@@ -83,9 +83,10 @@ function App() {
           const carplayFullscreen = containerRef.current.offsetHeight;
           const carplayWindowed = containerRef.current.offsetHeight - app.settings.side_bars.topBarHeight.value;
 
-          console.log("Fullscreen Height: ", carplayFullscreen);
-          console.log("Windowed Height: ", carplayWindowed);
-          console.log("Topbar Height: ", app.settings.side_bars.topBarHeight.value);
+          console.log(`Resizing window:
+            Fullscreen: ${containerRef.current.offsetWidth}x${carplayFullscreen}
+            Windowed: ${containerRef.current.offsetWidth}x${carplayWindowed}
+            Topbar: ${app.settings.side_bars.topBarHeight.value}`)
 
           app.update((state) => {
             state.system.windowSize.width = containerRef.current.offsetWidth;

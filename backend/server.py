@@ -175,6 +175,7 @@ class ServerThread(threading.Thread):
     # Handle UI update requests
     @socketio.on('request', namespace='/data')
     def handle_can_request():
+        request_timestamp = time.time()
 
         # Limit output to 2 decimal places
         data = {
@@ -182,7 +183,12 @@ class ServerThread(threading.Thread):
             for k, v in shared_state.car_data.items()
         }
 
-        socketio.emit('data', data, namespace='/data')
+        payload = {
+            'timestamp': request_timestamp,
+            'data': data
+        }
+
+        socketio.emit('data', payload, namespace='/data')
 
 
 

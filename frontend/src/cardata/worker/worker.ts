@@ -29,7 +29,18 @@ adcChannel.on("settings", handlesensorSettings);
 
 // Listen for continuous data stream from data namespace
 dataChannel.on("data", (data) => {
-    postCarDataToMain(data);
+    // Check if the received data has the new structure with a timestamp
+    if (data && typeof data.timestamp === 'number' && data.data) {
+        const now_ms = Date.now();
+        const request_timestamp_ms = data.timestamp * 1000;
+        const round_trip_latency_ms = now_ms - request_timestamp_ms;
+
+        //console.log(`Server latency: ${Math.round(round_trip_latency_ms)}ms`);
+
+        // Post only the actual car data values to the main thread
+        const message = { type: 'message', values: data.data, timestamp: now_ms}
+        postCarDataToMain(message);
+    }
 });
 
 // Send a request for data values

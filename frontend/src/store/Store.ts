@@ -107,6 +107,7 @@ const APP = create(
       view: '',
       switch: 'ArrowUp',
       lastKey: '',
+      lastUpdate: 0,
 
       settingPage: 1,
 

@@ -369,6 +369,7 @@ class CANListener(can.Listener):
                         data[4] == sensor["message_bytes"][4]):    # match parameter1
 
                         value = ((data[5] << 8) | data[6] if sensor["is_16bit"] else data[5])
+                        
                         converted_value = eval(sensor["scale"], {"value": value})
 
                         if self.client and self.client.connected:

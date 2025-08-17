@@ -35,9 +35,14 @@ function Cardata() {
 
   useEffect(() => {
     carWorker.onmessage = (event) => {
+      
       const { type, message } = event.data;
       const newData = { [type]: message };
-      updateData(newData.message)
+      updateData(newData.message.values)
+
+      app.update((state) => {
+        state.system.lastUpdate = newData.message.timestamp;
+      });
     };
 
     return () => {
