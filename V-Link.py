@@ -54,13 +54,15 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from backend.dev.vcan            import VCANThread
 
 from backend.server              import ServerThread
-from backend.app                 import APPThread
-from backend.adc                 import ADCThread
-from backend.rti                 import RTIThread
-from backend.can                 import CANThread
-from backend.ign                 import IGNThread
-from backend.swc                 import SWCThread
 from backend.pimost              import PiMOSTThread
+
+from backend.threads.app         import APPThread
+from backend.threads.adc         import ADCThread
+from backend.threads.rti         import RTIThread
+from backend.threads.can         import CANThread
+from backend.threads.ign         import IGNThread
+from backend.threads.swc         import SWCThread
+
 
 from backend.logger import logger
 

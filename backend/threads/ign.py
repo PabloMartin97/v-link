@@ -2,7 +2,8 @@ import threading
 import time
 import os
 import lgpio
-from .shared.shared_state import shared_state
+
+from ..shared.shared_state import shared_state
 
 class IGNThread(threading.Thread):
     def __init__(self, logger):

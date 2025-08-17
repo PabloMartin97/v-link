@@ -4,12 +4,13 @@ import os
 import can
 import serial
 import uinput
+
 from pathlib import Path
 from enum import Enum, auto
 from abc import ABC, abstractmethod
 
-from . import settings
-from .shared.shared_state import shared_state
+from .. import settings
+from ..shared.shared_state import shared_state
 
 
 def current_time_ms():

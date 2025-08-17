@@ -3,8 +3,8 @@ import time
 import can
 import random
 
-from . import settings
-from .shared.shared_state import shared_state
+from .. import settings
+from ..shared.shared_state import shared_state
 
 class Config:
     def __init__(self, logger):

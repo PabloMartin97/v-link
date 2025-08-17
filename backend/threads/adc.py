@@ -4,7 +4,7 @@ import json
 import os
 import numpy as np
 import socketio
-from .shared.shared_state import shared_state
+from ..shared.shared_state import shared_state
 
 import board
 import busio
@@ -117,12 +117,17 @@ class ADCThread(threading.Thread):
         
         return interpolated_value
 
-    def read_sensor_data_from_json(self, filename="adc.json"):
-        config_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
+    def read_sensor_data_from_json(self, filename="adc.json", app_name="v-link"):
+        # Expand ~ to the user's home directory
+        config_home = os.path.expanduser("~/.config")
+        config_folder = os.path.join(config_home, app_name)
         file_path = os.path.join(config_folder, filename)
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Config file not found: {file_path}")
+
         with open(file_path, "r") as file:
-            data = json.load(file)
-            return data
+            return json.load(file)
 
     def connect_to_socketio(self):
         max_retries = 5

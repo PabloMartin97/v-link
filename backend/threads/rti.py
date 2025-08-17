@@ -4,7 +4,8 @@ import sys
 import os
 import subprocess
 import serial
-from .shared.shared_state import shared_state
+
+from ..shared.shared_state import shared_state
 
 class RTIThread(threading.Thread):
     def __init__(self, logger):

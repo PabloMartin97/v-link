@@ -4,7 +4,7 @@ import sys
 import os
 import subprocess
 import signal
-from .shared.shared_state import shared_state
+from ..shared.shared_state import shared_state
 
 class APPThread(threading.Thread):
     def __init__(self, logger):
