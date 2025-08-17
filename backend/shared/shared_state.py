@@ -35,7 +35,7 @@ class SharedState:
         self.toggle_app = threading.Event()
 
         self.toggle_can = threading.Event()
-        self.toggle_lin = threading.Event()
+        self.toggle_swc = threading.Event()
         self.toggle_adc = threading.Event()
         self.toggle_rti = threading.Event()
         self.toggle_ign = threading.Event()
@@ -54,7 +54,7 @@ class SharedState:
             "server":   None,
             "app":      None,
             "can":      None,
-            "lin":      None,
+            "swc":      None,
             "adc":      None,
             "rti":      None,
             "ign":      None,

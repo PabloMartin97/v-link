@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { APP, MMI, CAN, LIN, ADC, RTI } from '../store/Store';
+import { APP, MMI, CAN, SWC, ADC, RTI } from '../store/Store';
 
 // Define all modules for easy iteration and reference
 const modules = {
   app: APP,
   // mmi: MMI, // Uncomment if needed
   can: CAN,
-  lin: LIN,
+  swc: SWC,
   adc: ADC,
   rti: RTI
 };

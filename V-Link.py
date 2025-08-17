@@ -58,8 +58,8 @@ from backend.app                 import APPThread
 from backend.adc                 import ADCThread
 from backend.rti                 import RTIThread
 from backend.can                 import CANThread
-from backend.lin                 import LINThread
 from backend.ign                 import IGNThread
+from backend.swc                 import SWCThread
 from backend.pimost              import PiMOSTThread
 
 from backend.logger import logger
@@ -79,10 +79,10 @@ class VLINK:
 
             'app':      APPThread,
             'can':      CANThread,
-            'lin':      LINThread,
             'adc':      ADCThread,
             'rti':      RTIThread,
             'ign':      IGNThread,
+            'swc':      SWCThread,
           
             'vcan':     VCANThread,
         }
@@ -205,9 +205,9 @@ class VLINK:
         time.sleep(.05)
         self.start_thread('rti', logger)
         time.sleep(.05)
-        self.start_thread('lin', logger)
-        time.sleep(.05)
         self.start_thread('adc', logger)
+        time.sleep(.05)
+        self.start_thread('swc', logger)
         time.sleep(.5)
         self.start_thread('app', logger)
             
@@ -268,10 +268,6 @@ class VLINK:
         if shared_state.toggle_can.is_set():
             self.toggle_thread('can')
             shared_state.toggle_can.clear()
-        
-        if shared_state.toggle_lin.is_set():
-            self.toggle_thread('lin')
-            shared_state.toggle_lin.clear()
             
         if shared_state.toggle_adc.is_set():
             self.toggle_thread('adc')
@@ -288,6 +284,10 @@ class VLINK:
         if shared_state.toggle_ign.is_set():
             self.toggle_thread('ign')
             shared_state.toggle_ign.clear()
+
+        if shared_state.toggle_swc.is_set():
+            self.toggle_thread('swc')
+            shared_state.toggle_swc.clear()
 
 
     def process_exit_event(self):
@@ -382,7 +382,7 @@ def display_thread_states():
     print("")
     print("Thread states:")
 
-    thread_names = ["Server", "App", "CAN", "LIN", "ADC", "RTI", "VCAN"]
+    thread_names = ["Server", "App", "CAN", "SWC", "ADC", "RTI", "VCAN"]
     thread_states = [
         shared_state.THREADS.get(name.lower(), None).is_alive() if shared_state.THREADS.get(name.lower()) else False
         for name in thread_names
@@ -429,7 +429,7 @@ if __name__ == '__main__':
             vlink.process_exit_event()
             vlink.process_restart_event()
             vlink.process_update_event()
-            #vlink.process_hdmi_event() Removed until confirmed by SuberPL
+            #vlink.process_hdmi_event() # Currently Removed
 
             if not shared_state.verbose:
                 display_thread_states()

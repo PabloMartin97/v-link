@@ -5,7 +5,7 @@ from .server              import ServerThread
 from .app                 import APPThread
 
 from .can                 import CANThread
-from .lin                 import LINThread
+from .swc                 import SWCThread
 from .adc                 import ADCThread
 from .rti                 import RTIThread
 from .ign                 import IGNThread

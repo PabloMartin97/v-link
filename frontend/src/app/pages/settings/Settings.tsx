@@ -16,7 +16,6 @@ const appChannel = io("ws://localhost:4001/app")
 const sysChannel = io("ws://localhost:4001/sys")
 
 const canChannel = io("ws://localhost:4001/can")
-const linChannel = io("ws://localhost:4001/lin")
 const adcChannel = io("ws://localhost:4001/adc")
 const rtiChannel = io("ws://localhost:4001/rti")
 const mostChannel = io("ws://localhost:4001/most")
@@ -266,7 +265,7 @@ const Settings = () => {
     // NOTES: Settings are grouped into types
     // "System" Settings control the appearance and behaviour of the app. This is the main settings file.
     // "Data" Settings provide parameters for the app and certain system settings
-    // "Interface" Settings provide parameter for the behaviour of the interface modules like LIN and RTI
+    // "Interface" Settings provide parameter for the behaviour of the interface modules RTI
 
     // System Settings is grouped into different objects. e.g.:
     /*  {
@@ -470,19 +469,6 @@ const Settings = () => {
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
                 <input type="checkbox" checked={system.canState} onChange={() => { handleIO("can", canChannel) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
-
-            <Element>
-              <Caption2>{`LIN ${system.linState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.linState} onChange={() => { handleIO("lin", linChannel) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>

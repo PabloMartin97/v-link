@@ -1,11 +1,9 @@
 import threading
 import time
 import can
-import socketio
 import random
 
 from . import settings
-from .buttonHandler import ButtonHandler
 from .shared.shared_state import shared_state
 
 class Config:
@@ -95,9 +93,7 @@ class CANThread(threading.Thread):
         self._stop_event = threading.Event()
         self.daemon = True
 
-        self.client = socketio.Client()
         self.config = Config(logger)
-        self.can_control_settings = self.config.can_settings["controls"]
 
         self.can_buses = {}         # can interfaces
         self.notifiers = {}         # can filters (using a callback)
@@ -105,7 +101,6 @@ class CANThread(threading.Thread):
 
         
     def run(self):
-        self.connect_to_socketio()
         self.initialize_can()
         
         try:
@@ -122,32 +117,26 @@ class CANThread(threading.Thread):
             self.logger.info("vCAN mode is enabled. Overriding CAN settings to use vcan0.")
             all_sensors = [sensor for sensor_list in self.config.sensors.values() for sensor in sensor_list]
             
-            if all_sensors or self.can_control_settings.get('enabled'):
+            if all_sensors:
                 interfaces_to_process.append({
                     "channel": "vcan0",
                     "bustype": "socketcan",
                     "bitrate": 500000,
                     "is_extended": True,  # Assume extended for debugging simplicity
                     "sensors": all_sensors,
-                    "attach_swc": self.can_control_settings.get('enabled', False)
                 })
         else:
             for interface in self.config.interfaces:
                 channel = interface["channel"]
                 sensors_for_channel = self.config.sensors.get(channel, [])
-                should_attach_swc = (
-                    self.can_control_settings.get('enabled', False) and
-                    self.can_control_settings.get('interface') == channel
-                )
                 
-                if sensors_for_channel or should_attach_swc:
+                if sensors_for_channel:
                     interfaces_to_process.append({
                         "channel": channel,
                         "bustype": interface["bustype"],
                         "bitrate": interface["bitrate"],
                         "is_extended": interface["is_extended"],
                         "sensors": sensors_for_channel,
-                        "attach_swc": should_attach_swc
                     })
 
         # --- Unified Initialization Loop ---
@@ -166,14 +155,7 @@ class CANThread(threading.Thread):
 
                 # Gather all reply IDs for filtering
                 rep_ids = {s["rep_id"][0] for s in sensors}
-                if iface_cfg["attach_swc"]:
-                    try:
-                        control_rep_id = int(self.can_control_settings['rep_id'], 16)
-                        rep_ids.add(control_rep_id)
-                        self.logger.debug(f"Adding SWC ID to {channel}-filter.")
-                    except (ValueError, KeyError) as e:
-                        self.logger.error(f"Invalid control rep_id for channel {channel}: {e}")
-
+            
                 # Apply filters
                 if rep_ids:
                     filters = [{"can_id": r_id, "can_mask": 0x1FFFFFFF if is_extended else 0x7FF, "extended": is_extended} for r_id in rep_ids]
@@ -197,12 +179,8 @@ class CANThread(threading.Thread):
                 # Setup Listeners
                 listeners = []
                 if sensors:
-                    listeners.append(CANListener(sensors_by_id, self.client, self.logger))
+                    listeners.append(CANListener(sensors_by_id, self.logger))
                 
-                if iface_cfg["attach_swc"]:
-                    self.logger.info(f"Attaching SWC Listener to {channel}")
-                    listeners.append(SWCListener(self.can_control_settings, self.client, self.logger))
-
                 if listeners:
                     notifier = can.Notifier(bus, listeners)
                     self.notifiers[channel] = notifier
@@ -227,24 +205,6 @@ class CANThread(threading.Thread):
         for bus in self.can_buses.values():
             bus.shutdown()
 
-        if self.client.connected:
-            self.client.disconnect()
-
-    def connect_to_socketio(self):
-        max_retries = 10
-        current_retry = 0
-        while not self.client.connected and current_retry < max_retries:
-            try:
-                self.client.connect('http://localhost:4001', namespaces=['/can'])
-            except Exception as e:
-                self.logger.error(f"Socket.IO connection failed. Retry {current_retry}/{max_retries}. Error: {e}")
-                time.sleep(.5)
-                current_retry += 1
-
-        if self.client.connected:
-            self.logger.info(f"CAN connected to Socket.IO")
-        else:
-            self.logger.error(f"CAN failed to connect to Socket.IO.")
 
 #############################################################
 # CAN Scheduler - Sending out scheduled messages to network #
@@ -285,8 +245,6 @@ class CANScheduler(threading.Thread):
     def run(self):
         self.logger.info("CANScheduler started.")
         while not self._stop_event.is_set():
-            start_time = time.monotonic()
-
             # Get next token from pool (i.e. priority)
             token = next(self.token_stream)
 
@@ -348,11 +306,10 @@ class CANScheduler(threading.Thread):
 #############################################################
 
 class CANListener(can.Listener):
-    def __init__(self, sensors_by_id, client, logger):
+    def __init__(self, sensors_by_id, logger):
         self.logger = logger
 
         self.sensors_by_id = sensors_by_id
-        self.client = client
 
     def on_message_received(self, msg):
         try:
@@ -371,76 +328,14 @@ class CANListener(can.Listener):
                         value = ((data[5] << 8) | data[6] if sensor["is_16bit"] else data[5])
                         
                         converted_value = eval(sensor["scale"], {"value": value})
+                        shared_state.update_car_data(sensor['key'], float(converted_value))
 
-                        if self.client and self.client.connected:
-                            #self.client.emit("data", f"{sensor['id']}:{float(converted_value)}", namespace="/can")
-                            shared_state.update_car_data(sensor['key'], float(converted_value))
-
-                            #with shared_state.car_data_lock:
-                            #    snapshot = shared_state.car_data.copy() 
-                            #print(snapshot)
-                            #shared_state.car_data[sensor['key']] = float(converted_value)
+                        #with shared_state.car_data_lock:
+                        #    snapshot = shared_state.car_data.copy() 
+                        #print(snapshot)
+                        #shared_state.car_data[sensor['key']] = float(converted_value)
 
                         return
                     
         except Exception as e:
             self.logger.error(f"CAN listener error: {e}")
-
-#############################################################
-# SWC Listener - Listening to SWC messages on CAN           #
-#############################################################
-
-class SWCListener(can.Listener):
-    def __init__(self, control_settings, client, logger):
-        self.logger = logger
-
-        self.control_settings = control_settings
-        self.client = client
-
-        # Control parameters
-        self.zero_message = [int(byte, 16) for byte in control_settings['zero_message']]
-        self.control_reply_id = int(control_settings['rep_id'], 16)
-        self.control_byte_count = control_settings['control_byte_count']
-        self.control_buttons = {k: self.parse_can_control_values(v) for k, v in control_settings['button'].items()}
-        self.control_joystick = {k: self.parse_can_control_values(v) for k, v in control_settings['joystick'].items()}
-
-        # Build lookup from control message tuple to button name
-        self.control_lookup = {}
-        for button_name, value_lists in {**self.control_buttons, **self.control_joystick}.items():
-            for key_tuple in value_lists:
-                self.control_lookup[key_tuple] = button_name
-
-        self.button_handler = ButtonHandler(
-            control_settings['click_timeout'],
-            control_settings['long_press_duration'],
-            control_settings['mouse_speed']
-        )
-
-    def parse_can_control_values(self, value):
-        if isinstance(value[0], list):
-            # Multiple CAN message (Already a list of lists)
-            return [tuple(int(byte, 16) for byte in pair) for pair in value]
-        else:
-            # Single CAN message (flat list), wrap in a list
-            return [tuple(int(byte, 16) for byte in value)]   
-
-    def on_message_received(self, msg):
-        try:
-            # Process control messages if enabled
-            if self.control_settings['enabled'] and msg.arbitration_id == self.control_reply_id:
-                message_data = list(msg.data)
-                self.button_handler.timeout_button()
-                if message_data[-len(self.zero_message):] == self.zero_message:
-                    self.logger.debug("Zero message detected. Ignoring CAN Frame.")
-                    return
-
-                key = tuple(message_data[-self.control_byte_count:])
-                if key in self.control_lookup:
-                    self.logger.debug(f"Pressing: {self.control_lookup[key]}")
-                    self.button_handler.handle(self.control_lookup[key])
-                    return
-
-                message_hex = " ".join(f"{byte:02X}" for byte in message_data)
-                self.logger.debug(f"Unknown control signal received: {message_hex}")
-        except Exception as e:
-            self.logger.error(f"SWC listener error: {e}")

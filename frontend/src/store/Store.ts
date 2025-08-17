@@ -186,7 +186,7 @@ const CAN = create(
   }))
 );
 
-const LIN = create(
+const SWC = create(
   immer((set) => ({
     system: {
       state: false,
@@ -230,4 +230,4 @@ const KEY = create(
 );
 
 
-export { DATA, APP, MMI, CAN, LIN, ADC, RTI, KEY };
+export { DATA, APP, MMI, CAN, SWC, ADC, RTI, KEY };

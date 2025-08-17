@@ -263,52 +263,42 @@
     "type": "interface",
 
     "left": {
-      "type": "lin",
       "value": "ArrowLeft",
       "label": "Left"
     },
     "right": {
-      "type": "lin",
       "value": "ArrowRight",
       "label": "Right"
     },
     "selectDown": {
-      "type": "lin",
       "value": "Space",
       "label": "Select"
     },
     "back": {
-      "type": "lin",
       "value": "Backspace",
       "label": "Back"
     },
     "down": {
-      "type": "lin",
       "value": "ArrowDown",
       "label": "Down"
     },
     "home": {
-      "type": "lin",
       "value": "KeyH",
       "label": "Home"
     },
     "play": {
-      "type": "lin",
       "value": "KeyP",
       "label": "Play"
     },
     "pause": {
-      "type": "lin",
       "value": "KeyO",
       "label": "Pause"
     },
     "next": {
-      "type": "lin",
       "value": "KeyN",
       "label": "Next"
     },
     "previous": {
-      "type": "lin",
       "value": "KeyV",
       "label": "Previous"
     }
@@ -319,17 +309,14 @@
     "type": "interface",
 
     "switch": {
-      "type": "lin",
       "value": "ArrowUp",
       "label": "Switch Pages"
     },
     "left": {
-      "type": "lin",
       "value": "ArrowLeft",
       "label": "Left"
     },
     "right": {
-      "type": "lin",
       "value": "ArrowRight",
       "label": "Right"
     }

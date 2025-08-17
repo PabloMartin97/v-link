@@ -15,7 +15,6 @@ const Container = styled.div`
     flex-direction: column;
     background: none;
     border-radius: 7px;
-    overflow: hidden;
     align-self: flex-start;
 `;
 

@@ -25,7 +25,7 @@ CORS(server, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(server, cors_allowed_origins="*", async_mode='eventlet')
 
 # Define modules
-modules = ["app", "mmi", "can", "lin", "adc", "rti", "most"]
+modules = ["app", "mmi", "can", "swc", "adc", "rti", "most"]
 
 class ServerThread(threading.Thread):
     def __init__(self, logger):

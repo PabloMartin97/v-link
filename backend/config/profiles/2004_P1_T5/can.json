@@ -194,19 +194,5 @@
             "max_value": 260,
             "limit_start": 240
         }
-    },
-    "controls": {
-        "enabled": false,
-        "interface": "can1",
-        "rep_id": "0x00000000",
-        "zero_message": [],
-        "control_byte_count": 2,
-        "button": {
-        },
-        "joystick": {
-        },
-        "long_press_duration": 1500,
-        "click_timeout": 300,
-        "mouse_speed": 6
     }
 }
