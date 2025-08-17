@@ -3,7 +3,7 @@ import time
 import can
 import socketio
 import random
-import sys
+
 from . import settings
 from .buttonHandler import ButtonHandler
 from .shared.shared_state import shared_state
@@ -106,7 +106,7 @@ class CANThread(threading.Thread):
         
     def run(self):
         self.connect_to_socketio()
-        self.initialize_canbus()
+        self.initialize_can()
         
         try:
             while not self._stop_event.is_set():
@@ -115,86 +115,116 @@ class CANThread(threading.Thread):
             pass
 
     # Initialize CAN interface and load configurations
-    def initialize_canbus(self):
-        for interface in self.config.interfaces:
-            channel = interface["channel"]          # can1, can2
-            is_extended = interface["is_extended"]  # Check if extended IDs should be used
+    def initialize_can(self):
+        interfaces_to_process = []
+
+        if shared_state.vCan:
+            self.logger.info("vCAN mode is enabled. Overriding CAN settings to use vcan0.")
+            all_sensors = [sensor for sensor_list in self.config.sensors.values() for sensor in sensor_list]
+            
+            if all_sensors or self.can_control_settings.get('enabled'):
+                interfaces_to_process.append({
+                    "channel": "vcan0",
+                    "bustype": "socketcan",
+                    "bitrate": 500000,
+                    "is_extended": True,  # Assume extended for debugging simplicity
+                    "sensors": all_sensors,
+                    "attach_swc": self.can_control_settings.get('enabled', False)
+                })
+        else:
+            for interface in self.config.interfaces:
+                channel = interface["channel"]
+                sensors_for_channel = self.config.sensors.get(channel, [])
+                should_attach_swc = (
+                    self.can_control_settings.get('enabled', False) and
+                    self.can_control_settings.get('interface') == channel
+                )
+                
+                if sensors_for_channel or should_attach_swc:
+                    interfaces_to_process.append({
+                        "channel": channel,
+                        "bustype": interface["bustype"],
+                        "bitrate": interface["bitrate"],
+                        "is_extended": interface["is_extended"],
+                        "sensors": sensors_for_channel,
+                        "attach_swc": should_attach_swc
+                    })
+
+        # --- Unified Initialization Loop ---
+        for iface_cfg in interfaces_to_process:
+            channel = iface_cfg["channel"]
+            sensors = iface_cfg["sensors"]
+            is_extended = iface_cfg["is_extended"]
 
             try:
                 bus = can.interface.Bus(
                     channel=channel,
-                    bustype=interface["bustype"],
-                    bitrate=interface["bitrate"]
+                    bustype=iface_cfg["bustype"],
+                    bitrate=iface_cfg["bitrate"]
                 )
-                if bus is None:
-                    self.logger.error(f"Error: failed to initialize CAN bus {channel}, bus is None")
-                    continue
-
                 self.can_buses[channel] = bus
 
-                # Adding Diag rep_id's to CAN-filters
-                sensors = self.config.sensors.get(channel, [])
-                rep_ids = set()
-                for sensor in sensors:
+                # Gather all reply IDs for filtering
+                rep_ids = {s["rep_id"][0] for s in sensors}
+                if iface_cfg["attach_swc"]:
                     try:
-                        if sensor.get('channel') == channel:
-                            rep_ids.add(sensor["rep_id"][0])
-                            self.logger.debug(f"Adding {sensor['label']} ID to {channel}-filter.")
-                    except Exception as e:
-                        self.logger.error(f"{e}")
-
-                # Adding SWC rep_id's to CAN-filters
-                if self.can_control_settings.get('enabled'):
-                    try:
-                        if(self.can_control_settings.get('interface') == channel):
-                            control_rep_id = int(self.can_control_settings['rep_id'], 16)
-                            rep_ids.add(control_rep_id)
-                            self.logger.debug(f"Adding SWC IDs to {channel}-filter.")
-                    except ValueError as e:
+                        control_rep_id = int(self.can_control_settings['rep_id'], 16)
+                        rep_ids.add(control_rep_id)
+                        self.logger.debug(f"Adding SWC ID to {channel}-filter.")
+                    except (ValueError, KeyError) as e:
                         self.logger.error(f"Invalid control rep_id for channel {channel}: {e}")
 
-                # Apply filter to CAN channel
-                try:
-                    filters = [{"can_id": rep_id, "can_mask": 0x1FFFFFFF if is_extended else 0x7FF, "extended": is_extended} for rep_id in rep_ids]
+                # Apply filters
+                if rep_ids:
+                    filters = [{"can_id": r_id, "can_mask": 0x1FFFFFFF if is_extended else 0x7FF, "extended": is_extended} for r_id in rep_ids]
                     bus.set_filters(filters)
-                except Exception as e:
-                    self.logger.error(f"Could not apply filter: {e}")
+                    self.logger.info(f"Applied {len(rep_ids)} filters to {channel}.")
 
                 self.logger.info(f"Initialized {bus}")
 
-            except Exception as e:
-                self.logger.error(f"{e}")
+                # Group sensors by reply ID for listeners
+                sensors_by_id = {}
+                for sensor in sensors:
+                    rep_id = sensor["rep_id"][0]
+                    sensors_by_id.setdefault(rep_id, []).append(sensor)
 
+                # Start Scheduler only if there are sensors to request
+                if sensors:
+                    canScheduler = CANScheduler(sensors_by_id, bus, is_extended, self.logger)
+                    self.broadcast_tasks.append(canScheduler)
+                    canScheduler.start()
+
+                # Setup Listeners
+                listeners = []
+                if sensors:
+                    listeners.append(CANListener(sensors_by_id, self.client, self.logger))
                 
-            sensors_by_id = {}
-            for sensor in sensors:
-                rep_id = sensor["rep_id"][0]
-                sensors_by_id.setdefault(rep_id, []).append(sensor)
+                if iface_cfg["attach_swc"]:
+                    self.logger.info(f"Attaching SWC Listener to {channel}")
+                    listeners.append(SWCListener(self.can_control_settings, self.client, self.logger))
 
-            self.logger.debug("Starting CAN Notifier")
+                if listeners:
+                    notifier = can.Notifier(bus, listeners)
+                    self.notifiers[channel] = notifier
 
-            canScheduler = CANScheduler (sensors_by_id, bus, is_extended, self.logger)
-            canListener  = CANListener  (sensors_by_id, self.client, self.logger)
-            swcListener  = SWCListener  (sensors_by_id, self.can_control_settings, self.client, self.logger)
-            
-            canScheduler.start()
-            
-            notifier = can.Notifier(bus, [canListener, swcListener])
-            self.notifiers[channel] = notifier
+            except Exception as e:
+                self.logger.error(f"Failed to initialize CAN interface {channel}: {e}")
 
 
 
     def stop_thread(self):
-        time.sleep(.5)
         self._stop_event.set()
+
+        for scheduler in self.broadcast_tasks:
+            scheduler.stop()
+
         for notifier in self.notifiers.values():
             try:
                 notifier.stop()
             except Exception as e:
                 self.logger.error(f"Error stopping Notifier: {e}")
 
-        for channel, bus in self.can_buses.items():
-            bus.stop_all_periodic_tasks()
+        for bus in self.can_buses.values():
             bus.shutdown()
 
         if self.client.connected:
@@ -360,10 +390,9 @@ class CANListener(can.Listener):
 #############################################################
 
 class SWCListener(can.Listener):
-    def __init__(self, sensors_by_id, control_settings, client, logger):
+    def __init__(self, control_settings, client, logger):
         self.logger = logger
 
-        self.sensors_by_id = sensors_by_id
         self.control_settings = control_settings
         self.client = client
 

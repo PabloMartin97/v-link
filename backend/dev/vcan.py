@@ -5,7 +5,7 @@ import struct
 import threading
 import subprocess
 import os
-import shutil  # for checking can interface presence
+import shutil
 
 from ..shared.shared_state import shared_state
 
@@ -17,12 +17,11 @@ class VCANThread(threading.Thread):
         self.daemon = True
         self.can_bus = None
         self.logger = logger
-        self.channel = self.detect_can_interface()
+        self.channel = "vcan0"
 
-        if self.channel.startswith("vcan"):
-            script_directory = os.path.dirname(os.path.abspath(__file__))
-            setup_script_path = os.path.join(script_directory, 'setup.sh')
-            subprocess.run([setup_script_path], shell=True)
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+        setup_script_path = os.path.join(script_directory, 'setup.sh')
+        subprocess.run([setup_script_path], shell=True)
 
         self.state = {
             "rpm": 1000,
@@ -49,24 +48,6 @@ class VCANThread(threading.Thread):
             (0x10, 0xA5): "speed",
         }
 
-    def detect_can_interface(self):
-        """Check available CAN interfaces and return preferred one."""
-        try:
-            with open("/proc/net/dev") as f:
-                devs = f.read()
-            if "can2:" in devs:
-                print("Detected CAN interface: can2")
-                return "can2"
-            elif "vcan0:" in devs:
-                print("Detected virtual CAN interface: vcan0")
-                return "vcan0"
-        except FileNotFoundError:
-            pass
-
-        # Default fallback
-        print("No CAN interfaces detected, defaulting to vcan0")
-        return "vcan0"
-
     def run(self):
         try:
             self.can_bus = can.interface.Bus(channel=self.channel, bustype='socketcan', bitrate=500000)
@@ -81,7 +62,6 @@ class VCANThread(threading.Thread):
             self.stop_canbus()
 
     def stop_thread(self):
-        print("Stopping VCAN thread.")
         time.sleep(0.5)
         self._stop_event.set()
 

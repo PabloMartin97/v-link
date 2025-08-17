@@ -1,6 +1,5 @@
 # shared_state.py
 
-import queue
 import threading
 
 from threading import Lock
@@ -23,10 +22,10 @@ class SharedState:
 
         #Debug
         self.verbose = False
-        self.vite = True
-        self.isKiosk = True
+        self.vite = False
 
-        #Display Status
+        #Display
+        self.isKiosk = True
         self.rtiStatus = False
         self.hdmiStatus = False
 
