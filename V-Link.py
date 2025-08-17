@@ -54,8 +54,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from backend.dev.vcan            import VCANThread
 
 from backend.server              import ServerThread
-from backend.pimost              import PiMOSTThread
 
+from backend.threads.mst         import MOSTThread
 from backend.threads.app         import APPThread
 from backend.threads.adc         import ADCThread
 from backend.threads.rti         import RTIThread
@@ -90,7 +90,7 @@ class VLINK:
         }
 
         if shared_state.pimost:
-            self.threads['pimost'] = PiMOSTThread
+            self.threads['mst'] = PiMOSTThread
 
     def detect_rpi(self):
 
@@ -215,7 +215,7 @@ class VLINK:
             
         if shared_state.pimost:
             time.sleep(1)
-            self.start_thread('pimost', logger)
+            self.start_thread('mst', logger)
 
     def start_thread(self, thread_name, logger):
         logger.info(f"Starting {thread_name} thread.")

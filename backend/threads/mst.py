@@ -1,15 +1,11 @@
 import threading
 import time
-import sys
-import os
-import subprocess
 import socketio
 import serial
 import struct
+
 from threading import Thread
 from serial.tools import list_ports
-from .shared.shared_state import shared_state
-import time
 
 # pymost-client implementation, replaced timer with thread
 class PiMost:
@@ -92,9 +88,9 @@ class PiMost:
             self.logger.error(f"Error parsing MOST message: {e}")
 #
 
-class PiMOSTThread(threading.Thread):
+class MOSTThread(threading.Thread):
     def __init__(self, logger):
-        super(PiMOSTThread, self).__init__()
+        super(MOSTThread, self).__init__()
         self.logger = logger
         
         self.pimost = PiMost(self.recv_most_message, logger)
