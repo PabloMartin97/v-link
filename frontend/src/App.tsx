@@ -7,6 +7,7 @@ import isPropValid from '@emotion/is-prop-valid'; // Import isPropValid
 import { APP, MMI, KEY } from './store/Store';
 import { Socket } from './socket/Socket';
 
+import Init from './app/Init';
 import Splash from './app/Splash';
 import Content from './app/Content';
 import Modal from './app/components/Modal';
@@ -109,33 +110,38 @@ function App() {
     <StyleSheetManager shouldForwardProp={isPropValid}>
       <AppContainer ref={containerRef}>
         <Socket />
-        <Splash />
 
+        <ThemeProvider theme={theme}>
 
-        {system.startedUp && ready ? (
-          <ThemeProvider theme={theme}>
-            <Carplay
-              commandCounter={commandCounter}
-              command={keyCommand}
-            />
-            <Modal
-              isOpen={system.modal.visible}
-              title={system.modal.title}
-              body={system.modal.body}
-              button={system.modal.button}
-              action={system.modal.action}
-              onClose={() =>
-                app.update((state) => {
-                  state.system.modal.visible = false;
-                })
-              }
-            />
-            <Cardata />
-            <Content />
-          </ThemeProvider>
-        ) : (
-          <></>
-        )}
+          <Splash />
+          <Init />
+          <Modal
+            isOpen={system.modal.visible}
+            title={system.modal.title}
+            content={system.modal.content}
+            exit={system.modal.exit}
+            onClose={() =>
+              app.update((state) => {
+                state.system.modal.visible = false;
+              })
+            }
+          />
+
+          {system.startedUp && ready ? (
+            <>
+              {/*<Carplay
+                commandCounter={commandCounter}
+                command={keyCommand}
+              />*/}
+
+              < Cardata />
+              <Content />
+            </>
+          ) : (
+            <></>
+          )}
+        </ThemeProvider>
+
       </AppContainer>
     </StyleSheetManager>
   );

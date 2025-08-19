@@ -90,7 +90,7 @@ class VLINK:
         }
 
         if shared_state.pimost:
-            self.threads['mst'] = PiMOSTThread
+            self.threads['mst'] = MOSTThread
 
     def detect_rpi(self):
 
@@ -127,6 +127,7 @@ class VLINK:
         
 
     def check_settings(self):
+        print("CHECKING FOR SETTINGS")
         current_dir = Path(__file__).parent
 
         default_dir = current_dir / 'backend' / 'config' / 'profiles'
@@ -197,11 +198,8 @@ class VLINK:
 
     
     def start_modules(self):
-        if shared_state.vCan:
-            self.start_thread('vcan', logger)
 
-        time.sleep(.05)
-        self.start_thread('ign', logger)
+        vlink.start_thread('ign', logger)
         time.sleep(.05)
         self.start_thread('can', logger)
         time.sleep(.05)
@@ -210,9 +208,10 @@ class VLINK:
         self.start_thread('adc', logger)
         time.sleep(.05)
         self.start_thread('swc', logger)
-        time.sleep(.5)
-        self.start_thread('app', logger)
-            
+
+        if shared_state.vCan:
+            self.start_thread('vcan', logger)
+
         if shared_state.pimost:
             time.sleep(1)
             self.start_thread('mst', logger)
@@ -405,8 +404,9 @@ if __name__ == '__main__':
 
     vlink = VLINK()
     vlink.start_thread('server', logger)
+
     vlink.detect_rpi()
-    vlink.check_settings()
+    #vlink.check_settings()
 
 
     # Update shared_state based on arguments
@@ -421,7 +421,12 @@ if __name__ == '__main__':
     shared_state.ignStatus.set()
 
     # Start main threads:
-    vlink.start_modules()
+    #vlink.start_modules()
+
+    time.sleep(.5)
+    vlink.start_thread('app', logger)
+
+
     # if(shared_state.verbose):
     vlink.print_thread_states()
 

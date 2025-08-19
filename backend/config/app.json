@@ -6,6 +6,7 @@
     "padding": 30,
     "chart_input_max": 6,
     "chart_input_current": 1,
+    "profile": null,
 
     "keymap": {
       "options": [
@@ -255,52 +256,6 @@
       "type": "adc",
       "value": "pressure",
       "label": "Value"
-    }
-  },
-
-  "mmi_bindings": {
-    "title": "MMI Keymap",
-    "type": "interface",
-
-    "left": {
-      "value": "ArrowLeft",
-      "label": "Left"
-    },
-    "right": {
-      "value": "ArrowRight",
-      "label": "Right"
-    },
-    "selectDown": {
-      "value": "Space",
-      "label": "Select"
-    },
-    "back": {
-      "value": "Backspace",
-      "label": "Back"
-    },
-    "down": {
-      "value": "ArrowDown",
-      "label": "Down"
-    },
-    "home": {
-      "value": "KeyH",
-      "label": "Home"
-    },
-    "play": {
-      "value": "KeyP",
-      "label": "Play"
-    },
-    "pause": {
-      "value": "KeyO",
-      "label": "Pause"
-    },
-    "next": {
-      "value": "KeyN",
-      "label": "Next"
-    },
-    "previous": {
-      "value": "KeyV",
-      "label": "Previous"
     }
   },
 

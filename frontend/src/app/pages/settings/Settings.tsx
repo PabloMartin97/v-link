@@ -102,12 +102,24 @@ const Settings = () => {
   });
 
   const openModal = (title, body, button, action) => {
+    const content = (
+      <>
+        <div>
+          {body}
+        </div>
+        <div>
+          <Button onClick={() => {action}}>{button}</Button>
+          <Button>{button}</Button>
+        </div>
+      </>
+    )
+
     app.update((state) => {
       state.system.modal.visible = true;
       state.system.modal.title = title
-      state.system.modal.body = body
-      state.system.modal.button = button
-      state.system.modal.action = action
+      state.system.modal.exit = true
+
+      state.system.modal.content = content
     })
   };
 
@@ -216,7 +228,7 @@ const Settings = () => {
     setReset(true)
   }
 
-  function sendForceSwitchMostMessage () {
+  function sendForceSwitchMostMessage() {
     mostChannel.emit("force_switch");
   }
 

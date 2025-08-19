@@ -1,99 +1,6 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
 
-/*
-import { Stream } from "socketmost/dist/modules/Messages";
-import { DongleConfig } from 'node-carplay/node'
-
-export enum HandDriveType {
-  LHD = 0,
-  RHD = 1,
-}
-
-export type PhoneTypeConfig = {
-  frameInterval: number | null
-}
-
-const DEFAULT_CONFIG = {
-  width: 800,
-  height: 640,
-  fps: 20,
-  dpi: 160,
-  format: 5,
-  iBoxVersion: 2,
-  phoneWorkMode: 2,
-  packetMax: 49152,
-  boxName: 'nodePlay',
-  nightMode: false,
-  hand: HandDriveType.LHD,
-  mediaDelay: 300,
-  audioTransferMode: false,
-  wifiType: '5ghz',
-  micType: 'os',
-  phoneConfig: {
-    [PhoneType.CarPlay]: {
-      frameInterval: 5000,
-    },
-    [PhoneType.AndroidAuto]: {
-      frameInterval: null,
-    },
-  },
-}
-*/
-
-
-const DEFAULT_BINDINGS = {
-  left: 'ArrowLeft',
-  right: 'ArrowRight',
-  selectDown: 'Space',
-  back: 'Backspace',
-  down: 'ArrowDown',
-  home: 'KeyH',
-  play: 'KeyP',
-  pause: 'KeyS',
-  next: 'KeyN',
-  prev: 'KeyV'
-}
-
-const EXTRA_CONFIG = {
-  //...DEFAULT_CONFIG,
-  kiosk: true,
-  delay: 300,
-  fps: 60,
-  camera: '',
-  microphone: '',
-  piMost: false,
-  canbus: false,
-  bindings: DEFAULT_BINDINGS,
-  most: {},
-  canConfig: {}
-}
-
-
-const MMI = create(
-  immer((set) => ({
-    bindings: DEFAULT_BINDINGS,
-    config: EXTRA_CONFIG,
-    saveSettings: (settings) => {
-      set((state) => {
-        const mergedSettings = {
-          ...state.config,
-          ...settings,
-          bindings: settings.mmi_bindings || DEFAULT_BINDINGS,
-        };
-        state.config = mergedSettings;
-      });
-    },
-    getSettings: () => {
-      // Add logic as needed
-    },
-    stream: (stream) => {
-      // Add logic as needed
-    },
-    update: (updater) => set(updater),
-  }))
-);
-
 const DATA = create((set) => ({
   data: {}, // Object to store live vehicle data
   update: (newData) =>
@@ -109,8 +16,11 @@ const APP = create(
       lastKey: '',
       lastUpdate: 0,
 
+      firstStart: true,
+
       settingPage: 1,
 
+      config: false,
       initialized: false,
       startedUp: false,
 
@@ -154,9 +64,7 @@ const APP = create(
       modal: {
         visible: false,
         title: null,
-        body: null,
-        button: null,
-        action: null,
+        content: null,
       },
 
       wifiState: false,
@@ -215,6 +123,17 @@ const RTI = create(
     update: (updater) => set(updater),
   }))
 );
+
+const MMI = create(
+  immer((set) => ({
+    system: {
+      state: false,
+    },
+    settings: {},
+    update: (updater) => set(updater),
+  }))
+);
+
 
 const KEY = create(
   immer((set) => ({

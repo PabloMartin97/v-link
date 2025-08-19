@@ -26,7 +26,7 @@ function Cardata() {
 
   const carWorker = useMemo(() => {
     const worker = new Worker(
-      new URL('./worker/worker.ts', import.meta.url), {
+      new URL('./worker/CarData.worker.ts', import.meta.url), {
       type: 'module'
     }
     ) as CARWorker

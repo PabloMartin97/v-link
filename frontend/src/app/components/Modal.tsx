@@ -56,7 +56,7 @@ const Exit = styled.button`
   color: #DBDBDB;
 `;
 
-const Modal = ({ isOpen, onClose, title, body, button, action }) => {
+const Modal = ({ isOpen, onClose, title, content, exit }) => {
   const Body1 = Typography.Body1;
   const Display2 = Typography.Display2;
   const [visible, setVisible] = useState(false);
@@ -78,13 +78,10 @@ const Modal = ({ isOpen, onClose, title, body, button, action }) => {
     <Overlay $visible={visible}>
       <Content $visible={visible}>
         <Display2>{title}</Display2>
-        <Body1>{body}</Body1>
-        {action ? (
-          <Button style={{ width: '300px', background: '#101010' }} onClick={action}>
-            {button}
-          </Button>
-        ) : null}
+        {content}
+        {exit ? 
         <Exit onClick={onClose}>X</Exit>
+        : null }
       </Content>
     </Overlay>,
     document.getElementById('root')

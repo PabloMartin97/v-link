@@ -25,7 +25,7 @@ CORS(server, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(server, cors_allowed_origins="*", async_mode='eventlet')
 
 # Define modules
-modules = ["app", "mmi", "can", "swc", "adc", "rti", "most"]
+modules = ["app", "mmi", "can", "swc", "adc", "rti", "mst"]
 
 class ServerThread(threading.Thread):
     def __init__(self, logger):
@@ -34,6 +34,8 @@ class ServerThread(threading.Thread):
         self.app = server
         self.stop_event = threading.Event()
         self.server_socket = eventlet.listen(('0.0.0.0', 4001))
+
+        print("RUNNING SERVER")
         
 
     def run(self):
@@ -126,6 +128,7 @@ class ServerThread(threading.Thread):
 
         # Emit module Data
         def emit_data(data):
+            print(data)
             socketio.emit('data', data, namespace=namespace)
 
         # Save module settings
@@ -194,14 +197,29 @@ class ServerThread(threading.Thread):
 
     # Handle system  tasks
     @socketio.on('systemTask', namespace='/sys')
-    def handle_system_task(args):
-        if   args == 'reboot':
+    def handle_system_task(args, payload=None):
+        if   args == 'checkProfile':
+            # Checks whether .config/v-link/ exists
+            # Returns either true or an object with selectable profiles.
+            result = settings.check_settings()
+            return result
+        
+        elif args == 'loadProfile':
+            result = settings.copy_files(payload)
+            if result:
+                print("All settings copied and ready")
+                return {"result": result}
+
+        elif args == 'reboot':
             subprocess.run("sudo reboot -h now", shell=True)
-        if   args == 'shutdown':
+
+        elif args == 'shutdown':
             subprocess.run("sudo shutdown -h now", shell=True)
+
         elif args == 'reset':
-            settings.reset_settings("app")
-            socketio.emit("settings", settings.load_settings("app"), namespace='/app')
+            settings.reset_settings()
+            shared_state.restart_event.set()
+
         elif args == 'rti':
             shared_state.rtiStatus = not shared_state.rtiStatus
             shared_state.hdmiStatus = shared_state.rtiStatus
@@ -210,20 +228,27 @@ class ServerThread(threading.Thread):
             socketio.emit('state', shared_state.rtiStatus, namespace="/rti")
             if not shared_state.dev:
                 shared_state.hdmi_event.set()
+
         elif args == 'quit':
             shared_state.exit_event.set()
+
         elif args == 'restart':
             shared_state.restart_event.set()
+
         elif args == 'hdmi':
             shared_state.hdmiStatus = not shared_state.hdmiStatus
             if not shared_state.dev:
                 shared_state.hdmi_event.set()
+
         elif args == 'update':
             shared_state.update_event.set()
+
         elif args == 'ign':
             socketio.emit('ign', shared_state.ignStatus.is_set(), namespace="/sys")
+
         else:
             logger.debug(f"Unknown action: {args}")
+
 
     @socketio.on('force_switch', namespace='/most')
     def handle_force_switch():
