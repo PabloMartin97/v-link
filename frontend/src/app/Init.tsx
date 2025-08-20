@@ -85,27 +85,18 @@ const Init = () => {
     const [profiles, setProfiles] = useState({});
     const [options, setOptions] = useState([]);
     const [platform, setPlatform] = useState(null);
-    const [engine, setEngine] = useState(null);
     const [selectedIndex, setSelectedIndex] = useState(null);
     const [visible, setVisible] = useState(true);
 
     const app = APP((state) => state);
 
-    const checkProfile = () => {
-        sysChannel.emit("systemTask", "checkProfile", (data) => {
-        console.log(data);
-
-        if(data === true) {
-            console.log("Config-files found, loading settings.");
-            setVisible(false)
-            app.update((state) => {
-                state.system.config = true;
-            });
-        } else {
-            setProfiles(data);
-            setOptions(Object.keys(data));
-        }
-    });
+    const startApp = () => {
+        console.log("Config-files found, loading settings.");
+        sysChannel.emit("systemTask", "start")
+        setVisible(false)
+        app.update((state) => {
+            state.system.config = true;
+        });
     }
 
 
@@ -113,14 +104,8 @@ const Init = () => {
         // Checks whether .config/v-link/ exists
         // Returns either true or an object with selectable profiles.
         sysChannel.emit("systemTask", "checkProfile", (data) => {
-            console.log(data);
-
             if(data === true) {
-                console.log("Config-files found, loading settings.");
-                setVisible(false)
-                app.update((state) => {
-                    state.system.config = true;
-                });
+                startApp();
             } else {
                 setProfiles(data);
                 setOptions(Object.keys(data));
@@ -141,7 +126,6 @@ const Init = () => {
 
     const handleSelectEngine = (engine, index) => {
         setSelectedIndex(index);
-        setEngine(engine);
         console.log("Selected Profile:", platform, engine);
         
         const vehicle = {
@@ -152,11 +136,7 @@ const Init = () => {
         
         sysChannel.emit("systemTask", "loadProfile", vehicle, (data) => {
             if (data.result) {
-                console.log("Config-files found, loading settings.");
-                setVisible(false);
-                app.update((state) => {
-                    state.system.config = true;
-                });
+                startApp();
             } else {
                 console.log("Could not load profile");
             }

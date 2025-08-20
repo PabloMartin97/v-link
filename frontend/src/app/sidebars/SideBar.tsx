@@ -12,6 +12,10 @@ import { Fade } from '../../theme/styles/Effects';
 
 
 const Sidebar = styled.div`
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
     align-self: flex-end;
     height: 100%;
 
@@ -33,10 +37,10 @@ const Menu = styled.div`
     width: 100%;
     height: 100%;
 
-    gap: 10px;
 
     display: flex;
     flex-direction: column;
+    align-self: center;
     justify-self: flex-start;
     justify-content: flex-start;
     align-items: flex-start;
@@ -80,8 +84,13 @@ const SideBar = ({ collapseLength }) => {
             collapseLength={collapseLength / 1000}
             minWidth={0}
             maxWidth={app.settings.side_bars.sideBarWidth.value}>
+
             <Menu>
-                <Title>SETTINGS</Title>
+                <Link>
+                    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'flex-start' }}>
+                            <Title style={{ color: theme.colors.medium }}>SETTINGS</Title>
+                    </div>
+                </Link>
                 <Link
                     onClick={() => handleTabChange(1)}
                     isActive={currentTab === 1}
@@ -97,7 +106,7 @@ const SideBar = ({ collapseLength }) => {
                                 inactiveColor={theme.colors.medium}>
                                 <use xlinkHref={`/assets/svg/buttons/general.svg#general`}></use>
                             </IconMedium>
-                                General
+                            General
                         </div>
                     </div>
                 </Link>
@@ -117,7 +126,7 @@ const SideBar = ({ collapseLength }) => {
                                 inactiveColor={theme.colors.medium}>
                                 <use xlinkHref={`/assets/svg/buttons/interface.svg#interface`}></use>
                             </IconMedium>
-                                Interface
+                            Interface
                         </div>
                     </div>
                 </Link>
@@ -137,10 +146,9 @@ const SideBar = ({ collapseLength }) => {
                                 inactiveColor={theme.colors.medium}>
                                 <use xlinkHref={`/assets/svg/buttons/keymap.svg#keymap`}></use>
                             </IconMedium>
-                                Keymap
+                            Keymap
                         </div>
                     </div>
-
                 </Link>
 
                 <Link
@@ -156,9 +164,29 @@ const SideBar = ({ collapseLength }) => {
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
+                                <use xlinkHref={`/assets/svg/buttons/carplay.svg#carplay`}></use>
+                            </IconMedium>
+                            Dongle
+                        </div>
+                    </div>
+                </Link>
+
+                <Link
+                    onClick={() => handleTabChange(5)}
+                    isActive={currentTab === 5}
+                    activeColor={theme.colors.light}
+                    inactiveColor={theme.colors.medium}>
+                    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
+                        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
+                            <IconMedium
+                                isActive={currentTab === 5}
+                                theme={theme}
+                                activeColor={theme.colors.theme[themeColor].active}
+                                defaultColor={theme.colors.theme[themeColor].default}
+                                inactiveColor={theme.colors.medium}>
                                 <use xlinkHref={`/assets/svg/buttons/system.svg#system`}></use>
                             </IconMedium>
-                                System
+                            System
                         </div>
                     </div>
                 </Link>
@@ -182,7 +210,7 @@ const SideBar = ({ collapseLength }) => {
                             </IconMedium>
 
                         </Link>
-                        <Caption1 style={{ color: theme.colors.light }}> {app.system.version}</Caption1>
+                        <Caption1 style={{ color: theme.colors.medium }}> {app.system.version}</Caption1>
                     </div>
                 </div>
 

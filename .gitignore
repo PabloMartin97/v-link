@@ -17,3 +17,4 @@ __pycache__/
 *.py[cod]
 ._*
 create-package.sh
+v-link.code-workspace

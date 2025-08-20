@@ -57,18 +57,49 @@ const Svg = styled.svg`
 const DataBox = () => {
     const theme = useTheme();
 
-    const app = APP((state) => state)
     const data = DATA((state) => state.data);
-    const modules = APP((state) => state.modules);
-    const settings = APP((state) => state.settings.dash_classic);
 
-    const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
+    const [customMsg, setCustomMsg] = useState('No Messages')
+    const [toggle, setToggle] = useState(false)
+
+
+    const modules = APP((state) => state.modules);
+    const dash_classic = APP((state) => state.settings.dash_classic);
+    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
 
     const padding = 20; // Padding for the rect size
     const containerRef = useRef(null);
 
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const { width, height } = dimensions;
+
+    const leftName = dash_classic.value_1.value
+    const leftType = dash_classic.value_1.type
+    const leftData = DATA((state) => state.data[leftName]);
+    const leftSettings = modules[leftType]((state) => state.settings.sensors[leftName]);
+    const leftID = modules[leftType]((state) => leftSettings.app_id)
+    const leftLimit = modules[leftType]((state) => leftSettings.limit_start)
+
+
+
+    const rightName = dash_classic.value_2.value
+    const rightType = dash_classic.value_2.type
+    const rightData = DATA((state) => state.data[rightName]);
+    const rightSettings = modules[rightType]((state) => state.settings.sensors[rightName]);
+    const rightID = modules[leftType]((state) => rightSettings.app_id)
+    const rightLimit = modules[rightType]((state) => rightSettings.limit_start)
+
+
+    const centerName = dash_classic.message_data.value
+    const centerType = dash_classic.message_data.type
+    const centerData = DATA((state) => state.data[centerName]);
+    const centerSettings = modules[centerType]((state) => state.settings.sensors[centerName])
+    const centerID = centerSettings.app_id
+    const centerLimit = dash_classic.message_threshold.value
+
+    const centerMsg = dash_classic.message_text.value
+    const centerOperator = dash_classic.message_option.value
+
 
     /* Observe container resizing and update dimensions. */
     useEffect(() => {
@@ -85,30 +116,6 @@ const DataBox = () => {
         if (containerRef.current) resizeObserver.observe(containerRef.current);
         return () => resizeObserver.disconnect();
     }, []);
-
-    const leftName = settings.value_1.value
-    const leftType = settings.value_1.type
-    const leftID = modules[leftType]((state) => state.settings.sensors[leftName].app_id)
-    const leftData = data[leftName]
-    const leftLimit = modules[leftType]((state) => state.settings.sensors[leftName].limit_start)
-
-    const rightName = settings.value_2.value
-    const rightType = settings.value_2.type
-    const rightID = modules[rightType]((state) => state.settings.sensors[rightName].app_id)
-    const rightData = data[rightName]
-    const rightLimit = modules[rightType]((state) => state.settings.sensors[rightName].limit_start)
-
-
-    const [customMsg, setCustomMsg] = useState('No Messages')
-    const [toggle, setToggle] = useState(false)
-
-    const centerName = settings.message_data.value
-    const centerType = settings.message_data.type
-    const centerID = modules[centerType]((state) => state.settings.sensors[centerName].app_id)
-    const centerMsg = settings.message_text.value
-    const centerLimit = settings.message_threshold.value
-    const centerData = data[centerName]
-    const centerOperator = settings.message_option.value
 
     /* Update center values. */
     useEffect(() => {

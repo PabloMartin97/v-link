@@ -1,13 +1,11 @@
 {
   "type": "system",
   "name": "app",
-
   "constants": {
     "padding": 30,
     "chart_input_max": 6,
-    "chart_input_current": 1,
+    "chart_input_current": 4,
     "profile": null,
-
     "keymap": {
       "options": [
         "Classic",
@@ -16,11 +14,9 @@
       ]
     }
   },
-
   "general": {
     "title": "Application",
     "type": "system",
-
     "colorTheme": {
       "value": "Green",
       "label": "Color Theme",
@@ -63,11 +59,9 @@
       "label": "Dashboard Padding"
     }
   },
-
   "shutdown": {
     "title": "Auto Shutdown",
     "type": "system",
-
     "autoShutdown": {
       "value": true,
       "label": "Auto Shutdown"
@@ -81,21 +75,17 @@
       "label": "Popup Timeout (min)"
     }
   },
-
   "screen": {
     "title": "Screen Settings",
     "type": "system",
-
     "autoOpen": {
       "value": true,
       "label": "Open Screen on Start"
     }
   },
-
   "side_bars": {
     "title": "Sidebar Settings",
     "type": "system",
-
     "topBar": {
       "value": true,
       "label": "Carplay in Fullscreen"
@@ -113,11 +103,9 @@
       "label": "SideBar Width"
     }
   },
-
   "dash_classic": {
     "title": "Classic Dash",
     "type": "data",
-
     "message_data": {
       "type": "can",
       "value": "boost",
@@ -143,7 +131,6 @@
       "label": "Message",
       "value": "Boost above threshold!"
     },
-
     "gauge_1": {
       "type": "can",
       "value": "boost",
@@ -175,11 +162,9 @@
       "label": "Bottom Right"
     }
   },
-
   "dash_race": {
     "title": "Race Dash",
     "type": "data",
-
     "gauge_1": {
       "type": "can",
       "value": "rpm",
@@ -226,11 +211,9 @@
       "label": "Value 6"
     }
   },
-
   "dash_charts": {
     "title": "Chart-Dash",
     "type": "data",
-
     "length": {
       "type": null,
       "value": 5000,
@@ -245,24 +228,35 @@
       "type": "adc",
       "value": "pressure",
       "label": "Value 1"
+    },
+    "value_2": {
+      "type": "adc",
+      "value": "temperature",
+      "label": "Value 2"
+    },
+    "value_3": {
+      "type": "can",
+      "value": "coolant",
+      "label": "Value 3"
+    },
+    "value_4": {
+      "type": "can",
+      "value": "rpm",
+      "label": "Value 4"
     }
   },
-
-  "dash_topbar":{
+  "dash_topbar": {
     "title": "TopBar",
     "type": "data",
-
     "value": {
       "type": "adc",
       "value": "pressure",
       "label": "Value"
     }
   },
-
   "app_bindings": {
     "title": "Application Keymap",
     "type": "interface",
-
     "switch": {
       "value": "ArrowUp",
       "label": "Switch Pages"
@@ -276,10 +270,137 @@
       "label": "Right"
     }
   },
+  "dongle_bindings": {
+    "title": "Dongle Keymap",
+    "type": "interface",
+    "selectDown": {
+      "value": "Space",
+      "label": "Select / Confirm"
+    },
+    "selectUp": {
+      "value": "KeyU",
+      "label": "Select Up"
+    },
+    "back": {
+      "value": "Backspace",
+      "label": "Back"
+    },
+    "up": {
+      "value": "ArrowUp",
+      "label": "Up"
+    },
+    "down": {
+      "value": "ArrowDown",
+      "label": "Down"
+    },
+    "left": {
+      "value": "ArrowLeft",
+      "label": "Left"
+    },
+    "right": {
+      "value": "ArrowRight",
+      "label": "Right"
+    },
+    "home": {
+      "value": "KeyH",
+      "label": "Home"
+    },
+    "play": {
+      "value": "KeyP",
+      "label": "Play"
+    },
+    "pause": {
+      "value": "KeyO",
+      "label": "Pause"
+    },
+    "next": {
+      "value": "KeyN",
+      "label": "Next"
+    },
+    "prev": {
+      "value": "KeyV",
+      "label": "Previous"
+    },
+    "acceptPhone": {
+      "value": "KeyA",
+      "label": "Accept Phone"
+    },
+    "rejectPhone": {
+      "value": "KeyR",
+      "label": "Reject Phone"
+    }
+  },
+  "dongle_config": {
+    "title": "Dongle Configuration",
+    "type": "system",
 
+    "fps": {
+      "value": 60,
+      "label": "Frames per Second",
+      "options": [
+        30,
+        60
+      ]
+    },
+    "dpi": {
+      "value": 160,
+      "label": "DPI"
+    },
+    "format": {
+      "value": 5,
+      "label": "Video Format"
+    },
+    "iBoxVersion": {
+      "value": 2,
+      "label": "iBox Version"
+    },
+    "boxName": {
+      "value": "CarPlay",
+      "label": "Box Name"
+    },
+    "nightMode": {
+      "value": false,
+      "label": "Night Mode"
+    },
+    "mediaDelay": {
+      "value": 300,
+      "label": "Media Delay (ms)"
+    },
+    "audioTransferMode": {
+      "value": false,
+      "label": "Audio Transfer Mode"
+    },
+    "wifiType": {
+      "value": "5ghz",
+      "label": "Wi-Fi Band",
+      "options": [
+        "2.4ghz",
+        "5ghz"
+      ]
+    },
+    "micType": {
+      "value": "os",
+      "label": "Microphone Type",
+      "options": [
+        "box",
+        "os"
+      ]
+    },
+    "camera": {
+      "value": false,
+      "label": "Enable Camera"
+    },
+    "piMost": {
+      "value": false,
+      "label": "Enable PiMOST"
+    },
+    "delay": {
+      "value": 0,
+      "label": "MMI Delay"
+    }
+  },
   "comfort": {
     "title": "Comfort",
-
     "cruiseControl": {
       "value": false,
       "label": "Activate Cruise Control"
@@ -293,10 +414,8 @@
       "label": "Close Windows"
     }
   },
-
   "lights": {
     "title": "Lights",
-
     "headlights": {
       "value": false,
       "label": "Activate Headlights"
@@ -310,10 +429,8 @@
       "label": "Activate Foglights"
     }
   },
-
   "dev": {
     "title": "Dev",
-
     "advancedSettings": {
       "value": false,
       "label": "Show Advanced Settings"

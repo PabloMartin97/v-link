@@ -1,32 +1,31 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { APP, MMI, CAN, SWC, ADC, RTI } from '../store/Store';
-
+import { APP, CAN, SWC, ADC, RTI } from '../store/Store';
 
 // Define all modules for easy iteration and reference
 const modules = {
   app: APP,
-  mmi: MMI,
   can: CAN,
   swc: SWC,
   adc: ADC,
   rti: RTI
 };
 
-// Create socket connections for each module
+// Create a single socket connection to the main server
+const mainSocket = io('ws://localhost:4001');
+
+// Create namespace connections using the main socket
 const socket = {};
 Object.keys(modules).forEach(module => {
-  socket[module] = io(`ws://localhost:4001/${module}`);
+  socket[module] = mainSocket.io.socket(`/${module}`);
 });
-
-const sysChannel = io("ws://localhost:4001/sys");
+const sysChannel = mainSocket.io.socket('/sys');
 
 export const Socket = () => {
   // Initialize all Zustand stores and map them to module names
   const store = Object.fromEntries(
     Object.entries(modules).map(([key, useStore]) => [key, useStore()])
   );
-
 
   const totalModules = Object.keys(modules).length;
   const [loadedModules, setLoadedModules] = useState(0);
@@ -35,8 +34,9 @@ export const Socket = () => {
 
   /* Initialize App */
   useEffect(() => {
+    console.log('Initializing App...');
     if (!store['app'].system.config) return;
-
+    
     if (loadedModules === totalModules) {
       console.log('App ready.');
       store['app'].update((state) => {
@@ -49,14 +49,14 @@ export const Socket = () => {
 
   /* Wait for Settings */
   useEffect(() => {
+    console.log('wait for settings');
     if (!store['app'].system.config) return;
 
     // Handles settings update for each module, ensuring each module loads once
     const handleSettings = (module) => (data) => {
+      console.log(`Handling settings for ${module}`);
       loadedModuleSet.current.add(module);
       setLoadedModules(loadedModuleSet.current.size);
-
-      console.log(data);
       store[module].update((state) => {
         state.settings = data;
       });
@@ -70,33 +70,72 @@ export const Socket = () => {
     };
 
     const handleState = (module) => (data) => {
+      console.log(`Handling state for ${module}`);
       store['app'].update((state) => {
         state.system[`${module}State`] = data;
       });
     };
 
-    // Register state and settings listeners for each module
-    Object.keys(modules).forEach(module => {
-      socket[module].on('state', handleState(module));
-      socket[module].emit('ping');
-    });
+    // Wait for main socket to connect before setting up namespaces
+    const setupNamespaces = () => {
+      // Register state and settings listeners for each module
+      Object.keys(modules).forEach(module => {
+        socket[module].on('state', handleState(module));
+        socket[module].emit('ping');
+      });
 
-    Object.keys(modules).forEach(module => {
-      socket[module].on('settings', handleSettings(module));
-      socket[module].emit('load');
-    });
+      Object.keys(modules).forEach(module => {
+        socket[module].on('settings', handleSettings(module));
+        socket[module].emit('load');
+      });
 
-    sysChannel.on('ign', handleIgnition());
-    sysChannel.emit('systemTask', 'ign');
+      sysChannel.on('ign', handleIgnition());
+      sysChannel.emit('systemTask', 'ign');
+    };
 
+    // Check if main socket is already connected
+    if (mainSocket.connected) {
+      setupNamespaces();
+    } else {
+      // Wait for connection
+      mainSocket.on('connect', setupNamespaces);
+    }
+
+    // Cleanup function
     return () => {
       Object.keys(modules).forEach(module => {
         socket[module].off('settings', handleSettings(module));
         socket[module].off('state', handleState(module));
       });
       sysChannel.off('ign', handleIgnition());
+      mainSocket.off('connect', setupNamespaces);
     };
   }, [store['app'].system.config]);
+
+  // Optional: Add connection status monitoring
+  useEffect(() => {
+    const handleConnect = () => {
+      console.log('Main socket connected');
+    };
+
+    const handleDisconnect = (reason) => {
+      console.log('Main socket disconnected:', reason);
+    };
+
+    const handleError = (error) => {
+      console.error('Socket connection error:', error);
+    };
+
+    mainSocket.on('connect', handleConnect);
+    mainSocket.on('disconnect', handleDisconnect);
+    mainSocket.on('connect_error', handleError);
+
+    return () => {
+      mainSocket.off('connect', handleConnect);
+      mainSocket.off('disconnect', handleDisconnect);
+      mainSocket.off('connect_error', handleError);
+    };
+  }, []);
 
   return null;
 };

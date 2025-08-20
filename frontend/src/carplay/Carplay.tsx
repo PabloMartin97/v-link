@@ -11,7 +11,7 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 
-import { APP, MMI } from '../store/Store';
+import { APP } from '../store/Store';
 import hexToRGBA from '../app/helper/HexToRGBA'
 
 import "./../themes.scss"
@@ -71,9 +71,6 @@ interface CarplayProps {
 function Carplay({ command, commandCounter }: CarplayProps) {
 
   const app = APP((state) => state);
-  const mmi = MMI((state) => state);
-
-  const theme = useTheme();
 
   const [phoneState, setPhoneState] = useState<Boolean | null>(false);
 
@@ -81,12 +78,27 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const width = app.system.carplaySize.width
   const height = app.system.carplaySize.height
 
-  const config = {
-    fps: mmi.config.fps,
-    width: width,
-    height: height,
-    mediaDelay: mmi.config.delay
-  }
+  const flattenConfig = (config: Record<string, any>) => {
+    const result: Record<string, any> = {};
+    Object.entries(config).forEach(([key, value]) => {
+      if (typeof value === "object" && value !== null && "value" in value) {
+        result[key] = value.value;
+      }
+    });
+    return result;
+  };
+
+  const config = useMemo(
+    () => flattenConfig(app.dongle_config),
+    [app.dongle_config]
+  );
+
+  //const config = {
+  //  fps: mmi.config.fps,
+  //  width: width,
+  //  height: height,
+  //  mediaDelay: mmi.config.delay
+  //}
 
   const mainElem = useRef<HTMLDivElement>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)

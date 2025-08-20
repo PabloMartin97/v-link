@@ -1,9 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 
-import { Button } from '../../theme/styles/Inputs';
-
-
 interface DisplayProps {
   ignition: boolean;
   autoShutdown: boolean;
@@ -55,27 +52,9 @@ const Ignition: React.FC<DisplayProps> = ({
     updateApp((state) => {
       state.system.modal.visible = true;
       state.system.modal.title = 'Ignition Off.';
-      state.system.modal.exit = true;
-
-      state.system.modal.content = (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",       // vertically center the SVGs
-            justifyContent: "space-around", // space them evenly horizontally
-          }}
-        >
-          <div>
-            System will shut down in ${shutdownDelay} seconds to prevent battery drain.
-            Click to dismiss for ${messageTimeout} minutes.
-          </div>
-
-           <Button onClick={() => {handleDismiss}}>DISMISS</Button>
-        </div>
-      );
+      state.system.modal.body = `System will shut down in ${shutdownDelay} seconds to prevent battery drain. \nClick to dismiss for ${messageTimeout} minutes.`;
+      state.system.modal.button = 'DISMISS';
+      state.system.modal.action = handleDismiss;
     });
   };
 

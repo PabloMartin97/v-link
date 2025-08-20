@@ -205,10 +205,16 @@ class ServerThread(threading.Thread):
             return result
         
         elif args == 'loadProfile':
+            # Loads the profile which was selected through the frontend.
             result = settings.copy_files(payload)
             if result:
                 print("All settings copied and ready")
                 return {"result": result}
+            
+        elif args == 'start':
+            # Loads the profile which was selected through the frontend.
+            print('Starting all threads')
+            shared_state.start_event.set()
 
         elif args == 'reboot':
             subprocess.run("sudo reboot -h now", shell=True)

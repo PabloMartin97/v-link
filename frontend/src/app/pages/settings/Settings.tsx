@@ -9,16 +9,17 @@ import { Typography } from '../../../theme/styles/Typography';
 import { APP } from '../../../store/Store';
 
 import { io } from "socket.io-client";
-import Modal from '../../components/Modal';
 
+// Create a single socket connection to the main server
+const mainSocket = io('ws://localhost:4001');
 
-const appChannel = io("ws://localhost:4001/app")
-const sysChannel = io("ws://localhost:4001/sys")
-
-const canChannel = io("ws://localhost:4001/can")
-const adcChannel = io("ws://localhost:4001/adc")
-const rtiChannel = io("ws://localhost:4001/rti")
-const mostChannel = io("ws://localhost:4001/most")
+// Create namespace connections using the main socket
+const appChannel = mainSocket.io.socket('/app');
+const sysChannel = mainSocket.io.socket('/sys');
+const canChannel = mainSocket.io.socket('/can');
+const adcChannel = mainSocket.io.socket('/adc');
+const rtiChannel = mainSocket.io.socket('/rti');
+const mostChannel = mainSocket.io.socket('/most');
 
 const Container = styled.div`
     flex: 1;
@@ -82,14 +83,30 @@ const Settings = () => {
   const Caption2 = Typography.Caption2
 
   /* Load Stores */
-  const app = APP((state) => state)
   const modules = APP((state) => state.modules)
-
-  const settings = app.settings;
-  const system = app.system;
+  const settings = APP((state) => state.settings)
+  const system = APP((state) => state.system)
+  const appUpdate = APP((state) => state.update)
 
   const theme = useTheme();
-  const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
+  const themeColor = (settings.general.colorTheme.value).toLowerCase()
+
+
+  const [save, setSave] = useState(true)
+  const [reset, setReset] = useState(false)
+  const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
+
+
+  useEffect(() => {
+  if (reset) {
+    setCurrentSettings(settings);
+    setReset(false);
+    
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }
+}, [reset, settings]);
 
 
   /* Create combined data store for dropdown */
@@ -114,7 +131,7 @@ const Settings = () => {
       </>
     )
 
-    app.update((state) => {
+    appUpdate((state) => {
       state.system.modal.visible = true;
       state.system.modal.title = title
       state.system.modal.exit = true
@@ -175,10 +192,7 @@ const Settings = () => {
   };
 
 
-  /* Handle Settings */
-  const [save, setSave] = useState(true)
-  const [reset, setReset] = useState(false)
-  const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
+
 
   // Change Settings
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
@@ -203,7 +217,7 @@ const Settings = () => {
   // Save Settings
   function saveSettings() {
     setSave(true)
-    app.update((state) => {
+    appUpdate((state) => {
       state.settings = currentSettings;
     });
     appChannel.emit("save", currentSettings);
@@ -248,10 +262,10 @@ const Settings = () => {
       const latestVersion = data.tag_name; // This is the version (e.g., "v1.2.0")
 
 
-      if (latestVersion === app.system.version)
+      if (latestVersion === system.version)
         openModal("No Updates available.", "Check back again later :)", null, null)
       else {
-        openModal("New update available!", `Current: ${app.system.version} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
+        openModal("New update available!", `Current: ${system.version} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
       }
     } catch (error) {
       openModal("Error checking for updates:", error, null, null)
@@ -265,7 +279,7 @@ const Settings = () => {
       setCurrentSettings(app.settings)
       setReset(false)
     }
-  }, [app.settings])
+  }, [reset])
 
   /* Toggle Threads */
   function handleIO(module, channel) {
@@ -300,6 +314,7 @@ const Settings = () => {
     if (!settingsObj) return null;
 
     // Get label, type, and nested options from setting block
+    console.log(key, settingsObj, settingsObj[key])
     const { title, type, ...nestedSettings } = settingsObj[key];
 
     const nestedElements = Object.entries(nestedSettings).map(([setting, content]) => {
@@ -362,7 +377,7 @@ const Settings = () => {
 
       const handleBinding = (key, setting) => {
         //console.log(key, setting)
-        openModal(`${app.settings[key][setting].label}`, "Press a key to assign or ESC to abort.", null, null)
+        openModal(`${settings[key][setting].label}`, "Press a key to assign or ESC to abort.", null, null)
 
         // Define the key press handler
         const handleKeyPress = (event) => {
@@ -381,7 +396,7 @@ const Settings = () => {
 
 
       return (
-        <Element>
+        <Element key={setting}>
           <Caption2>{label}</Caption2>
           <Divider />
           <Spacer>
@@ -443,12 +458,12 @@ const Settings = () => {
 
     const container = scrollRef.current;
     if (container) {
-      container.addEventListener("wheel", handleWheel);
+      container.addEventListener("wheel", handleWheel, { passive: true });
     }
 
     return () => {
       if (container) {
-        container.removeEventListener("wheel", handleWheel);
+        container.removeEventListener("wheel", handleWheel, { passive: true });
       }
     };
   }, [system.settingPage]); // Make sure useEffect runs again on reset
@@ -462,7 +477,6 @@ const Settings = () => {
         horizontal={false}
         hideScrollbars={true}
         ignoreElements='input, select'
-        key={`${system.settingPage}-${reset}`} // This will force a complete re-render when page changes
         innerRef={scrollRef}
       >
         {system.settingPage === 1 &&
@@ -536,11 +550,17 @@ const Settings = () => {
         {system.settingPage === 3 &&
           <>
             {renderSetting("app_bindings", currentSettings)}
-            {renderSetting("mmi_bindings", currentSettings)}
+            {renderSetting("dongle_bindings", currentSettings)}
           </>
         }
 
         {system.settingPage === 4 &&
+          <>
+            {renderSetting("dongle_config", currentSettings)}
+          </>
+        }
+
+        {system.settingPage === 5 &&
           <>
             <div style={{ display: 'flex', width: '100%', height: '90%', gap: '10px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>

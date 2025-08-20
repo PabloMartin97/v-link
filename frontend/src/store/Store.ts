@@ -1,11 +1,15 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
 
-const DATA = create((set) => ({
-  data: {}, // Object to store live vehicle data
-  update: (newData) =>
-    set((state) => ({ data: { ...state.data, ...newData } })),
-}));
+const DATA = create(
+  immer((set) => ({
+    data: {},
+    update: (newData) =>
+      set((state) => {
+        Object.assign(state.data, newData);
+      }),
+  }))
+);
 
 const APP = create(
   immer((set) => ({
@@ -124,16 +128,6 @@ const RTI = create(
   }))
 );
 
-const MMI = create(
-  immer((set) => ({
-    system: {
-      state: false,
-    },
-    settings: {},
-    update: (updater) => set(updater),
-  }))
-);
-
 
 const KEY = create(
   immer((set) => ({
@@ -149,4 +143,4 @@ const KEY = create(
 );
 
 
-export { DATA, APP, MMI, CAN, SWC, ADC, RTI, KEY };
+export { DATA, APP, CAN, SWC, ADC, RTI, KEY };

@@ -40,6 +40,7 @@ class SharedState:
         self.toggle_rti = threading.Event()
         self.toggle_ign = threading.Event()
 
+        self.start_event = threading.Event()
         self.exit_event = threading.Event()
         self.restart_event = threading.Event()
         self.update_event = threading.Event()

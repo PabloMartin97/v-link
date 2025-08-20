@@ -4,7 +4,7 @@ import { theme } from './theme/Theme';
 import styled, { ThemeProvider, StyleSheetManager } from 'styled-components';
 import isPropValid from '@emotion/is-prop-valid'; // Import isPropValid
 
-import { APP, MMI, KEY } from './store/Store';
+import { APP, KEY } from './store/Store';
 import { Socket } from './socket/Socket';
 
 import Init from './app/Init';
@@ -28,14 +28,13 @@ const AppContainer = styled.div`
 `;
 
 function App() {
-  const mmi = MMI((state) => state);
   const key = KEY((state) => state);
   const app = APP((state) => state);
 
   const system = app.system;
 
-  const [commandCounter, setCommandCounter] = useState(0);
-  const [keyCommand, setKeyCommand] = useState('');
+  const commandCounterRef = useRef(0);
+  const keyCommandRef = useRef('');
 
   useEffect(() => {
     document.addEventListener('keydown', mmiKeyDown);
@@ -44,33 +43,39 @@ function App() {
     };
   }, [system.view, system.switch]);
 
-  const mmiKeyDown = (event: KeyboardEvent) => {
-    // Store last Keystroke in store to broadcast it
-    key.setKeyStroke(event.code);
+const mmiKeyDown = (event: KeyboardEvent) => {
+  // Store last Keystroke in store to broadcast it
+  key.setKeyStroke(event.code);
 
-    // Only process Carplay key commands when in Carplay view
-    if (system.view !== 'Carplay') return;
+  // Only process Carplay key commands when in Carplay view
+  if (system.view !== 'Carplay') return;
 
-    // If user is not switching the page, send control to CarPlay
-    if (system.switch && event.code !== system.switch) {
-      if (Object.values(mmi!.bindings).includes(event.code)) {
-        const action = Object.keys(mmi!.bindings).find(key =>
-          mmi!.bindings[key] === event.code
-        );
-        //console.log(action)
-        if (action !== undefined) {
-          setKeyCommand(action);
-          setCommandCounter(prev => prev + 1);
-          if (action === 'selectDown') {
-            setTimeout(() => {
-              setKeyCommand('selectUp');
-              setCommandCounter(prev => prev + 1);
-            }, 200);
-          }
+  // If user is not switching the page, send control to CarPlay
+  if (system.switch && event.code !== system.switch) {
+    const bindings = app.settings.dongle_bindings;
+
+    if (bindings) {
+      console.log('looking for binding')
+      // Find the action whose .value matches the key event
+      const action = Object.keys(bindings).find(
+        (key) => bindings[key].value === event.code
+      );
+
+      if (action !== undefined) {
+        keyCommandRef.current = action;
+        commandCounterRef.current += 1;
+
+        if (action === "selectDown") {
+          setTimeout(() => {
+            keyCommandRef.current = "selectUp";
+            commandCounterRef.current += 1;
+          }, 200);
         }
       }
     }
-  };
+  }
+};
+
 
   // Dimensions of the container
   const containerRef = useRef(null);

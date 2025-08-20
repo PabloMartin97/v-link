@@ -57,15 +57,32 @@ const LoadingWrapper = styled.div`
   height: 100%;
 `;
 
-const DRAG_THRESHOLD = 30; // Reduced threshold for more responsive transitions
+const DRAG_THRESHOLD = 30;
 const TRANSITION_DURATION = 400;
+const MIN_DRAG_DISTANCE = 10;
 
 function Dashboard() {
-  const app = APP((state) => state);
   const key = KEY((state) => state);
   const theme = useTheme();
   const dashBoardRef = useRef(null);
   const resizeDebounceTimeout = useRef(null);
+  
+  // Refs for drag state to avoid unnecessary re-renders
+  const dragStateRef = useRef({
+    startX: 0,
+    currentX: 0,
+    offset: 0,
+    isDragging: false,
+    isPointerDown: false
+  });
+  
+  const animationFrameRef = useRef(null);
+  const containerWidthRef = useRef(window.innerWidth);
+
+  const defaultDash = APP((state) => state.settings.general.defaultDash.value);
+  const colorTheme = APP((state) => state.settings.general.colorTheme.value);
+  const app_bindings = APP((state) => state.settings.app_bindings);
+  const appUpdate = APP((state) => state.update);
 
   const components = useMemo(() => [
     { name: "Classic", component: Classic },
@@ -75,11 +92,11 @@ function Dashboard() {
 
   const defaultComponentIndex = useMemo(() => 
     components.findIndex(
-      (item) => item.name === app.settings.general.defaultDash.value
-    ), [components, app.settings.general.defaultDash.value]
+      (item) => item.name === defaultDash
+    ), [components, defaultDash]
   );
 
-  // State management
+  // Reduced state - only what needs to trigger re-renders
   const [currentPageIndex, setCurrentPageIndex] = useState(defaultComponentIndex);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionState, setTransitionState] = useState({
@@ -88,12 +105,9 @@ function Dashboard() {
     direction: null
   });
   
-  // Drag state
-  const [dragStart, setDragStart] = useState(0);
-  const [dragCurrent, setDragCurrent] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isPointerDown, setIsPointerDown] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0);
+  // Single state for drag rendering updates
+  const [dragRenderOffset, setDragRenderOffset] = useState(0);
+  const [isDragRendering, setIsDragRendering] = useState(false);
 
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -107,19 +121,25 @@ function Dashboard() {
     return { prevIndex, nextIndex };
   }, [components.length]);
 
-  // Cache container width to avoid repeated DOM queries
-  const [containerWidth, setContainerWidth] = useState(window.innerWidth);
-
+  // Optimized drag percentage calculation using ref
   const calculateDragPercentage = useCallback((dragDistance) => {
-    return Math.max(-100, Math.min(100, (dragDistance / containerWidth) * 100));
-  }, [containerWidth]);
-
-  const resetDragState = useCallback(() => {
-    setIsDragging(false);
-    setIsPointerDown(false);
-    setDragStart(0);
-    setDragCurrent(0);
+    return Math.max(-100, Math.min(100, (dragDistance / containerWidthRef.current) * 100));
   }, []);
+
+  // Throttled render update function
+  const updateDragRender = useCallback(() => {
+    const dragState = dragStateRef.current;
+    const dragDistance = dragState.currentX - dragState.startX;
+    const dragPercentage = calculateDragPercentage(dragDistance);
+    
+    setDragRenderOffset(dragPercentage);
+    
+    // Only set isDragRendering if we're actually dragging significantly
+    const shouldRender = Math.abs(dragPercentage) > 2; // Small threshold to avoid micro-movements
+    if (shouldRender !== isDragRendering) {
+      setIsDragRendering(shouldRender);
+    }
+  }, [calculateDragPercentage, isDragRendering]);
 
   // Window resize handler with container width caching
   useEffect(() => {
@@ -136,11 +156,11 @@ function Dashboard() {
           height: newHeight,
         });
         
-        // Cache container width to avoid future DOM queries
+        // Update cached container width
         if (dashBoardRef.current) {
-          setContainerWidth(dashBoardRef.current.offsetWidth || newWidth);
+          containerWidthRef.current = dashBoardRef.current.offsetWidth || newWidth;
         } else {
-          setContainerWidth(newWidth);
+          containerWidthRef.current = newWidth;
         }
       }, 100);
     };
@@ -149,7 +169,7 @@ function Dashboard() {
     
     // Initial container width setup
     if (dashBoardRef.current) {
-      setContainerWidth(dashBoardRef.current.offsetWidth || window.innerWidth);
+      containerWidthRef.current = dashBoardRef.current.offsetWidth || window.innerWidth;
     }
     
     return () => {
@@ -158,15 +178,14 @@ function Dashboard() {
     };
   }, []);
 
-  // Update content size (throttled to avoid frequent reflows)
+  // Update content size (throttled)
   useEffect(() => {
     if (dashBoardRef.current) {
       const rect = dashBoardRef.current.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        // Update cached container width
-        setContainerWidth(rect.width);
+        containerWidthRef.current = rect.width;
         
-        app.update((state) => {
+        appUpdate((state) => {
           if (state.system.interface) {
             state.system.contentSize.width = rect.width;
             state.system.contentSize.height = rect.height;
@@ -174,7 +193,7 @@ function Dashboard() {
         });
       }
     }
-  }, [windowSize, app]);
+  }, [windowSize, appUpdate]);
 
   // Transition logic
   const performTransition = useCallback((direction) => {
@@ -185,7 +204,18 @@ function Dashboard() {
       : (currentPageIndex === 0 ? components.length - 1 : currentPageIndex - 1);
 
     setIsTransitioning(true);
-    setDragOffset(0);
+    setDragRenderOffset(0);
+    setIsDragRendering(false);
+    
+    // Reset drag state
+    dragStateRef.current = {
+      startX: 0,
+      currentX: 0,
+      offset: 0,
+      isDragging: false,
+      isPointerDown: false
+    };
+    
     setTransitionState({
       oldIndex: currentPageIndex,
       newIndex: newIndex,
@@ -206,40 +236,56 @@ function Dashboard() {
   const swipeLeft = useCallback(() => performTransition('left'), [performTransition]);
   const swipeRight = useCallback(() => performTransition('right'), [performTransition]);
 
-  // Unified pointer handling
+  // Optimized pointer handlers using refs
   const handlePointerStart = useCallback((position) => {
     if (isTransitioning) return;
-    setIsPointerDown(true);
-    setDragStart(position);
-    setDragCurrent(position);
-    setIsDragging(false);
-    setDragOffset(0);
+    
+    dragStateRef.current = {
+      startX: position,
+      currentX: position,
+      offset: 0,
+      isDragging: false,
+      isPointerDown: true
+    };
   }, [isTransitioning]);
 
-  // Optimized pointer move handler with RAF throttling
+  // Heavily optimized pointer move with RAF throttling
   const handlePointerMove = useCallback((position) => {
-    if (isTransitioning || !isPointerDown) return;
+    const dragState = dragStateRef.current;
     
-    // Use requestAnimationFrame to throttle updates
-    requestAnimationFrame(() => {
-      const dragDistance = position - dragStart;
-      
-      if (!isDragging && Math.abs(dragDistance) > 10) {
-        setIsDragging(true);
-      }
-
-      if (isDragging || Math.abs(dragDistance) > 10) {
-        setDragCurrent(position);
-        const dragPercentage = calculateDragPercentage(dragDistance);
-        setDragOffset(dragPercentage);
-      }
-    });
-  }, [isTransitioning, isPointerDown, isDragging, dragStart, calculateDragPercentage]);
+    if (isTransitioning || !dragState.isPointerDown) return;
+    
+    // Cancel previous animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    // Update current position immediately
+    dragState.currentX = position;
+    
+    // Check if we should start dragging
+    const dragDistance = position - dragState.startX;
+    if (!dragState.isDragging && Math.abs(dragDistance) > MIN_DRAG_DISTANCE) {
+      dragState.isDragging = true;
+    }
+    
+    // Only update render if we're dragging
+    if (dragState.isDragging) {
+      animationFrameRef.current = requestAnimationFrame(updateDragRender);
+    }
+  }, [isTransitioning, updateDragRender]);
 
   const handlePointerEnd = useCallback(() => {
-    if (isTransitioning || !isPointerDown) return;
+    const dragState = dragStateRef.current;
     
-    const dragDistance = dragCurrent - dragStart;
+    if (isTransitioning || !dragState.isPointerDown) return;
+    
+    // Cancel any pending animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    const dragDistance = dragState.currentX - dragState.startX;
     const dragPercentage = calculateDragPercentage(dragDistance);
     
     if (Math.abs(dragPercentage) > DRAG_THRESHOLD) {
@@ -249,12 +295,20 @@ function Dashboard() {
         swipeLeft();
       }
     } else {
-      setDragOffset(0);
-      setTimeout(() => setDragOffset(0), 50);
+      // Reset to original position
+      setDragRenderOffset(0);
+      setIsDragRendering(false);
     }
 
-    resetDragState();
-  }, [isTransitioning, isPointerDown, dragCurrent, dragStart, calculateDragPercentage, swipeRight, swipeLeft, resetDragState]);
+    // Reset drag state
+    dragStateRef.current = {
+      startX: 0,
+      currentX: 0,
+      offset: 0,
+      isDragging: false,
+      isPointerDown: false
+    };
+  }, [isTransitioning, calculateDragPercentage, swipeRight, swipeLeft]);
 
   // Event handlers
   const handleDoubleClick = useCallback((event) => {
@@ -266,47 +320,55 @@ function Dashboard() {
   // Global pointer up listener
   useEffect(() => {
     const handleGlobalPointerUp = () => {
-      if (isPointerDown) {
+      if (dragStateRef.current.isPointerDown) {
         handlePointerEnd();
       }
     };
 
     document.addEventListener('mouseup', handleGlobalPointerUp);
     document.addEventListener('touchend', handleGlobalPointerUp);
+    
     return () => {
       document.removeEventListener('mouseup', handleGlobalPointerUp);
       document.removeEventListener('touchend', handleGlobalPointerUp);
+      // Clean up animation frame on unmount
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
-  }, [isPointerDown, handlePointerEnd]);
+  }, [handlePointerEnd]);
 
   // Keyboard navigation
   useEffect(() => {
-    if (key.keyStroke === app.settings.app_bindings.left.value) swipeRight();
-    if (key.keyStroke === app.settings.app_bindings.right.value) swipeLeft();
-  }, [key.keyStroke, app.settings.app_bindings.left.value, app.settings.app_bindings.right.value, swipeRight, swipeLeft]);
+    if (key.keyStroke === app_bindings.left.value) swipeRight();
+    if (key.keyStroke === app_bindings.right.value) swipeLeft();
+  }, [key.keyStroke, app_bindings.left.value, app_bindings.right.value, swipeRight, swipeLeft]);
 
-  // Get transform and opacity for each component
+  // Get transform and opacity for each component (memoized with fewer dependencies)
   const getComponentTransform = useCallback((index) => {
     const { prevIndex, nextIndex } = getAdjacentIndices(currentPageIndex);
 
-    if (isDragging) {
+    if (isDragRendering) {
       if (index === currentPageIndex) {
-        return { translateX: `${dragOffset}%`, opacity: 1 - Math.abs(dragOffset) * 0.003 };
-      }
-      
-      if (index === prevIndex && dragOffset > 0) {
         return { 
-          translateX: `${dragOffset - 100}%`, 
-          opacity: Math.max(0, dragOffset * 0.01) 
-        };
-      } else if (index === nextIndex && dragOffset < 0) {
-        return { 
-          translateX: `${dragOffset + 100}%`, 
-          opacity: Math.max(0, Math.abs(dragOffset) * 0.01) 
+          translateX: `${dragRenderOffset}%`, 
+          opacity: 1 - Math.abs(dragRenderOffset) * 0.003 
         };
       }
       
-      return { translateX: dragOffset > 0 ? '-100%' : '100%', opacity: 0 };
+      if (index === prevIndex && dragRenderOffset > 0) {
+        return { 
+          translateX: `${dragRenderOffset - 100}%`, 
+          opacity: Math.max(0, dragRenderOffset * 0.01) 
+        };
+      } else if (index === nextIndex && dragRenderOffset < 0) {
+        return { 
+          translateX: `${dragRenderOffset + 100}%`, 
+          opacity: Math.max(0, Math.abs(dragRenderOffset) * 0.01) 
+        };
+      }
+      
+      return { translateX: dragRenderOffset > 0 ? '-100%' : '100%', opacity: 0 };
     }
     
     if (!isTransitioning) {
@@ -328,16 +390,16 @@ function Dashboard() {
     }
     
     return { translateX: '100%', opacity: 0 };
-  }, [currentPageIndex, isDragging, dragOffset, isTransitioning, transitionState, getAdjacentIndices]);
+  }, [currentPageIndex, isDragRendering, dragRenderOffset, isTransitioning, transitionState, getAdjacentIndices]);
 
-  // Determine which components to render
+  // Determine which components to render (optimized)
   const shouldRender = useCallback((index) => {
     const { prevIndex, nextIndex } = getAdjacentIndices(currentPageIndex);
 
-    if (isDragging) {
+    if (isDragRendering) {
       return index === currentPageIndex || 
-             (index === prevIndex && dragOffset > 0) || 
-             (index === nextIndex && dragOffset < 0);
+             (index === prevIndex && dragRenderOffset > 0) || 
+             (index === nextIndex && dragRenderOffset < 0);
     }
     
     if (!isTransitioning) {
@@ -346,12 +408,12 @@ function Dashboard() {
     
     const { oldIndex, newIndex } = transitionState;
     return index === oldIndex || index === newIndex;
-  }, [currentPageIndex, isDragging, dragOffset, isTransitioning, transitionState, getAdjacentIndices]);
+  }, [currentPageIndex, isDragRendering, dragRenderOffset, isTransitioning, transitionState, getAdjacentIndices]);
 
   return (
     <DashBoard
       ref={dashBoardRef}
-      className={app.settings.general.colorTheme.value}
+      className={colorTheme}
       onMouseDown={(e) => handlePointerStart(e.clientX)}
       onMouseMove={(e) => handlePointerMove(e.clientX)}
       onMouseUp={handlePointerEnd}
@@ -372,7 +434,7 @@ function Dashboard() {
               translateX={translateX}
               opacity={opacity}
               isTransitioning={isTransitioning}
-              isDragging={isDragging}
+              isDragging={isDragRendering}
             >
               <Suspense fallback={
                 <LoadingWrapper>

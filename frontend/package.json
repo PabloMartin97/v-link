@@ -35,7 +35,7 @@
     "react": "^18.3.1",
     "react-devtools": "^4.28.5",
     "react-dom": "^18.3.1",
-    "react-indiana-drag-scroll": "^2.2.0",
+    "react-indiana-drag-scroll": "^2.2.1",
     "react-loader-spinner": "^5.3.4",
     "react-simple-keyboard": "^3.7.34",
     "react-spinners-kit": "^1.9.1",
