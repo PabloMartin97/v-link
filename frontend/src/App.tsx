@@ -134,10 +134,10 @@ const mmiKeyDown = (event: KeyboardEvent) => {
 
           {system.startedUp && ready ? (
             <>
-              {/*<Carplay
-                commandCounter={commandCounter}
-                command={keyCommand}
-              />*/}
+              {<Carplay
+                commandCounter={commandCounterRef}
+                command={keyCommandRef}
+              />}
 
               < Cardata />
               <Content />

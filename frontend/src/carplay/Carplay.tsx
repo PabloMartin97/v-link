@@ -79,18 +79,21 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const height = app.system.carplaySize.height
 
   const flattenConfig = (config: Record<string, any>) => {
+        console.log(config)
+
     const result: Record<string, any> = {};
     Object.entries(config).forEach(([key, value]) => {
       if (typeof value === "object" && value !== null && "value" in value) {
         result[key] = value.value;
       }
     });
+    console.log(result)
     return result;
   };
 
   const config = useMemo(
-    () => flattenConfig(app.dongle_config),
-    [app.dongle_config]
+    () => flattenConfig(app.settings.dongle_config),
+    [app.settings.dongle_config]
   );
 
   //const config = {

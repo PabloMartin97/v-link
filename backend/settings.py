@@ -55,6 +55,18 @@ def load_settings(setting):
     except Exception as e:
         logger.error(f"Error loading settings from '{settings_file}': {e}")
         return None
+    
+    
+def save_settings(setting, data):
+    # Specify the file path
+    json_path = USER_CONFIG_DIR / f"{setting}.json"
+
+    # Save the settings to the JSON file
+    try:
+        with open(json_path, 'w') as file:
+            json.dump(data, file, indent=4)
+    except Exception as e:
+        logger.error(f"Error saving settings to '{json_path}': {e}")
 
 
 def reset_settings():

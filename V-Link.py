@@ -238,8 +238,9 @@ class VLINK:
             for thread_name, thread in shared_state.THREADS.items():
                 if thread_name != 'server' and isinstance(thread, threading.Thread) and thread.is_alive():
                     self.stop_thread(thread_name)
-            time.sleep(1)
+            time.sleep(.5)
             
+            self.start_thread('app', logger)
             self.start_modules()
 
     def process_hdmi_event(self):
@@ -307,7 +308,7 @@ def setup_arguments():
 def display_thread_states():
     clear_screen()
     # Display the app name and version
-    print("V-Link 3.0.2 | Boosted Moose")
+    print("V-Link 3.0.3 | Boosted Moose")
     print('Device: ', vlink.rpiModel, ' | ', vlink.rpiProtocol)
     print(f"RTI state: {'Up' if shared_state.rtiStatus else 'Down'}")
     print(f"IGN state: {'High' if shared_state.ignStatus else 'Low'}")
