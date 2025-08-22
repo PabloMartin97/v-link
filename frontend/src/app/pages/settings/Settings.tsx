@@ -7,6 +7,7 @@ import { ToggleSwitch, Select, Input, Button } from '../../../theme/styles/Input
 import { Typography } from '../../../theme/styles/Typography';
 
 import { APP } from '../../../store/Store';
+import { openModal } from '../../components/Modal';
 
 import { useNamespaces } from '../../../socket/Namespaces';
 const socket = useNamespaces();
@@ -88,15 +89,15 @@ const Settings = () => {
 
 
   useEffect(() => {
-  if (reset) {
-    setCurrentSettings(settings);
-    setReset(false);
-    
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = 0;
+    if (reset) {
+      setCurrentSettings(settings);
+      setReset(false);
+
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0;
+      }
     }
-  }
-}, [reset, settings]);
+  }, [reset, settings]);
 
 
   /* Create combined data store for dropdown */
@@ -107,28 +108,6 @@ const Settings = () => {
       //console.log(key)
       Object.assign(dataStores, { [key]: currentModule.settings.sensors })
   });
-
-  const openModal = (title, body, button, action) => {
-    const content = (
-      <>
-        <div>
-          {body}
-        </div>
-        <div>
-          <Button onClick={() => {action}}>{button}</Button>
-          <Button>{button}</Button>
-        </div>
-      </>
-    )
-
-    appUpdate((state) => {
-      state.system.modal.visible = true;
-      state.system.modal.title = title
-      state.system.modal.exit = true
-
-      state.system.modal.content = content
-    })
-  };
 
   /* Add Settings */
   const handleAddSetting = (key, currentSettings) => {
@@ -365,22 +344,43 @@ const Settings = () => {
 
 
       const handleBinding = (key, setting) => {
-        //console.log(key, setting)
-        openModal(`${settings[key][setting].label}`, "Press a key to assign or ESC to abort.", null, null)
-
         // Define the key press handler
         const handleKeyPress = (event) => {
+          // Close the modal first
+          appUpdate((state) => {
+            state.system.modal.visible = false;
+          });
+
           if (event.code === 'Escape') {
-            handleSettingChange("app", key, setting, "Unassigned", settingsObj);
+            socket.log.emit("info", "Key binding cancelled.");
           } else {
+            socket.log.emit("info", `${settings[key][setting].label} bound to: ${event.code}`);
             handleSettingChange("app", key, setting, event.code, settingsObj);
           }
+
+          // Resume key bindings after assignment
+          appUpdate((state) => {
+            state.system.pauseKeyBinds = false;
+          });
 
           document.removeEventListener('keydown', handleKeyPress); // Clean up listener
         };
 
+        // Set up pause key bindings before showing modal
+        appUpdate((state) => {
+          state.system.pauseKeyBinds = true; // Pause key bindings to prevent conflicts
+        });
+
         // Add event listener for key press
         document.addEventListener('keydown', handleKeyPress);
+
+        // Use the openModal function instead of direct state manipulation
+        openModal(
+          settings[key][setting].label,
+          'Press a key to assign or ESC to abort.',
+          null,
+          null
+        );
       };
 
 

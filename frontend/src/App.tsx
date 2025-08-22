@@ -10,7 +10,7 @@ import { Socket } from './socket/Socket';
 import Init from './app/Init';
 import Splash from './app/Splash';
 import Content from './app/Content';
-import Modal from './app/components/Modal';
+import { Modal } from './app/components/Modal';
 
 
 import Carplay from './carplay/Carplay';
@@ -46,6 +46,11 @@ function App() {
 const mmiKeyDown = (event: KeyboardEvent) => {
   // Store last Keystroke in store to broadcast it
   key.setKeyStroke(event.code);
+
+  // If keybinds are paused, do not process further
+  const pauseKeyBinds = APP.getState().system.pauseKeyBinds;
+  console.log(`Keybinds paused: ${pauseKeyBinds}`);
+  if(pauseKeyBinds) return;
 
   // Only process Carplay key commands when in Carplay view
   if (system.view !== 'Carplay') return;
@@ -120,17 +125,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
 
           <Splash />
           <Init />
-          <Modal
-            isOpen={system.modal.visible}
-            title={system.modal.title}
-            content={system.modal.content}
-            exit={system.modal.exit}
-            onClose={() =>
-              app.update((state) => {
-                state.system.modal.visible = false;
-              })
-            }
-          />
+          <Modal />
 
           {system.startedUp && ready ? (
             <>

@@ -6,8 +6,8 @@ import { APP } from '../../store/Store';
 import { Typography } from '../../theme/styles/Typography';
 import { Link, Button } from '../../theme/styles/Inputs';
 import { IconMedium } from '../../theme/styles/Icons';
-import { Fade } from '../../theme/styles/Effects';
 
+import {openModal, closeModal} from '../components/Modal';
 
 
 
@@ -74,6 +74,7 @@ const SideBar = ({ collapseLength }) => {
         setCurrentTab(app.system.settingPage)
     }, [app.system.settingPage])
 
+    
     return (
         <Sidebar
             theme={theme}
@@ -87,7 +88,7 @@ const SideBar = ({ collapseLength }) => {
             <Menu>
                 <Link>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'flex-start' }}>
-                            <Title style={{ color: theme.colors.medium }}>SETTINGS</Title>
+                        <Title style={{ color: theme.colors.medium }}>SETTINGS</Title>
                     </div>
                 </Link>
                 <Link
@@ -193,16 +194,10 @@ const SideBar = ({ collapseLength }) => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'left', height: `${theme.interaction.buttonHeight}px` }}>
                     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '5px' }}>
-                        <Link
-                            /* 
-                            openModal(
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    <h1>You found the Turbo-Button!</h1>
-                                    <p>Sadly, it doesn't do anything.</p>
-                                </div>
-                            )
-                            */
-                            onClick={() => setMoose(true)}>
+                        <Link onClick={() => {
+                            openModal("You found the Hidden Moose", "Its antlers will guide you safely through the journey!", "Boost the Moose", closeModal)
+                            setMoose(true)
+                        }}>
 
                             <IconMedium theme={theme} style={{ fill: 'none', stroke: moose ? theme.colors.theme[themeColor].active : 'none' }} onClick={() => setMoose(!moose)}>
                                 <use xlinkHref={`/assets/svg/logos/moose.svg#moose`}></use>

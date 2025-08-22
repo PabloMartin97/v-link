@@ -19,6 +19,7 @@ const APP = create(
       switch: 'ArrowUp',
       lastKey: '',
       lastUpdate: 0,
+      pauseKeyBinds: false,
 
       firstStart: true,
 

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import styled from 'styled-components';
 import { Typography } from '../../theme/styles/Typography';
 import { Button } from '../../theme/styles/Inputs';
+import { APP } from '../../store/Store';
 
 const Overlay = styled.div`
   position: fixed;
@@ -23,19 +24,19 @@ const Overlay = styled.div`
 
 const Content = styled.div`
   background: #151515;
-  padding: 20px;
+  padding: 30px;
   border-radius: 10px;
   text-align: center;
   color: none;
   white-space: pre-line;
 
   min-width: 300px;
+  gap: 20px;
 
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-
   opacity: ${({ $visible }) => ($visible ? 1 : 0)};
   transform: ${({ $visible }) => ($visible ? 'scale(1)' : 'scale(0.9)')};
   transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
@@ -56,31 +57,33 @@ const Exit = styled.button`
   color: #DBDBDB;
 `;
 
-const Modal = ({ isOpen, onClose, title, content, exit }) => {
+const Modal = () => {
+  const modalSettings = APP((state) => state.system.modal);
+
   const Body1 = Typography.Body1;
   const Display2 = Typography.Display2;
   const [visible, setVisible] = useState(false);
-  const [shouldRender, setShouldRender] = useState(isOpen);
+  const [shouldRender, setShouldRender] = useState(modalSettings.visible);
 
   useEffect(() => {
-    if (isOpen) {
+    if (modalSettings.visible) {
       setShouldRender(true);
       setTimeout(() => setVisible(true), 100); // Ensure transition triggers
     } else {
       setVisible(false);
       setTimeout(() => setShouldRender(false), 300); // Delay unmounting until fade-out finishes
     }
-  }, [isOpen, shouldRender]);
+  }, [modalSettings.visible, shouldRender]);
 
   if (!shouldRender) return null; // Prevent render when modal is fully closed
 
   return ReactDOM.createPortal(
-    <Overlay $visible={visible}>
-      <Content $visible={visible}>
-        <Display2>{title}</Display2>
-        {content}
-        {exit ? 
-        <Exit onClick={onClose}>X</Exit>
+    <Overlay $visible={modalSettings.visible}>
+      <Content $visible={modalSettings.visible}>
+        <Display2>{modalSettings.title}</Display2>
+        {modalSettings.content}
+        {modalSettings.exit ? 
+        <Exit onClick={closeModal}>X</Exit>
         : null }
       </Content>
     </Overlay>,
@@ -88,4 +91,34 @@ const Modal = ({ isOpen, onClose, title, content, exit }) => {
   );
 };
 
-export default Modal;
+const openModal = (title, body, button, action) => {
+  const appUpdate = APP.getState().update;
+
+
+  const content = (
+    <>
+      <div style={{ color: 'white' }}>{body}</div>
+      {button && <Button onClick={action}>{button}</Button>}
+    </>
+  );
+
+  appUpdate((state) => {
+    state.system.modal.visible = true;
+    state.system.modal.title = title;
+    state.system.modal.exit = true;
+    state.system.modal.content = content;
+  });
+};
+
+const closeModal = () => {
+  const appUpdate = APP.getState().update;
+
+  appUpdate((state) => {
+    state.system.modal.visible = false;
+    state.system.modal.title = null;
+    state.system.modal.exit = null;
+    state.system.modal.content = null;
+  });
+};
+
+export { Modal, openModal, closeModal };

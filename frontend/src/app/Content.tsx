@@ -242,7 +242,11 @@ const Content = () => {
     app.update((state) => { state.system.view = viewKeys[currentIndex]; });
   };
 
-  useEffect(() => { if (key.keyStroke === app.system.switch) cycleView(); }, [key.keyStroke]);
+  // Listen for key strokes to switch views
+  useEffect(() => {
+    if (key.keyStroke === app.system.switch && !app.system.pauseKeyBinds)
+      cycleView();
+  }, [key.keyStroke]);
 
   return (
     <>
