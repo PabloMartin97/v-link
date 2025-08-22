@@ -267,3 +267,17 @@ class ServerThread(threading.Thread):
     @socketio.on('most_message', namespace='/most')
     def print_most_message(args):
         logger.debug(f"Received most message on most namespace: {args}")
+
+
+    # Handle UI log messages
+    @socketio.on('info', namespace='/log')
+    def handle_frontend_error(args):
+        logger.info(f"[FRONTEND]: {args}")
+
+    @socketio.on('debug', namespace='/log')
+    def handle_frontend_error(args):
+        logger.debug(f"[FRONTEND]: {args}")
+
+    @socketio.on('error', namespace='/log')
+    def handle_frontend_error(args):
+        logger.error(f"[FRONTEND]: {args}")

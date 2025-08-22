@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import styled, { useTheme } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { Typography } from '../theme/styles/Typography';
 import { Button } from "../theme/styles/Inputs";
 import { APP } from '../store/Store';
 
 
 const sysChannel = io("ws://localhost:4001/sys");
+const logChannel = io("ws://localhost:4001/log");
+
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
 
 const Container = styled.div`
     flex: 1;
@@ -30,6 +36,7 @@ const Box = styled.div`
   margin: 10px;
   width: 100%;
   height: 100%;
+  padding: 30px;
   position: relative;  
   flex: 1;
   display: flex;
@@ -39,6 +46,8 @@ const Box = styled.div`
   border-radius: 7px;
   background: ${({ theme }) => theme.colors.gradients.gradient2};
   overflow: hidden;
+
+  animation: ${fadeIn} 0.6s ease;
 `;
 
 const Options = styled.div`
@@ -58,23 +67,51 @@ const OptionItem = styled.div`
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: space-between;
     cursor: pointer;
-    width: 80px;
+    height: 125px;
     
-    transition: ${props => props.platform ? 'none' : 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)'};
-    opacity: ${props => props.platform ? 1 : (props.isSelected ? 1 : props.hasSelection ? 0.3 : 1)};
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: ${props => {
+        if (props.platform) return 1;
+        if (!props.hasSelection) return 1;
+        if (props.isSelected) return 1;
+        return (props.animationPhase === 'fade' || props.animationPhase === 'slide') ? 0 : 1;
+    }};
     transform: ${props => {
         if (props.platform || !props.hasSelection) return 'translateX(0)';
-        if (props.isSelected) return 'translateX(0)';
-        const direction = props.index < props.selectedIndex ? -1 : 1;
-        return `translateX(${direction * 200}px)`;
+        if (props.isSelected && props.animationPhase === 'slide') {
+            // Calculate offset to move selected item to center
+            const gap = 100;
+            const currentOffset = (props.index - (props.totalItems - 1) / 2) * (100 + gap);
+            return `translateX(${-currentOffset}px)`;
+        }
+        return 'translateX(0)';
     }};
-    filter: ${props => props.platform ? 'none' : (props.isSelected ? 'none' : props.hasSelection ? 'blur(2px)' : 'none')};
+    visibility: ${props => {
+        if (props.platform) return 'visible';
+        if (!props.hasSelection) return 'visible';
+        if (props.isSelected) return 'visible';
+        return props.animationPhase === 'slide' ? 'hidden' : 'visible';
+    }};
+
+    animation: ${props => {
+        // Don't animate fadeIn during transitions or for selected items that are sliding
+        if (props.isTransitioning || (props.isSelected && props.animationPhase === 'slide')) {
+            return css`none`;
+        }
+        return css`${fadeIn} 0.6s ease`;
+    }};
 `;
 
 const SVGContainer = styled.div`
     transition: ${props => props.platform ? 'none' : 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)'};
     transform: ${props => props.platform ? 'scale(1)' : (props.isSelected ? 'scale(1.2)' : 'scale(1)')};
+    cursor: ${props => props.platform ? 'default' : 'pointer'};
+
+    &:hover {
+        transform: ${props => props.platform ? 'scale(1)' : (props.isSelected ? 'scale(1.25)' : 'scale(1.1)')};
+    }
 `;
 
 const Init = () => {
@@ -86,6 +123,8 @@ const Init = () => {
     const [options, setOptions] = useState([]);
     const [platform, setPlatform] = useState(null);
     const [selectedIndex, setSelectedIndex] = useState(null);
+    const [animationPhase, setAnimationPhase] = useState(null); // 'fade' or 'slide'
+    const [isTransitioning, setIsTransitioning] = useState(false);
     const [visible, setVisible] = useState(true);
 
     const app = APP((state) => state);
@@ -103,6 +142,7 @@ const Init = () => {
     useEffect(() => {
         // Checks whether .config/v-link/ exists
         // Returns either true or an object with selectable profiles.
+        logChannel.emit("info", `Checking for existing config files...`);
         sysChannel.emit("systemTask", "checkProfile", (data) => {
             if (data === true) {
                 startApp();
@@ -115,18 +155,28 @@ const Init = () => {
 
     const handleSelectPlatform = (profile, index) => {
         setSelectedIndex(index);
+        setAnimationPhase('fade');
+        setIsTransitioning(true);
 
-        // Delay the state update to allow animation to play
+        // First fade out non-selected items (300ms)
+        setTimeout(() => {
+            setAnimationPhase('slide');
+        }, 300);
+
+        // Then slide selected item to center and update state (600ms total)
         setTimeout(() => {
             setPlatform(profile);
             setOptions(profiles[profile]);
-            setSelectedIndex(null); // Reset for next selection
+            setSelectedIndex(null);
+            setAnimationPhase(null);
+            // Keep isTransitioning true for a bit longer to prevent fadeIn on new render
+            setTimeout(() => setIsTransitioning(false), 100);
         }, 600);
     };
 
     const handleSelectEngine = (engine, index) => {
         setSelectedIndex(index);
-        console.log("Selected Profile:", platform, engine);
+        logChannel.emit("info", `Selected profile: ${engine}`);
 
         const vehicle = {
             platform: platform,
@@ -138,7 +188,8 @@ const Init = () => {
             if (data.result) {
                 startApp();
             } else {
-                console.log("Could not load profile");
+                logChannel.emit("error", "Could not load profile. Exiting.")
+                sysChannel.emit("systemTask", "quit")
             }
         });
 
@@ -149,9 +200,11 @@ const Init = () => {
         visible ?
             <Container>
                 <Box>
-                    <Title>
-                        {platform ? "Please select the engine type:" : "Please select your vehicle platform:"}
-                    </Title>
+                    <div style={{ display: "flex", flexShrink: 1, flexDirection: "column", alignItems: "center" }}>
+                        <Title>
+                            {platform ? "Please select the engine type:" : "Please select your vehicle platform:"}
+                        </Title>
+                    </div>
                     <Options>
                         {options.map((item, index) => (
                             <OptionItem
@@ -161,18 +214,21 @@ const Init = () => {
                                 isSelected={selectedIndex === index}
                                 hasSelection={selectedIndex !== null}
                                 platform={platform}
+                                totalItems={options.length}
+                                animationPhase={animationPhase}
+                                isTransitioning={isTransitioning}
                             >
                                 <SVGContainer
                                     isSelected={selectedIndex === index}
                                     platform={platform}
                                 >
                                     <svg
-                                        width="150"
-                                        height="150"
+                                        width="100"
+                                        height="100"
                                         fill="white"
                                         onClick={() =>
                                             platform
-                                                ? handleSelectEngine(item, index)
+                                                ? null
                                                 : handleSelectPlatform(item, index)
                                         }
                                     >
@@ -182,6 +238,7 @@ const Init = () => {
                                     </svg>
                                 </SVGContainer>
                                 <Button
+                                    style={{ backgroundColor: platform ? undefined : "transparent" }}
                                     onClick={() =>
                                         platform
                                             ? handleSelectEngine(item, index)
@@ -193,13 +250,28 @@ const Init = () => {
                             </OptionItem>
                         ))}
                     </Options>
-                    <Button
-                        onClick={() =>
-                            sysChannel.emit("systemTask", "quit")
-                        }
-                    >
-                        <Caption2>EXIT</Caption2>
-                    </Button>
+                    <Options>
+                        {platform && (
+                            <Button
+                                style={{ width: "25%" }}
+                                onClick={() => {
+                                    setPlatform(null);
+                                    setOptions(Object.keys(profiles));
+                                    setSelectedIndex(null);
+                                }}
+                            >
+                                <Caption2>BACK</Caption2>
+                            </Button>
+                        )}
+                        <Button
+                            style={{ width: "25%" }}
+                            onClick={() =>
+                                sysChannel.emit("systemTask", "quit")
+                            }
+                        >
+                            <Caption2>EXIT</Caption2>
+                        </Button>
+                    </Options>
                 </Box>
             </Container> : <></>
     );
