@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useNamespaces } from '../../socket/Namespaces';
+import { openModal, closeModal } from '../../app/components/Modal';
+
+
 const socket = useNamespaces();
 
 interface DisplayProps {
@@ -41,20 +44,17 @@ const Ignition: React.FC<DisplayProps> = ({
     // Start the extended timer (5 minutes)
     startExtendedTimer();
 
-    // Update state to hide the modal
-    updateApp((state) => {
-      state.system.modal.visible = false;
-    });
+    // Close the modal
+    closeModal();
   };
 
   const showShutdownModal = () => {
-    updateApp((state) => {
-      state.system.modal.visible = true;
-      state.system.modal.title = 'Ignition Off.';
-      state.system.modal.body = `System will shut down in ${shutdownDelay} seconds to prevent battery drain. \nClick to dismiss for ${messageTimeout} minutes.`;
-      state.system.modal.button = 'DISMISS';
-      state.system.modal.action = handleDismiss;
-    });
+    openModal(
+      'Ignition Off',
+      `System will shut down in ${shutdownDelay} seconds to prevent battery drain. \nClick to dismiss for ${messageTimeout} minutes.`,
+      'DISMISS',
+      handleDismiss
+    );
   };
 
   useEffect(() => {

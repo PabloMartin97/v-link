@@ -60,11 +60,11 @@ const mmiKeyDown = (event: KeyboardEvent) => {
     const bindings = app.settings.dongle_bindings;
 
     if (bindings) {
-      console.log('looking for binding')
       // Find the action whose .value matches the key event
       const action = Object.keys(bindings).find(
         (key) => bindings[key].value === event.code
       );
+      console.log('action', action);
 
       if (action !== undefined) {
         keyCommandRef.current = action;
@@ -130,8 +130,8 @@ const mmiKeyDown = (event: KeyboardEvent) => {
           {system.startedUp && ready ? (
             <>
               {<Carplay
-                commandCounter={commandCounterRef}
-                command={keyCommandRef}
+                commandCounter={commandCounterRef.current}
+                command={keyCommandRef.current}
               />}
 
               < Cardata />
