@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Socket } from 'socket.io-client';
+import { useNamespaces } from '../../socket/Namespaces';
+const socket = useNamespaces();
 
 interface DisplayProps {
   ignition: boolean;
@@ -7,7 +8,6 @@ interface DisplayProps {
   shutdownDelay: number;
   messageTimeout: number;
   updateApp: (fn: (state: any) => void) => void;
-  io: Socket;
 }
 
 const Ignition: React.FC<DisplayProps> = ({
@@ -16,7 +16,6 @@ const Ignition: React.FC<DisplayProps> = ({
   shutdownDelay,
   messageTimeout,
   updateApp,
-  io,
 }) => {
   const extendedTimer = useRef<NodeJS.Timeout | null>(null);
   const shutdownTimer = useRef<NodeJS.Timeout | null>(null);
@@ -24,7 +23,7 @@ const Ignition: React.FC<DisplayProps> = ({
   const startShutdownTimer = () => {
     shutdownTimer.current = setTimeout(() => {
       console.log('Shutting Down');
-      io.emit('systemTask', 'shutdown'); // Uncomment to actually trigger shutdown
+      socket.sys.emit('systemTask', 'shutdown'); // Uncomment to actually trigger shutdown
     }, shutdownDelay * 1000);
   };
 

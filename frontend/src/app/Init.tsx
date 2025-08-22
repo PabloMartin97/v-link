@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
 import styled, { keyframes, css } from 'styled-components';
 import { Typography } from '../theme/styles/Typography';
 import { Button } from "../theme/styles/Inputs";
-import { APP, SOCKET } from '../store/Store';
+import { APP } from '../store/Store';
 
-
-const sysChannel = SOCKET.getState().sys;
-const logChannel = SOCKET.getState().log;
+import { useNamespaces } from '../socket/Namespaces';
+const socket = useNamespaces();
+//socket.log.emit("error", "Could not load profile. Exiting.")
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -131,7 +130,7 @@ const Init = () => {
 
     const startApp = () => {
         console.log("Config-files found, loading settings.");
-        sysChannel.emit("systemTask", "start")
+        socket.sys.emit('systemTask', 'start');
         setVisible(false)
         app.update((state) => {
             state.system.config = true;
@@ -142,8 +141,8 @@ const Init = () => {
     useEffect(() => {
         // Checks whether .config/v-link/ exists
         // Returns either true or an object with selectable profiles.
-        logChannel.emit("info", `Checking for existing config files...`);
-        sysChannel.emit("systemTask", "checkProfile", (data) => {
+        socket.log.emit("info", `Checking for existing config files...`);
+         socket.sys.emit('systemTask', "checkProfile", (data) => {
             if (data === true) {
                 startApp();
             } else {
@@ -176,7 +175,7 @@ const Init = () => {
 
     const handleSelectEngine = (engine, index) => {
         setSelectedIndex(index);
-        logChannel.emit("info", `Selected profile: ${engine}`);
+        socket.sys.emit("info", `Selected profile: ${engine}`);
 
         const vehicle = {
             platform: platform,
@@ -184,12 +183,12 @@ const Init = () => {
         };
 
 
-        sysChannel.emit("systemTask", "loadProfile", vehicle, (data) => {
+        socket.sys.emit("systemTask", "loadProfile", vehicle, (data) => {
             if (data.result) {
                 startApp();
             } else {
-                logChannel.emit("error", "Could not load profile. Exiting.")
-                sysChannel.emit("systemTask", "quit")
+                socket.log.emit("error", "Could not load profile. Exiting.")
+                socket.sys.emit("systemTask", "quit")
             }
         });
 
@@ -266,7 +265,7 @@ const Init = () => {
                         <Button
                             style={{ width: "25%" }}
                             onClick={() =>
-                                sysChannel.emit("systemTask", "quit")
+                                socket.sys.emit("systemTask", "quit")
                             }
                         >
                             <Caption2>EXIT</Caption2>

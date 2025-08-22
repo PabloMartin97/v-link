@@ -7,9 +7,6 @@ import Display from './helper/Display';
 import Ignition from './helper/Ignition';
 import Recorder from './helper/Recorder';
 
-import { io } from "socket.io-client";
-const sysChannel = io("ws://localhost:4001/sys")
-
 function Cardata() {
   const app = APP((state) => state)
   const updateApp = APP((state) => state.update)
@@ -65,7 +62,6 @@ function Cardata() {
     <>
       <Display
         autoOpen={app.settings.screen.autoOpen.value}
-        io={sysChannel}
       />
       <Ignition
         ignition={app.system.ignition}
@@ -73,7 +69,6 @@ function Cardata() {
         shutdownDelay={app.settings.shutdown.shutdownDelay.value}
         messageTimeout={app.settings.shutdown.messageTimeout.value}
         updateApp={updateApp}
-        io={sysChannel}
       />
       <Recorder
         data={data.data}

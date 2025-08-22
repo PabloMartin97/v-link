@@ -8,18 +8,8 @@ import { Typography } from '../../../theme/styles/Typography';
 
 import { APP } from '../../../store/Store';
 
-import { io } from "socket.io-client";
-
-// Create a single socket connection to the main server
-const mainSocket = io('ws://localhost:4001');
-
-// Create namespace connections using the main socket
-const appChannel = mainSocket.io.socket('/app');
-const sysChannel = mainSocket.io.socket('/sys');
-const canChannel = mainSocket.io.socket('/can');
-const adcChannel = mainSocket.io.socket('/adc');
-const rtiChannel = mainSocket.io.socket('/rti');
-const mostChannel = mainSocket.io.socket('/most');
+import { useNamespaces } from '../../../socket/Namespaces';
+const socket = useNamespaces();
 
 const Container = styled.div`
     flex: 1;
@@ -220,8 +210,8 @@ const Settings = () => {
     appUpdate((state) => {
       state.settings = currentSettings;
     });
-    appChannel.emit("save", currentSettings);
-    appChannel.emit("load");
+    socket.app.emit("save", currentSettings);
+    socket.app.emit("load");
   }
 
   // System Tasks
@@ -231,19 +221,19 @@ const Settings = () => {
       openModal("Exiting...", "Please wait while the app is closing.", null, null)
       setTimeout(() => {
         console.log('exiting')
-        sysChannel.emit("systemTask", request);
+        socket.sys.emit("systemTask", request);
       }, 1000)
     } else if (request === 'reset') {
       openModal("Reset", "All Settings have been resetted.", null, null)
     } else {
-      sysChannel.emit("systemTask", request);
+      socket.sys.emit("systemTask", request);
     }
 
     setReset(true)
   }
 
   function sendForceSwitchMostMessage() {
-    mostChannel.emit("force_switch");
+    socket.most.emit("force_switch");
   }
 
   const checkUpdate = async () => {
@@ -493,7 +483,7 @@ const Settings = () => {
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.canState} onChange={() => { handleIO("can", canChannel) }} />
+                <input type="checkbox" checked={system.canState} onChange={() => { handleIO("can", socket.can) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
@@ -506,7 +496,7 @@ const Settings = () => {
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.adcState} onChange={() => { handleIO("adc", adcChannel) }} />
+                <input type="checkbox" checked={system.adcState} onChange={() => { handleIO("adc", socket.adc) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
@@ -519,7 +509,7 @@ const Settings = () => {
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.rtiState} onChange={() => { handleIO("rti", rtiChannel) }} />
+                <input type="checkbox" checked={system.rtiState} onChange={() => { handleIO("rti", socket.rti) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
