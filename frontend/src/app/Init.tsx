@@ -3,11 +3,11 @@ import { io } from "socket.io-client";
 import styled, { keyframes, css } from 'styled-components';
 import { Typography } from '../theme/styles/Typography';
 import { Button } from "../theme/styles/Inputs";
-import { APP } from '../store/Store';
+import { APP, SOCKET } from '../store/Store';
 
 
-const sysChannel = io("ws://localhost:4001/sys");
-const logChannel = io("ws://localhost:4001/log");
+const sysChannel = SOCKET.getState().sys;
+const logChannel = SOCKET.getState().log;
 
 const fadeIn = keyframes`
   from { opacity: 0; }

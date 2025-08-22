@@ -1,5 +1,21 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
+import { io } from "socket.io-client";
+
+export const socket = io("ws://localhost:4001"); 
+
+const SOCKET = create(
+  immer((set) => ({
+    app: io("ws://localhost:4001/app"),
+    can: io("ws://localhost:4001/can"),
+    swc: io("ws://localhost:4001/swc"),
+    adc: io("ws://localhost:4001/adc"),
+    rti: io("ws://localhost:4001/rti"),
+    sys: io("ws://localhost:4001/sys"),
+    log: io("ws://localhost:4001/log"),
+  }))
+);
+
 
 const DATA = create(
   immer((set) => ({
@@ -143,4 +159,4 @@ const KEY = create(
 );
 
 
-export { DATA, APP, CAN, SWC, ADC, RTI, KEY };
+export { DATA, APP, CAN, SWC, ADC, RTI, KEY, SOCKET };
