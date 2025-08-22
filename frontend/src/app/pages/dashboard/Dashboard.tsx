@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense, useCallback } from 'react';
 import { APP, KEY } from '../../../store/Store';
 import styled, { useTheme } from 'styled-components';
+import { Oval } from 'react-loader-spinner';
 
 import { Fade } from '../../../theme/styles/Effects';
 import Pagination from '../../components/Pagination';
@@ -66,6 +67,7 @@ function Dashboard() {
   const theme = useTheme();
   const dashBoardRef = useRef(null);
   const resizeDebounceTimeout = useRef(null);
+
   
   // Refs for drag state to avoid unnecessary re-renders
   const dragStateRef = useRef({
@@ -80,7 +82,7 @@ function Dashboard() {
   const containerWidthRef = useRef(window.innerWidth);
 
   const defaultDash = APP((state) => state.settings.general.defaultDash.value);
-  const colorTheme = APP((state) => state.settings.general.colorTheme.value);
+  const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
   const app_bindings = APP((state) => state.settings.app_bindings);
   const appUpdate = APP((state) => state.update);
 
@@ -438,7 +440,15 @@ function Dashboard() {
             >
               <Suspense fallback={
                 <LoadingWrapper>
-                  <div>Loading...</div>
+                  <Oval
+                    visible={true}
+                    height="80"
+                    width="80"
+                    color={theme.colors.theme[colorTheme].active}
+                    ariaLabel="oval-loading"
+                    wrapperStyle={{}}
+                    wrapperClass=""
+                    />
                 </LoadingWrapper>
               }>
                 <Component />
@@ -449,7 +459,7 @@ function Dashboard() {
       </Wrapper>
       <Pagination
         pages={components.length}
-        colorActive={theme.colors.theme.blue.active}
+        colorActive={theme.colors.theme[colorTheme].active}
         colorInactive={theme.colors.medium}
         currentPage={currentPageIndex}
         dotSize={7.5}

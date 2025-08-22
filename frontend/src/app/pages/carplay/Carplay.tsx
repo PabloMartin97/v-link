@@ -63,9 +63,11 @@ const Container = styled.div`
 `;
 
 function Carplay() {
-    const app = APP((state) => state);
     const theme = useTheme();
-    const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
+    
+    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
+    const carplaySettings = APP((state) => state.system.carplay);
+    const appUpdate = APP((state) => state.update);
     
     const Body2 = Typography.Body2;
 
@@ -83,7 +85,7 @@ function Carplay() {
 
                 if (devices.length > 0) {
                     console.log("Devices found:", devices);
-                    app.update((state) => {
+                    appUpdate((state) => {
                         state.system.carplay.paired = true;
                     });
                     return true;
@@ -120,29 +122,24 @@ function Carplay() {
 
     // Handle button click
     const onClick = () => {
-        if (!app.system.carplay.paired) {
+        if (!carplaySettings.paired) {
             // Send event to carplay component to pair the dongle
             eventEmitter.dispatchEvent(new Event("pairDongle"));
             checkDevice();
             setIsActive(!isActive);
         } else {
-            app.update((state) => {
+            appUpdate((state) => {
                 // Trigger user activation
                 state.system.carplay.user = true;
             });
         }
     };
 
-    useEffect(() => {
-        console.log(app.system.carplay);
-        console.log(app.system.interface);
-    }, [app.system.carplay, app.system.interface]);
-
     return (
         <Container>
             <Body2>
-                {app.system.carplay.paired && app.system.carplay.dongle
-                    ? app.system.carplay.connected && app.system.carplay.worker
+                {carplaySettings.paired && carplaySettings.dongle
+                    ? carplaySettings.connected && carplaySettings.worker
                         ? "LAUNCHING..."
                         : "CONNECT iPHONE / ANDROID DEVICE"
                     : "CLICK TO PAIR DONGLE"}
@@ -162,18 +159,18 @@ function Carplay() {
                     theme={theme}
                     stroke={4}
                     fill={
-                        app.system.carplay.paired && app.system.carplay.dongle
-                            ? app.system.carplay.phone
-                                ? app.system.carplay.worker
+                        carplaySettings.paired && carplaySettings.dongle
+                            ? carplaySettings.phone
+                                ? carplaySettings.worker
                                     ? theme.colors.theme[themeColor].active
                                     : theme.colors.theme[themeColor].default
                                 : theme.colors.medium
                             : theme.colors.medium
                     }
                     color={
-                        app.system.carplay.paired && app.system.carplay.dongle
-                            ? app.system.carplay.phone
-                                ? app.system.carplay.worker
+                        carplaySettings.paired && carplaySettings.dongle
+                            ? carplaySettings.phone
+                                ? carplaySettings.worker
                                     ? theme.colors.theme[themeColor].active
                                     : theme.colors.theme[themeColor].default
                                 : theme.colors.medium
@@ -183,15 +180,15 @@ function Carplay() {
                 >
                     <SvgContainer
                         connected={
-                            app.system.carplay.paired &&
-                            app.system.carplay.dongle &&
-                            app.system.carplay.worker
+                            carplaySettings.paired &&
+                            carplaySettings.dongle &&
+                            carplaySettings.worker
                         }
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="-10 -10 61 36.5"
                     >
                         <defs>
-                            {app.system.carplay.worker && (
+                            {carplaySettings.worker && (
                                 <filter id="glow" x="-50%" y="-50%" width="400%" height="400%">
                                     {/* Add a blur effect */}
                                     <feGaussianBlur stdDeviation="2" result="blurredGlow" />
@@ -203,7 +200,7 @@ function Carplay() {
                                 </filter>
                             )}
                         </defs>
-                        <g className="cls-1" filter={app.system.carplay.worker ? "url(#glow)" : undefined}>
+                        <g className="cls-1" filter={carplaySettings.worker ? "url(#glow)" : undefined}>
                             <path
                                 className="left"
                                 d="M13,14.5h-5c-4,0-6-3.5-6-6s2-6.5,6-6.5h10c4,0,6,3.5,6,6.5"

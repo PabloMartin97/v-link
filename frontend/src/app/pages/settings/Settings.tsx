@@ -314,7 +314,6 @@ const Settings = () => {
     if (!settingsObj) return null;
 
     // Get label, type, and nested options from setting block
-    console.log(key, settingsObj, settingsObj[key])
     const { title, type, ...nestedSettings } = settingsObj[key];
 
     const nestedElements = Object.entries(nestedSettings).map(([setting, content]) => {

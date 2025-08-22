@@ -8,9 +8,16 @@ from backend.shared.shared_state import shared_state
 logger = logging.getLogger("vlink")
 
 # Constants
+APP_ROOT = Path.home() / "v-link"
 USER_CONFIG_DIR = Path.home() / ".config" / "v-link"
-BACKEND_CONFIG_DIR = Path("backend/config")
-DEFAULT_PROFILES_DIR = Path(__file__).parent / "config" / "profiles"
+
+DEFAULT_PROFILES_DIR = APP_ROOT / "backend" / "config" / "profiles"
+DEFAULT_CONFIG_DIR = APP_ROOT / "backend" / "config"
+
+logger.info(f"App Root Directory: {APP_ROOT}")
+logger.info(f"Default profile directory: {DEFAULT_PROFILES_DIR}")
+logger.info(f"Default config directory: {DEFAULT_CONFIG_DIR}")
+logger.info(f"User config directory: {USER_CONFIG_DIR}")
 
 def load_directory():
     # Ensure user config directory exists.
@@ -23,6 +30,7 @@ def load_directory():
     
 
 def check_settings():
+    logger.info(f"Checking settings in {USER_CONFIG_DIR}...")
     # If user config already exists and contains files, return True
     if USER_CONFIG_DIR.exists() and any(USER_CONFIG_DIR.iterdir()):
         return True
@@ -42,6 +50,7 @@ def check_settings():
 
 
 def load_settings(setting):
+    logger.info(f"Loading settings for {setting}...")
     # Load settings file from user config.
     if not USER_CONFIG_DIR:
         return None
@@ -59,6 +68,7 @@ def load_settings(setting):
     
 def save_settings(setting, data):
     # Specify the file path
+    logger.info(f"Saving settings to '{setting}.json'...")
     json_path = USER_CONFIG_DIR / f"{setting}.json"
 
     # Save the settings to the JSON file
@@ -71,6 +81,7 @@ def save_settings(setting, data):
 
 def reset_settings():
     # Reset configs by re-applying the last saved profile from app.json.
+    logger.info("Resetting settings...")
     app_json_path = USER_CONFIG_DIR / "app.json"
     if not app_json_path.exists():
         raise FileNotFoundError("Undefined profile, please delete .config/v-link/ and restart the app.")
@@ -87,11 +98,12 @@ def reset_settings():
 
 def copy_files(data):
     try:
+        logger.info("Copying files to user config directory...")
         # Copy base + profile-specific config files into user config directory.
         platform = data.get("platform")
         engine = data.get("engine")
 
-        profile_config = BACKEND_CONFIG_DIR / "profiles" / platform / engine
+        profile_config = DEFAULT_CONFIG_DIR / "profiles" / platform / engine
         USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
         def copy_json_files(src: Path, dst: Path):
@@ -100,7 +112,7 @@ def copy_files(data):
                     shutil.copy(file, dst)
 
         # Copy base + profile-specific configs
-        copy_json_files(BACKEND_CONFIG_DIR, USER_CONFIG_DIR)
+        copy_json_files(DEFAULT_CONFIG_DIR, USER_CONFIG_DIR)
         copy_json_files(profile_config, USER_CONFIG_DIR)
 
         # --- Modify app.json after copying ---

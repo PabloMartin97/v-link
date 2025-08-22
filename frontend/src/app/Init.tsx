@@ -81,7 +81,7 @@ const Init = () => {
     const Body1 = Typography.Body1;
     const Title = Typography.Title;
     const Caption2 = Typography.Caption2;
-    
+
     const [profiles, setProfiles] = useState({});
     const [options, setOptions] = useState([]);
     const [platform, setPlatform] = useState(null);
@@ -104,7 +104,7 @@ const Init = () => {
         // Checks whether .config/v-link/ exists
         // Returns either true or an object with selectable profiles.
         sysChannel.emit("systemTask", "checkProfile", (data) => {
-            if(data === true) {
+            if (data === true) {
                 startApp();
             } else {
                 setProfiles(data);
@@ -115,7 +115,7 @@ const Init = () => {
 
     const handleSelectPlatform = (profile, index) => {
         setSelectedIndex(index);
-        
+
         // Delay the state update to allow animation to play
         setTimeout(() => {
             setPlatform(profile);
@@ -127,13 +127,13 @@ const Init = () => {
     const handleSelectEngine = (engine, index) => {
         setSelectedIndex(index);
         console.log("Selected Profile:", platform, engine);
-        
+
         const vehicle = {
             platform: platform,
             engine: engine,
         };
-        
-        
+
+
         sysChannel.emit("systemTask", "loadProfile", vehicle, (data) => {
             if (data.result) {
                 startApp();
@@ -147,54 +147,61 @@ const Init = () => {
 
     return (
         visible ?
-        <Container>
-            <Box>
-                <Title>
-                    {platform ? "Please select the engine type:" : "Please select your vehicle platform:"}
-                </Title>
-                <Options>
-                    {options.map((item, index) => (
-                        <OptionItem
-                            key={item}
-                            index={index}
-                            selectedIndex={selectedIndex}
-                            isSelected={selectedIndex === index}
-                            hasSelection={selectedIndex !== null}
-                            platform={platform}
-                        >
-                            <SVGContainer 
+            <Container>
+                <Box>
+                    <Title>
+                        {platform ? "Please select the engine type:" : "Please select your vehicle platform:"}
+                    </Title>
+                    <Options>
+                        {options.map((item, index) => (
+                            <OptionItem
+                                key={item}
+                                index={index}
+                                selectedIndex={selectedIndex}
                                 isSelected={selectedIndex === index}
+                                hasSelection={selectedIndex !== null}
                                 platform={platform}
                             >
-                                <svg
-                                    width="150"
-                                    height="150"
-                                    fill="white"
+                                <SVGContainer
+                                    isSelected={selectedIndex === index}
+                                    platform={platform}
+                                >
+                                    <svg
+                                        width="150"
+                                        height="150"
+                                        fill="white"
+                                        onClick={() =>
+                                            platform
+                                                ? handleSelectEngine(item, index)
+                                                : handleSelectPlatform(item, index)
+                                        }
+                                    >
+                                        <use
+                                            xlinkHref={`/assets/svg/vehicles/${platform ? platform : item}.svg#${platform ? platform : item}`}
+                                        />
+                                    </svg>
+                                </SVGContainer>
+                                <Button
                                     onClick={() =>
                                         platform
                                             ? handleSelectEngine(item, index)
                                             : handleSelectPlatform(item, index)
                                     }
                                 >
-                                    <use
-                                        xlinkHref={`/assets/svg/vehicles/${platform ? platform : item}.svg#${platform ? platform : item}`}
-                                    />
-                                </svg>
-                            </SVGContainer>
-                            <Button
-                                onClick={() =>
-                                    platform
-                                        ? handleSelectEngine(item, index)
-                                        : handleSelectPlatform(item, index)
-                                }
-                            >
-                                <Caption2>{item}</Caption2>
-                            </Button>
-                        </OptionItem>
-                    ))}
-                </Options>
-            </Box>
-        </Container> : <></>
+                                    <Caption2>{item}</Caption2>
+                                </Button>
+                            </OptionItem>
+                        ))}
+                    </Options>
+                    <Button
+                        onClick={() =>
+                            sysChannel.emit("systemTask", "quit")
+                        }
+                    >
+                        <Caption2>EXIT</Caption2>
+                    </Button>
+                </Box>
+            </Container> : <></>
     );
 };
 

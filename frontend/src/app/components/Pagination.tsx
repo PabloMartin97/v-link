@@ -15,8 +15,7 @@ const Dots = styled.div`
 const Pagination = ({ pages, colorActive, colorInactive, currentPage, dotSize = 20 }) => {
     const theme = useTheme()
 
-    const value = APP((state) => state.settings.general.colorTheme.value)
-    const colorTheme = (value).toLowerCase()
+    const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
 
     const circles = [];
 

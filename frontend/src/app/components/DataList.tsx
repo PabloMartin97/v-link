@@ -64,11 +64,9 @@ const Element = styled.div`
 const DataList = (dashPage, itemCount, columns) => {
     const theme = useTheme();
 
-    const app = APP((state) => state.settings);
     const data = DATA((state) => state.data);
     const modules = APP((state) => state.modules);
-
-    const themeColor = (app.general.colorTheme.value).toLowerCase()
+    const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
 
     const Body1 = Typography.Body1;
 
@@ -110,7 +108,7 @@ const DataList = (dashPage, itemCount, columns) => {
                                 <stop offset="80%" stopColor="rgba(255, 255, 255, 0)" />
                             </linearGradient>
                             <linearGradient id="fadeLimit" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stopColor={theme.colors.theme[themeColor].highlightDark} />
+                                <stop offset="0%" stopColor={theme.colors.theme[colorTheme].highlightDark} />
                                 <stop offset="80%" stopColor="rgba(255, 255, 255, 0)" />
                             </linearGradient>
                         </defs>
@@ -137,7 +135,7 @@ const DataList = (dashPage, itemCount, columns) => {
                                 y="7.5"
                                 width="20"
                                 height="20"
-                                stroke={theme.colors.theme[themeColor].highlightDark}
+                                stroke={theme.colors.theme[colorTheme].highlightDark}
                                 strokeWidth={3}
                             />
                         )}
@@ -162,7 +160,7 @@ const DataList = (dashPage, itemCount, columns) => {
                         style={{
                             color:
                                 dataValue > dataLimit
-                                    ? theme.colors.theme[themeColor].highlightDark
+                                    ? theme.colors.theme[colorTheme].highlightDark
                                     : theme.colors.light,
                         }}
                     >
@@ -174,7 +172,7 @@ const DataList = (dashPage, itemCount, columns) => {
                     <Divider
                         color={
                             dataValue > dataLimit
-                                ? theme.colors.theme[themeColor].highlightDark
+                                ? theme.colors.theme[colorTheme].highlightDark
                                 : theme.colors.medium
                         }
                     />

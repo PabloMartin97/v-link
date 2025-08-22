@@ -63,12 +63,10 @@ const LinearGauge = () => {
     const theme = useTheme();
     const containerRef = useRef(null);
 
-    const app = APP((state) => state);
-    const modules = APP((state) => state.modules);
     const data = DATA((state) => state.data);
     
-    const settings = app.settings.dash_race;
-    const themeColor = (app.settings.general.colorTheme.value).toLowerCase();
+    const settings = APP((state) => state.settings.dash_race);
+    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();   
 
     // Extract gauge settings at top level
     const progressName = settings.gauge_1.value;
@@ -78,10 +76,24 @@ const LinearGauge = () => {
     const centerName = settings.gauge_3.value;
     const centerType = settings.gauge_3.type;
 
-    // Get sensor configurations at top level
-    const progressSensorConfig = modules[progressType]?.((state) => state.settings.sensors[progressName]) ?? {};
-    const topLeftSensorConfig = modules[topLeftType]?.((state) => state.settings.sensors[topLeftName]) ?? {};
-    const centerSensorConfig = modules[centerType]?.((state) => state.settings.sensors[centerName]) ?? {};
+    
+    // Get modules selector functions
+    const progressModuleSelector = APP((state) => state.modules[progressType]);
+    const topLeftModuleSelector = APP((state) => state.modules[topLeftType]);
+    const centerModuleSelector = APP((state) => state.modules[centerType]);
+
+    // Use the selector functions to get sensor configs
+    const progressSensorConfig = progressModuleSelector?.((state) => 
+        state.settings.sensors[progressName]
+    ) ?? {};
+    
+    const topLeftSensorConfig = topLeftModuleSelector?.((state) => 
+        state.settings.sensors[topLeftName]
+    ) ?? {};
+    
+    const centerSensorConfig = centerModuleSelector?.((state) => 
+        state.settings.sensors[centerName]
+    ) ?? {};
 
     // Memoize data extraction to avoid repeated calculations
     const gaugeData = useMemo(() => {

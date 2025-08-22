@@ -65,10 +65,8 @@ export const RadialGauge = ({
 
     // Load Settings
     const modules = APP((state) => state.modules);
-    //const data = DATA((state) => state.data)
     const theme = useTheme()
-
-    
+    const data = DATA((state) => state.data)    
     let value = DATA((state) => state.data[sensor])
 
     // Load interface config based on type
@@ -80,11 +78,7 @@ export const RadialGauge = ({
     const minValue = settings.min_value
     const limitStart = settings.limit_start
 
-    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
-    //const themeColor = (app.general.colorTheme.value).toLowerCase()
-
-
-    /* Update scale factors whenever the dimensions or viewBox changes. */
+    const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
     // State variables for SVG content and rendering
 
 
@@ -111,10 +105,6 @@ export const RadialGauge = ({
         if (containerRef.current) resizeObserver.observe(containerRef.current);
         return () => resizeObserver.disconnect();
     }, []);
-
-
-
-
 
     // Center of Gauge
     const cx = dimensions.height / 2;
@@ -200,7 +190,7 @@ export const RadialGauge = ({
         // Now, create a color scale where the lightest color corresponds to the progressArc position
         const colorScale = d3.scaleLinear()
             .domain([0, lightestPosition, totalMarkers - 1])  // Domain from start, progress arc, to end
-            .range([theme.colors.theme[themeColor].default, (value > limitStart ? theme.colors.theme[themeColor].highlightLight : theme.colors.theme[themeColor].active)]);  // Dark to active to light
+            .range([theme.colors.theme[colorTheme].default, (value > limitStart ? theme.colors.theme[colorTheme].highlightLight : theme.colors.theme[colorTheme].active)]);  // Dark to active to light
 
         const color = colorScale(index);  // Get color based on the index
 
@@ -278,10 +268,10 @@ export const RadialGauge = ({
                 .attr("y2", "0%")
                 .append("stop")
                 .attr("offset", "0%")
-                .attr("stop-color", theme.colors.theme[themeColor].default)  // Starting color
+                .attr("stop-color", theme.colors.theme[colorTheme].default)  // Starting color
                 .append("stop")
                 .attr("offset", "100%")
-                .attr("stop-color", theme.colors.theme[themeColor].light); // Ending color
+                .attr("stop-color", theme.colors.theme[colorTheme].light); // Ending color
 
             // Add the main arc as background
             svg
@@ -307,7 +297,7 @@ export const RadialGauge = ({
                 .attr("class", "limitArc")
                 .attr("d", generateArc(mainArc, limitArc, outlineRadius, 0, limitArc, mainArc))
                 .attr("fill", "none")
-                .attr("stroke", theme.colors.theme[themeColor].highlightDark)
+                .attr("stroke", theme.colors.theme[colorTheme].highlightDark)
                 .attr("stroke-width", 3);
 
             const progressCount = 140 // Total number of markers

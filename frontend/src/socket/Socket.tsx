@@ -34,9 +34,7 @@ export const Socket = () => {
 
   /* Initialize App */
   useEffect(() => {
-    console.log('Initializing App...');
     if (!store['app'].system.config) return;
-    
     if (loadedModules === totalModules) {
       console.log('App ready.');
       store['app'].update((state) => {
@@ -49,12 +47,10 @@ export const Socket = () => {
 
   /* Wait for Settings */
   useEffect(() => {
-    console.log('wait for settings');
     if (!store['app'].system.config) return;
 
     // Handles settings update for each module, ensuring each module loads once
     const handleSettings = (module) => (data) => {
-      console.log(`Handling settings for ${module}`);
       loadedModuleSet.current.add(module);
       setLoadedModules(loadedModuleSet.current.size);
       store[module].update((state) => {
@@ -70,7 +66,6 @@ export const Socket = () => {
     };
 
     const handleState = (module) => (data) => {
-      console.log(`Handling state for ${module}`);
       store['app'].update((state) => {
         state.system[`${module}State`] = data;
       });

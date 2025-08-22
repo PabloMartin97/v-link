@@ -79,7 +79,6 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const height = app.system.carplaySize.height
 
   const flattenConfig = (config: Record<string, any>) => {
-        console.log(config)
 
     const result: Record<string, any> = {};
     Object.entries(config).forEach(([key, value]) => {

@@ -262,10 +262,17 @@ class CANScheduler(threading.Thread):
 
                     # Send message
                     self.can_bus.send(msg)
+                    
                     #self.logger.debug(f"{sensor['label']}: {msg}")
 
                 except Exception as e:
-                    self.logger.error(f"Failed to send message: {e}")
+                    err_msg = str(e)
+                    self.logger.error(f"Failed to send message: {err_msg}")
+
+                    if "Error Code 105" in err_msg:
+                        self.logger.error("No CAN network found. Stopping CANScheduler.")
+                        self._stop_event.set()
+                        break
 
             # Sleep to maintain 0.01s interval between messages
             time.sleep(0.01)
