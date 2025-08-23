@@ -87,7 +87,17 @@ const Settings = () => {
   const [reset, setReset] = useState(false)
   const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
 
+  /* Ping modules to get thread state */
+  useEffect(() => {
+      
+      Object.keys(modules).forEach(module => {
+        if (socket[module]) {
+          socket[module].emit('ping');
+        }
+      });
+  }, [modules]);
 
+  /* Reset container to top when settings are reset */
   useEffect(() => {
     if (reset) {
       setCurrentSettings(settings);
@@ -497,6 +507,19 @@ const Settings = () => {
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
                 <input type="checkbox" checked={system.adcState} onChange={() => { handleIO("adc", socket.adc) }} />
+                <span className="slider"></span>
+              </ToggleSwitch>
+            </Element>
+
+            <Element>
+              <Caption2>{`SWC ${system.swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+              <Divider />
+              <ToggleSwitch
+                theme={theme}
+                backgroundColor={theme.colors.medium}
+                defaultColor={theme.colors.theme[themeColor].default}
+                activeColor={theme.colors.theme[themeColor].active}>
+                <input type="checkbox" checked={system.swcState} onChange={() => { handleIO("swc", socket.swc) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>

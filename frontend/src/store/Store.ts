@@ -76,8 +76,8 @@ const APP = create(
       btState: false,
 
       canState: false,
-      linState: false,
       adcState: false,
+      swcState: false,
       rtiState: false,
 
     },

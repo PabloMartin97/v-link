@@ -28,7 +28,8 @@ export const Socket = () => {
   useEffect(() => {
     if (!store['app'].system.config) return;
     if (loadedModules === totalModules) {
-      console.log('App ready.');
+      socket.log.emit('Info', 'App ready.');
+
       store['app'].update((state) => {
         state.modules = modules;
         state.system.startedUp = true;
@@ -58,6 +59,7 @@ export const Socket = () => {
     };
 
     const handleState = (module) => (data) => {
+      console.log('Thread state update from', module, data);
       store['app'].update((state) => {
         state.system[`${module}State`] = data;
       });
