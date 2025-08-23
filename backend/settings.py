@@ -8,16 +8,11 @@ from backend.shared.shared_state import shared_state
 logger = logging.getLogger("vlink")
 
 # Constants
-APP_ROOT = Path.home() / "v-link"
+APP_ROOT = Path(__file__).resolve().parent.parent
 USER_CONFIG_DIR = Path.home() / ".config" / "v-link"
 
 DEFAULT_PROFILES_DIR = APP_ROOT / "backend" / "config" / "profiles"
 DEFAULT_CONFIG_DIR = APP_ROOT / "backend" / "config"
-
-logger.info(f"App Root Directory: {APP_ROOT}")
-logger.info(f"Default profile directory: {DEFAULT_PROFILES_DIR}")
-logger.info(f"Default config directory: {DEFAULT_CONFIG_DIR}")
-logger.info(f"User config directory: {USER_CONFIG_DIR}")
 
 def load_directory():
     # Ensure user config directory exists.
@@ -30,7 +25,12 @@ def load_directory():
     
 
 def check_settings():
-    logger.info(f"Checking settings in {USER_CONFIG_DIR}...")
+    logger.info(f"Checking settings...")
+
+    logger.info(f"App Root Directory: {APP_ROOT}")
+    logger.info(f"Default profile directory: {DEFAULT_PROFILES_DIR}")
+    logger.info(f"Default config directory: {DEFAULT_CONFIG_DIR}")
+    logger.info(f"User config directory: {USER_CONFIG_DIR}")
     # If user config already exists and contains files, return True
     if USER_CONFIG_DIR.exists() and any(USER_CONFIG_DIR.iterdir()):
         return True

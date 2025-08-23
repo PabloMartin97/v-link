@@ -90,17 +90,14 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     return result;
   };
 
-  const config = useMemo(
-    () => flattenConfig(app.settings.dongle_config),
-    [app.settings.dongle_config]
-  );
+const config = useMemo(() => {
+  return {
+    ...flattenConfig(app.settings.dongle_config),
+    width: app.system.carplaySize.width,
+    height: app.system.carplaySize.height,
+  };
+}, [app.settings.dongle_config, app.system.carplaySize.width, app.system.carplaySize.height]);
 
-  //const config = {
-  //  fps: mmi.config.fps,
-  //  width: width,
-  //  height: height,
-  //  mediaDelay: mmi.config.delay
-  //}
 
   const mainElem = useRef<HTMLDivElement>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)

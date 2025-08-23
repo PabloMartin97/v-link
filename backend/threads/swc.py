@@ -301,14 +301,15 @@ class CAN(SWCInterface):
     
     # Check CAN message pattern
     def _message_matches_pattern(self, message_data, pattern):
+        print(message_data, pattern)
         return pattern == tuple(message_data[-self.control_byte_count:])
     
     # Initialize CAN interface
     def start(self):
         try:
             channel = "vcan0" if shared_state.vCan else self.config['interface']['name']
-            bustype =     self.config['interface']['bustype']
-            bitrate =     self.config['interface']['bitrate']
+            bustype = self.config['interface']['bustype']
+            bitrate = self.config['interface']['bitrate']
             is_extended = self.config['interface']['is_extended']
             
             self.can_bus = can.interface.Bus(channel=channel, bustype=bustype, bitrate=bitrate)
@@ -317,9 +318,16 @@ class CAN(SWCInterface):
             filters = [{"can_id": self.rep_id, "can_mask": 0x1FFFFFFF, "extended": is_extended}]
             self.can_bus.set_filters(filters)
             
-            # Start listener
-            listener = can.Listener()
-            listener.on_message_received = self._handle_can_message
+            # Create a custom listener class
+            class MessageListener(can.Listener):
+                def __init__(self, callback):
+                    self.callback = callback
+                
+                def on_message_received(self, msg):
+                    self.callback(msg)
+            
+            # Create listener with callback
+            listener = MessageListener(self._handle_can_message)
             self.notifier = can.Notifier(self.can_bus, [listener])
             
             self.logger.info(f"CAN SWC initialized on {channel}")

@@ -55,14 +55,11 @@ class Config:
                 dlc = 0xC8 + len(message_data)
 
                 message_bytes = [dlc, target, action, parameter0, parameter1, 0x01, 0x00, 0x00]
-                priority = sensor.get('priority', 1)
                 scale = sensor["scale"]
 
                 if not isinstance(scale, str) or "value" not in scale:
                     raise ValueError(f"Invalid scale format for sensor {key}")
                 
-                
-
                 sensor_entry = {
                     "key": key,
                     "label": sensor['label'],
@@ -74,7 +71,7 @@ class Config:
                     "scale": scale,
                     "is_16bit": sensor['is_16bit'],
                     "app_id": sensor['app_id'],
-                    "priority": priority,
+                    "priority": sensor['priority'],
                     "last_requested_time": 0
                 }
 
@@ -223,9 +220,11 @@ class CANScheduler(threading.Thread):
 
         # Group sensors by priority (1 = highest, 3 = lowest)
         self.prio_sensors = {1: [], 2: [], 3: []}
-        for sensor_list in sensors_config.values():
+
+        for device_id, sensor_list in sensors_config.items():
             for sensor in sensor_list:
-                prio = sensor.get("priority", 1)
+                prio = sensor.get("priority", 2)
+                print(f"Adding sensor {sensor['key']} with priority {prio}")
                 self.prio_sensors.setdefault(prio, []).append(sensor)
 
         # Keep track of the last sent sensor for each priority (round robin)
@@ -241,7 +240,7 @@ class CANScheduler(threading.Thread):
             2: 3,
             3: 1
             })
-
+        
     def run(self):
         self.logger.info("CANScheduler started.")
         while not self._stop_event.is_set():
