@@ -84,6 +84,7 @@ function Dashboard() {
   const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
   const app_bindings = APP((state) => state.settings.app_bindings);
   const appUpdate = APP((state) => state.update);
+  const keyStroke = APP((state) => state.keyStroke);
 
   const components = useMemo(() => [
     { name: "Classic", component: Classic },
@@ -341,9 +342,9 @@ function Dashboard() {
 
   // Keyboard navigation
   useEffect(() => {
-    if (app.keyStroke === app_bindings.left.value) swipeRight();
-    if (app.keyStroke === app_bindings.right.value) swipeLeft();
-  }, [app.keyStroke, app_bindings.left.value, app_bindings.right.value, swipeRight, swipeLeft]);
+    if (keyStroke === app_bindings.left.value) swipeRight();
+    if (keyStroke === app_bindings.right.value) swipeLeft();
+  }, [keyStroke, app_bindings.left.value, app_bindings.right.value, swipeRight, swipeLeft]);
 
   // Get transform and opacity for each component (memoized with fewer dependencies)
   const getComponentTransform = useCallback((index) => {

@@ -70,14 +70,18 @@ interface CarplayProps {
 
 function Carplay({ command, commandCounter }: CarplayProps) {
 
-  const app = APP((state) => state);
+
+  const carplaySettings = APP((state) => state.system.carplay)
+  const content         = APP((state) => state.system.interface.content)
+  const navBar          = APP((state) => state.system.interface.navBar)
+  const appUpdate       = APP((state) => state.update);
+  const dongleConfig    = APP((state) => state.settings.dongle_config);
+  const width           = APP((state) => state.system.carplaySize.width);
+  const height          = APP((state) => state.system.carplaySize.height);
+  const exitToDash      = APP((state) => state.settings.general.exitToDash);
 
   const [phoneState, setPhoneState] = useState<Boolean | null>(false);
 
-
-  const width = app.system.carplaySize.width
-  const height = app.system.carplaySize.height
-  const exitToDash = app.settings.general.exitToDash;
 
   const flattenConfig = (config: Record<string, any>) => {
 
@@ -93,11 +97,11 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
   const config = useMemo(() => {
     return {
-      ...flattenConfig(app.settings.dongle_config),
-      width: app.system.carplaySize.width,
-      height: app.system.carplaySize.height,
+      ...flattenConfig(dongleConfig),
+      width: width,
+      height: height,
     };
-  }, [app.settings.dongle_config, app.system.carplaySize.width, app.system.carplaySize.height]);
+  }, [dongleConfig, width, height]);
 
 
   const mainElem = useRef<HTMLDivElement>(null)
@@ -162,7 +166,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       switch (type) {
         case 'streamStarted':
           // This useEffect will notify when the phone is connected and the stream started
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.carplay.connected = true;
           });
 
@@ -198,7 +202,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         case 'plugged':
           console.log('Worker connected')
 
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.carplay.worker = true;
           });
 
@@ -206,7 +210,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         case 'unplugged':
           console.log('Worker disconnected')
 
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.carplay.worker = false;
             state.system.carplay.phone = false;
             state.system.carplay.user = false;
@@ -242,11 +246,11 @@ function Carplay({ command, commandCounter }: CarplayProps) {
               break
             case CommandMapping.requestHostUI:
               if (exitToDash) {
-                app.update((state) => {
+                appUpdate((state) => {
                   state.system.interface.view = "Dashboard";
                 });
               } else {
-                app.update((state) => {
+                appUpdate((state) => {
                   state.system.interface.navBar = true;
                 });
               }
@@ -292,13 +296,13 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         console.log('Phone connected')
         setPhoneState(true)
 
-        app.update((state) => {
+        appUpdate((state) => {
           state.system.carplay.phone = true;
         });
       } else {
         console.log('Phone disconnected')
         setPhoneState(false)
-        app.update((state) => {
+        appUpdate((state) => {
           state.system.carplay.phone = false;
         });
       }
@@ -311,7 +315,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     navigator.usb.onconnect = async () => {
       console.log('Dongle connected')
 
-      app.update((state) => {
+      appUpdate((state) => {
         state.system.carplay.dongle = true;
         state.system.carplay.pair = true;
       });
@@ -325,7 +329,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         console.log('Dongle disconnected')
         setPhoneState(false)
 
-        app.update((state) => {
+        appUpdate((state) => {
           state.system.carplay.dongle = false;
           state.system.carplay.phone = false;
           state.system.carplay.stream = false;
@@ -354,20 +358,20 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         onPointerCancel={sendTouchEvent}
         onPointerOut={sendTouchEvent}
 
-        style={{ height: app.system.carplaySize.height, width: app.system.carplaySize.width }}>
+        style={{ height: height, width: width }}>
 
         <canvas
           ref={canvasRef}
           id="video"
           style={
 
-            app.system.carplay.paired && app.system.carplay.dongle
+            carplaySettings.paired && carplaySettings.dongle
               ? { height: '100%', overflow: 'hidden' }
               : { display: 'none' }
           }
         />
       </Stream>
-      <Overlay isVisible={app.system.interface.content} navVisible={app.system.interface.navBar} />
+      <Overlay isVisible={content} navVisible={navBar} />
     </Container>
   )
 }

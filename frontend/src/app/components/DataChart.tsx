@@ -53,14 +53,14 @@ const DataChart = ({
 }) => {
     const theme = useTheme();
     const steps = parseInt(length / resolution);
-    const app = APP((state) => state);
-    const modules = APP((state) => state.modules);
-    const system = APP((state) => state.system);
-    const settings = APP((state) => state.settings);
-    const data = DATA((state) => state.data);
 
-    const themeColor = (settings.general.colorTheme.value).toLowerCase()
+    const appUpdate             = APP((state) => state.update);
+    const modules               = APP((state) => state.modules);
+    const isRecording           = APP((state) => state.system.isRecording);
+    const dashChartsSettings    = APP((state) => state.settings.dash_charts);
+    const themeColor            = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
 
+    const data                  = DATA((state) => state.data);
 
     const containerRef = useRef(null);  // Create a reference for the container
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -93,9 +93,9 @@ const DataChart = ({
 
     const datasets = Array.from({ length: setCount }, (_, i) => {
         const key = `value_${i + 1}`;
-        const sensor = settings.dash_charts[key].value;
+        const sensor = dashChartsSettings[key].value;
         const value = data[sensor];
-        const type = settings.dash_charts[key].type;
+        const type = dashChartsSettings[key].type;
         const config = modules[type]((state) => state.settings.sensors[sensor]);
 
         return {
@@ -275,8 +275,8 @@ const DataChart = ({
     }, [dataStreams]);
 
     const handleToggleRecording = () => {
-        app.update((state) => {
-            state.system.isRecording = !state.system.isRecording;
+        appUpdate((state) => {
+            state.system.isRecording = !isRecording;
         });
     };
 
@@ -310,7 +310,7 @@ const DataChart = ({
                     viewBox="0 0 50 50"
                     xmlns="http://www.w3.org/2000/svg"
                     style={{
-                        fill: system.isRecording ? 'red' : color_xGrid, // Change color based on recording state
+                        fill: isRecording ? 'red' : color_xGrid, // Change color based on recording state
                         borderRadius: '50%',
                         stroke: "#141414",  // Black outline for the button
                         strokeWidth: 4,   // Set outline thickness
@@ -319,7 +319,7 @@ const DataChart = ({
                     {/* Outer circle (the button's background) */}
                     <circle cx="25" cy="25" r="16" />
                     {/* Inner circle (the gap in the middle) */}
-                    <circle cx="25" cy="25" r="8" fill={system.isRecording ? 'red' : color_xGrid} />
+                    <circle cx="25" cy="25" r="8" fill={isRecording ? 'red' : color_xGrid} />
                 </svg>
             </RecordButton>
         </Container>

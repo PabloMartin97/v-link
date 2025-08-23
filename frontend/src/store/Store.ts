@@ -86,6 +86,14 @@ const APP = create(
       )
     },
 
+    // Keybind for switching pages
+    switchPage: 'ArrowUp',
+    setSwitchPage: (key) => {
+      set((state) => {
+        state.switchPage = key
+      })
+    },
+
     // Pause keybind processing
     pauseKeyBinds: false,
     setPauseKeyBinds: (paused) => {

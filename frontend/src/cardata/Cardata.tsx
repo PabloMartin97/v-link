@@ -8,7 +8,18 @@ import Ignition from './helper/Ignition';
 import Recorder from './helper/Recorder';
 
 function Cardata() {
-  const app = APP((state) => state)
+  const settings       = APP((state) => state.settings)
+  const modules        = APP((state) => state.modules)
+  const autoOpen       = APP((state) => state.settings.screen.autoOpen.value)
+  const ignState       = APP((state) => state.system.ignState)
+  const autoShutdown   = APP((state) => state.settings.shutdown.autoShutdown.value)
+  const shutdownDelay  = APP((state) => state.settings.shutdown.shutdownDelay.value)
+  const messageTimeout = APP((state) => state.settings.shutdown.messageTimeout.value)
+  const isRecording    = APP((state) => state.system.isRecording)
+  const resolution     = APP((state) => state.settings.dash_charts.resolution.value)
+
+
+
   const updateApp = APP((state) => state.update)
 
   const data = DATA((state) => state)
@@ -61,22 +72,21 @@ function Cardata() {
   return (
     <>
       <Display
-        autoOpen={app.settings.screen.autoOpen.value}
+        autoOpen={autoOpen}
       />
       <Ignition
-        ignition={app.system.ignState}
-        autoShutdown={app.settings.shutdown.autoShutdown.value}
-        shutdownDelay={app.settings.shutdown.shutdownDelay.value}
-        messageTimeout={app.settings.shutdown.messageTimeout.value}
+        ignition={ignState}
+        autoShutdown={autoShutdown}
+        shutdownDelay={shutdownDelay}
+        messageTimeout={messageTimeout}
         updateApp={updateApp}
       />
       <Recorder
         data={data.data}
-        resolution={app.settings.dash_charts.resolution.value}
-        setCount={app.settings.constants.chart_input_current}
-        recording={app.system.isRecording}
-        settings={app.settings}
-        modules={app.modules}
+        resolution={resolution}
+        recording={isRecording}
+        settings={settings}
+        modules={modules}
       />
     </>
   );

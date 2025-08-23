@@ -28,9 +28,12 @@ const AppContainer = styled.div`
 `;
 
 function App() {
-  const app = APP((state) => state);
+  // Subscribe to store slices
+  const systemSettings = APP((state) => state.system);
+  const appUpdate = APP((state) => state.update);
+  const setKeyStroke = APP((state) => state.setKeyStroke);
+  const dongleBindings = APP((state) => state.settings.dongle_bindings);
 
-  const system = app.system;
 
   const [commandCounter, setCommandCounter] = useState(0);
   const [keyCommand, setKeyCommand] = useState('');
@@ -40,28 +43,26 @@ function App() {
     return () => {
       document.removeEventListener('keydown', mmiKeyDown);
     };
-  }, [system.view, system.switch]);
+  }, [systemSettings.view, systemSettings.switch]);
 
 const mmiKeyDown = (event: KeyboardEvent) => {
   // Store last Keystroke in store to broadcast it
-  app.setKeyStroke(event.code);
+  setKeyStroke(event.code);
 
   // If keybinds are paused, do not process further
-  const pauseKeyBinds = APP.getState().system.pauseKeyBinds;
+  const pauseKeyBinds = APP((state) => state.system.pauseKeyBinds);
   console.log(`Keybinds paused: ${pauseKeyBinds}`);
   if(pauseKeyBinds) return;
 
   // Only process Carplay key commands when in Carplay view
-  if (system.view !== 'Carplay') return;
+  if (systemSettings.view !== 'Carplay') return;
 
   // If user is not switching the page, send control to CarPlay
-  if (system.switch && event.code !== system.switch) {
-    const bindings = app.settings.dongle_bindings;
-
-    if (bindings) {
+  if (systemSettings.switch && event.code !== systemSettings.switch) {
+    if (dongleBindings) {
       // Find the action whose .value matches the key event
-      const action = Object.keys(bindings).find(
-        (key) => bindings[key].value === event.code
+      const action = Object.keys(dongleBindings).find(
+        (key) => dongleBindings[key].value === event.code
       );
       console.log('action', action);
 
@@ -88,22 +89,22 @@ const mmiKeyDown = (event: KeyboardEvent) => {
   useEffect(() => {
     const handleResize = () => {
       if (containerRef.current)
-        if (containerRef.current && system.startedUp) {
-
+        if (containerRef.current && systemSettings.startedUp) {
+          const topBarHeight = APP.getState().settings.side_bars.topBarHeight.value;
           const carplayFullscreen = containerRef.current.offsetHeight;
-          const carplayWindowed = containerRef.current.offsetHeight - app.settings.side_bars.topBarHeight.value;
+          const carplayWindowed = containerRef.current.offsetHeight - topBarHeight;
 
           console.log(`Resizing window:
             Fullscreen: ${containerRef.current.offsetWidth}x${carplayFullscreen}
             Windowed: ${containerRef.current.offsetWidth}x${carplayWindowed}
-            Topbar: ${app.settings.side_bars.topBarHeight.value}`)
+            Topbar: ${topBarHeight}`)
 
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.windowSize.width = containerRef.current.offsetWidth;
             state.system.windowSize.height = containerRef.current.offsetHeight;
 
             state.system.carplaySize.width = containerRef.current.offsetWidth;
-            state.system.carplaySize.height = (app.settings.side_bars.topBarHeight.value ? carplayFullscreen : carplayWindowed);
+            state.system.carplaySize.height = (topBarHeight ? carplayFullscreen : carplayWindowed);
           });
 
           setReady(true);
@@ -113,7 +114,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
     const resizeObserver = new ResizeObserver(handleResize);
     if (containerRef.current) resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
-  }, [system.startedUp, containerRef.current]);
+  }, [systemSettings.startedUp, containerRef.current]);
 
   return (
     <StyleSheetManager shouldForwardProp={isPropValid}>
@@ -126,7 +127,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
           <Init />
           <Modal />
 
-          {system.startedUp && ready ? (
+          {systemSettings.startedUp && ready ? (
             <>
               {<Carplay
                 commandCounter={commandCounter}

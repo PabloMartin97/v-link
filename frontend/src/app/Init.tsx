@@ -126,13 +126,13 @@ const Init = () => {
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [visible, setVisible] = useState(true);
 
-    const app = APP((state) => state);
+    const appUpdate = APP((state) => state.update);
 
     const startApp = () => {
         console.log("Config-files found, loading settings.");
         socket.sys.emit('systemTask', 'start');
         setVisible(false)
-        app.update((state) => {
+        appUpdate((state) => {
             state.system.configLoaded = true;
         });
     }

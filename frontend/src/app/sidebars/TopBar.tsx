@@ -85,35 +85,18 @@ const ScrollerContent = styled.div`
 `;
 
 const TopBar = () => {
-
-  const data = DATA((state) => state.data);
-  //const modules = APP((state) => state.modules);
-
   const theme = useTheme();
 
-    const {
-    topBarActive,
-    topBarHeight,
-    colorTheme,
-    dashSettings,
-    view,
-    content,
-    navBar,
-    phone,
-    wifiState,
-    modules
-  } = APP(state => ({
-    topBarActive: state.settings.side_bars.topBar.value,
-    topBarHeight: state.settings.side_bars.topBarHeight.value,
-    colorTheme: state.settings.general.colorTheme.value.toLowerCase(),
-    dashSettings: state.settings.dash_topbar,
-    view: state.system.view,
-    content: state.system.interface.content,
-    navBar: state.system.interface.navBar,
-    phone: state.system.carplay.phone,
-    wifiState: state.system.wifiState,
-    modules: state.modules,
-  }));
+  const topBarActive   = APP(state => state.settings.side_bars.topBar.value);
+  const topBarHeight   = APP(state => state.settings.side_bars.topBarHeight.value);
+  const colorTheme     = APP(state => state.settings.general.colorTheme.value.toLowerCase());
+  const dashSettings   = APP(state => state.settings.dash_topbar);
+  const view           = APP(state => state.system.view);
+  const content        = APP(state => state.system.interface.content);
+  const navBar         = APP(state => state.system.interface.navBar);
+  const phone          = APP(state => state.system.carplay.phone);
+  const wifiState      = APP(state => state.system.wifiState);
+  const modules        = APP(state => state.modules);
 
 
   const valueName = dashSettings.value.value;

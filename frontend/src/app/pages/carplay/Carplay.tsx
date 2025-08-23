@@ -65,9 +65,9 @@ const Container = styled.div`
 function Carplay() {
     const theme = useTheme();
     
-    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
+    const themeColor      = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
     const carplaySettings = APP((state) => state.system.carplay);
-    const appUpdate = APP((state) => state.update);
+    const appUpdate       = APP((state) => state.update);
     
     const Body2 = Typography.Body2;
 

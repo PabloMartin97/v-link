@@ -74,13 +74,19 @@ const Settings = () => {
   const Caption2 = Typography.Caption2
 
   /* Load Stores */
-  const modules = APP((state) => state.modules)
-  const settings = APP((state) => state.settings)
-  const system = APP((state) => state.system)
-  const appUpdate = APP((state) => state.update)
+  const modules       = APP((state) => state.modules)
+  const settings      = APP((state) => state.settings)
+  const appUpdate     = APP((state) => state.update)
+  const themeColor    = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+  const versionNumber = APP((state) => state.system.version);
+  const settingPage   = APP((state) => state.system.settingPage);
+
+  const rtiState      = APP((state) => state.system.rtiState);
+  const canState      = APP((state) => state.system.canState);
+  const adcState      = APP((state) => state.system.adcState);
+  const swcState      = APP((state) => state.system.swcState);
 
   const theme = useTheme();
-  const themeColor = (settings.general.colorTheme.value).toLowerCase()
 
 
   const [save, setSave] = useState(true)
@@ -241,10 +247,10 @@ const Settings = () => {
       const latestVersion = data.tag_name; // This is the version (e.g., "v1.2.0")
 
 
-      if (latestVersion === system.version)
+      if (latestVersion === versionNumber)
         openModal("No Updates available.", "Check back again later :)", null, null)
       else {
-        openModal("New update available!", `Current: ${system.version} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
+        openModal("New update available!", `Current: ${versionNumber} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
       }
     } catch (error) {
       openModal("Error checking for updates:", error, null, null)
@@ -255,7 +261,7 @@ const Settings = () => {
   // Toggle Threads
   useEffect(() => {
     if (reset) {
-      setCurrentSettings(app.settings)
+      setCurrentSettings(settings)
       setReset(false)
     }
   }, [reset])
@@ -465,7 +471,7 @@ const Settings = () => {
         container.removeEventListener("wheel", handleWheel, { passive: true });
       }
     };
-  }, [system.settingPage]); // Make sure useEffect runs again on reset
+  }, [settingPage]); // Make sure useEffect runs again on reset
 
 
   return (
@@ -478,7 +484,7 @@ const Settings = () => {
         ignoreElements='input, select'
         innerRef={scrollRef}
       >
-        {system.settingPage === 1 &&
+        {settingPage === 1 &&
           <>
             {renderSetting("general", currentSettings)}
             {renderSetting("screen", currentSettings)}
@@ -486,53 +492,53 @@ const Settings = () => {
             {renderSetting("side_bars", currentSettings)}
 
             <Element>
-              <Caption2>{`CAN ${system.canState ? '(Active)' : '(Inactive)'}`}</Caption2>
+              <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
               <Divider />
               <ToggleSwitch
                 theme={theme}
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.canState} onChange={() => { handleIO("can", socket.can) }} />
+                <input type="checkbox" checked={canState} onChange={() => { handleIO("can", socket.can) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
 
             <Element>
-              <Caption2>{`ADC ${system.adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+              <Caption2>{`ADC ${adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
               <Divider />
               <ToggleSwitch
                 theme={theme}
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.adcState} onChange={() => { handleIO("adc", socket.adc) }} />
+                <input type="checkbox" checked={adcState} onChange={() => { handleIO("adc", socket.adc) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
 
             <Element>
-              <Caption2>{`SWC ${system.swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+              <Caption2>{`SWC ${swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
               <Divider />
               <ToggleSwitch
                 theme={theme}
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.swcState} onChange={() => { handleIO("swc", socket.swc) }} />
+                <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
 
             <Element>
-              <Caption2>{`RTI ${system.rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
+              <Caption2>{`RTI ${rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
               <Divider />
               <ToggleSwitch
                 theme={theme}
                 backgroundColor={theme.colors.medium}
                 defaultColor={theme.colors.theme[themeColor].default}
                 activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.rtiState} onChange={() => { handleIO("rti", socket.rti) }} />
+                <input type="checkbox" checked={rtiState} onChange={() => { handleIO("rti", socket.rti) }} />
                 <span className="slider"></span>
               </ToggleSwitch>
             </Element>
@@ -540,7 +546,7 @@ const Settings = () => {
           </>
         }
 
-        {system.settingPage === 2 &&
+        {settingPage === 2 &&
           <>
             {renderSetting("dash_topbar", currentSettings)}
             {renderSetting("dash_classic", currentSettings)}
@@ -559,26 +565,26 @@ const Settings = () => {
           </>
         }
 
-        {system.settingPage === 3 &&
+        {settingPage === 3 &&
           <>
             {renderSetting("app_bindings", currentSettings)}
             {renderSetting("dongle_bindings", currentSettings)}
           </>
         }
 
-        {system.settingPage === 4 &&
+        {settingPage === 4 &&
           <>
             {renderSetting("dongle_config", currentSettings)}
           </>
         }
 
-        {system.settingPage === 5 &&
+        {settingPage === 5 &&
           <>
             <div style={{ display: 'flex', width: '100%', height: '90%', gap: '10px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>
                 <Button onClick={() => { systemTask('quit') }} style={{ height: '100%' }}> Quit </Button>
                 <Button onClick={() => { systemTask('restart') }} style={{ height: '100%' }}> Restart </Button>
-                <Button onClick={() => { systemTask("rti") }} style={{ height: '100%' }}> {system.rtiState ? "Close RTI" : "Open RTI"} </Button>
+                <Button onClick={() => { systemTask("rti") }} style={{ height: '100%' }}> {rtiState ? "Close RTI" : "Open RTI"} </Button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>

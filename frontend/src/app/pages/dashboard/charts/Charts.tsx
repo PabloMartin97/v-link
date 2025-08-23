@@ -28,10 +28,11 @@ const List = styled.div`
 
 const Charts = () => {
     const theme = useTheme()
-    const app = APP((state) => state);
 
-    const setCount = app.settings.constants.chart_input_current;
-    const Datalist = DataList(app.settings.dash_charts, setCount, 2) // Amount of Items, 2 Columns
+    const dashChartsSettings = APP((state) => state.settings.dash_charts);
+    const setCount           = APP((state) => state.settings.constants.chart_input_current);
+
+    const Datalist = DataList(dashChartsSettings, setCount, 2) // Amount of Items, 2 Columns
 
 
 
@@ -39,8 +40,8 @@ const Charts = () => {
         <Container>
             <Chart>
                 <DataChart
-                    length={app.settings.dash_charts.length.value}
-                    resolution={app.settings.dash_charts.resolution.value}
+                    length={dashChartsSettings.length.value}
+                    resolution={dashChartsSettings.resolution.value}
                     setCount={setCount}
                     tickCountX={5}  // Update with the desired number of X-axis ticks
                     tickCountY={4}  // Update with the desired number of Y-axis ticks

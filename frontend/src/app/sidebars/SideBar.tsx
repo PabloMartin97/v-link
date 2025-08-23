@@ -48,42 +48,45 @@ const Menu = styled.div`
 
 
 const SideBar = ({ collapseLength }) => {
+    
 
-    const app = APP((state) => state)
+    const view          = APP((state) => state.system.view)
+    const settingPage   = APP((state) => state.system.settingPage)
+    const appUpdate     = APP((state) => state.update)
+    const versionNumber = APP((state) => state.system.version)
+    const sideBarWidth  = APP((state) => state.settings.side_bars.sideBarWidth.value)
+    const themeColor    = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+
     const theme = useTheme();
-    const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
 
     const Caption2 = Typography.Caption2;
     const Caption1 = Typography.Caption1;
     const Title = Typography.Title;
 
-
     const [moose, setMoose] = useState(false);
-
-    const [currentPage, setCurrentPage] = useState(app.system.view)
-    const [currentTab, setCurrentTab] = useState(app.system.settingPage)
+    const [currentPage, setCurrentPage] = useState(view)
+    const [currentTab, setCurrentTab] = useState(settingPage)
 
     /* Switch Tabs */
     const handleTabChange = (tabIndex) => {
-        app.update((state) => {
+        appUpdate((state) => {
             state.system.settingPage = tabIndex;
         });
     };
 
     useEffect(() => {
-        setCurrentTab(app.system.settingPage)
-    }, [app.system.settingPage])
+        setCurrentTab(settingPage)
+    }, [settingPage])
 
     
     return (
         <Sidebar
             theme={theme}
-            app={app}
             currentPage={currentPage}
-            currentView={app.system.view}
+            currentView={view}
             collapseLength={collapseLength / 1000}
             minWidth={0}
-            maxWidth={app.settings.side_bars.sideBarWidth.value}>
+            maxWidth={sideBarWidth}>
 
             <Menu>
                 <Link>
@@ -204,7 +207,7 @@ const SideBar = ({ collapseLength }) => {
                             </IconMedium>
 
                         </Link>
-                        <Caption1 style={{ color: theme.colors.medium }}> {app.system.version}</Caption1>
+                        <Caption1 style={{ color: theme.colors.medium }}> {versionNumber}</Caption1>
                     </div>
                 </div>
 
