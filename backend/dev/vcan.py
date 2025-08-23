@@ -57,7 +57,7 @@ class VCANThread(threading.Thread):
                 if message:
                     self.check_message(message)
         except Exception as e:
-            print(f"VCAN thread error: {e}")
+            self.logger.error(f"VCAN thread error: {e}")
         finally:
             self.stop_canbus()
 

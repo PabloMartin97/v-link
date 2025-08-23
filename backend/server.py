@@ -28,14 +28,14 @@ socketio = SocketIO(server, cors_allowed_origins="*", async_mode='eventlet')
 modules = ["app", "mmi", "can", "swc", "adc", "rti", "mst"]
 
 class ServerThread(threading.Thread):
-    def __init__(self, logger):
+    def __init__(self):
         super().__init__()
         self.daemon = True  # Ensure thread stops when main program exits
         self.app = server
         self.stop_event = threading.Event()
         self.server_socket = eventlet.listen(('0.0.0.0', 4001))
 
-        print("RUNNING SERVER")
+        logger.info("Server initialized on port 4001")
         
 
     def run(self):
@@ -117,7 +117,7 @@ class ServerThread(threading.Thread):
     # Send notification when frontend connects via socket.io
     @socketio.on('connect', namespace='/')
     def handle_connect():
-        if (shared_state.verbose): print("Client connected")
+        if (shared_state.verbose): logger.info("Client connected")
 
 
 
@@ -128,7 +128,6 @@ class ServerThread(threading.Thread):
 
         # Emit module Data
         def emit_data(data):
-            print(data)
             socketio.emit('data', data, namespace=namespace)
 
         # Save module settings
@@ -147,7 +146,7 @@ class ServerThread(threading.Thread):
 
         # Toggle module status
         def toggle_state():
-            if (shared_state.verbose): print('Toggling Thread')
+            if (shared_state.verbose): logger.info('Toggling Thread')
             getattr(shared_state, toggle_attr).set()
 
             thread_state = shared_state.THREADS.get(module, None)
@@ -208,12 +207,12 @@ class ServerThread(threading.Thread):
             # Loads the profile which was selected through the frontend.
             result = settings.copy_files(payload)
             if result:
-                print("All settings copied and ready")
+                logger.info("All settings copied and ready")
                 return {"result": result}
             
         elif args == 'start':
             # Loads the profile which was selected through the frontend.
-            print('Starting all threads')
+            logger.info('Starting all threads')
             shared_state.start_event.set()
 
         elif args == 'reboot':

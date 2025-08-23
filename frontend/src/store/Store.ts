@@ -6,7 +6,7 @@ const APP = create(
     modules: {},
     settings: {},
     system: {
-      version: 'v3.0.3',
+      version: 'v3.1.0',
       view: '',
       switch: 'ArrowUp',
       lastUpdate: 0,

@@ -148,4 +148,3 @@ class ADCThread(threading.Thread):
     def emit_data_to_frontend(self, data):
         if self.client and self.client.connected:
             self.client.emit('data', data, namespace='/adc')
-            print(data)

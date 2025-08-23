@@ -5,6 +5,8 @@ import styled, { ThemeProvider, StyleSheetManager } from 'styled-components';
 import isPropValid from '@emotion/is-prop-valid'; // Import isPropValid
 
 import { APP } from './store/Store';
+
+import { useNamespaces } from './socket/Namespaces';
 import { Socket } from './socket/Socket';
 
 import Init from './app/Init';
@@ -34,6 +36,8 @@ function App() {
   const setKeyStroke = APP((state) => state.setKeyStroke);
   const dongleBindings = APP((state) => state.settings.dongle_bindings);
 
+  const socket = useNamespaces();
+
 
   const [commandCounter, setCommandCounter] = useState(0);
   const [keyCommand, setKeyCommand] = useState('');
@@ -51,7 +55,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
 
   // If keybinds are paused, do not process further
   const pauseKeyBinds = APP((state) => state.system.pauseKeyBinds);
-  console.log(`Keybinds paused: ${pauseKeyBinds}`);
+  socket.log.emit('info', `Keybinds paused: ${pauseKeyBinds}`);
   if(pauseKeyBinds) return;
 
   // Only process Carplay key commands when in Carplay view

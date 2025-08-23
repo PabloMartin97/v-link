@@ -192,7 +192,7 @@ class VLINK:
             self.start_thread(thread_name, logger)
 
     def join_threads(self):
-        print('\nStopping threads, please wait patiently...\n')
+        logger.info('\nStopping threads, please wait patiently...\n')
         for thread_name, thread in shared_state.THREADS.items():
             if isinstance(thread, threading.Thread) and thread.is_alive():
                 self.stop_thread(thread_name)
@@ -318,7 +318,7 @@ def setup_arguments():
 def display_thread_states():
     clear_screen()
     # Display the app name and version
-    print("V-Link 3.0.3 | Boosted Moose")
+    print("V-Link 3.1.0 | Boosted Moose")
     print('Device: ', vlink.rpiModel, ' | ', vlink.rpiProtocol)
     print(f"RTI state: {'Up' if shared_state.rtiStatus else 'Down'}")
     print(f"IGN state: {'High' if shared_state.ignStatus else 'Low'}")

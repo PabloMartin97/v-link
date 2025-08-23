@@ -224,7 +224,7 @@ class CANScheduler(threading.Thread):
         for device_id, sensor_list in sensors_config.items():
             for sensor in sensor_list:
                 prio = sensor.get("priority", 2)
-                print(f"Adding sensor {sensor['key']} with priority {prio}")
+                self.logger.debug(f"Adding sensor {sensor['key']} with priority {prio}")
                 self.prio_sensors.setdefault(prio, []).append(sensor)
 
         # Keep track of the last sent sensor for each priority (round robin)

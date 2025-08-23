@@ -56,5 +56,4 @@ class RTIThread(threading.Thread):
 
     def cleanup(self):
         if self.rti_serial and self.rti_serial.is_open:
-            #print("Closing RTI Serial port")
             self.rti_serial.close()
