@@ -250,7 +250,7 @@ const Content = () => {
     const viewKeys = Object.keys(viewMap);
     let currentIndex = viewKeys.indexOf(view);
     currentIndex = (currentIndex + 1) % viewKeys.length;
-    appUpdate((state) => { view = viewKeys[currentIndex]; });
+    appUpdate((state) => { state.system.view = viewKeys[currentIndex]; });
   };
 
   // Listen for key strokes to switch views
