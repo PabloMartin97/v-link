@@ -158,7 +158,11 @@ class VLINK:
 
         shared_state.THREADS[thread_name] = thread
 
-        logger.info(f"{thread_name} thread started.")
+        time.sleep(.05)
+        if not thread.is_alive():
+            logger.error(f"{thread_name} failed to start.")
+        else:
+            logger.info(f"{thread_name} thread started.")
 
 
     def stop_thread(self, thread_name):
@@ -176,10 +180,12 @@ class VLINK:
 
 
     def toggle_thread(self, thread_name):
-        if shared_state.THREADS[thread_name]:
+        thread = shared_state.THREADS.get(thread_name)
+        is_alive = isinstance(thread, threading.Thread) and thread.is_alive()
+        if is_alive:
             self.stop_thread(thread_name)
         else:
-            self.start_thread(thread_name)
+            self.start_thread(thread_name, logger)
 
     def join_threads(self):
         print('\nStopping threads, please wait patiently...\n')
