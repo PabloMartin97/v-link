@@ -301,8 +301,8 @@ class CAN(SWCInterface):
     
     # Check CAN message pattern
     def _message_matches_pattern(self, message_data, pattern):
-        print(message_data, pattern)
-        return pattern == tuple(message_data[-self.control_byte_count:])
+        control_bytes = tuple(message_data[-self.control_byte_count:])
+        return pattern == control_bytes
     
     # Initialize CAN interface
     def start(self):
@@ -442,7 +442,7 @@ class LIN(SWCInterface):
     def _read_from_file(self):
         time.sleep(10)  # Wait for app start
         try:
-            with open(Path(__file__).parent / "dev/lin_test.txt", "r") as file:
+            with open(Path(__file__).parent.parent / "dev/lin_test.txt", "r") as file:
                 for line in file:
                     if self._stop_event.is_set():
                         break

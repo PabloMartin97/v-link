@@ -33,8 +33,8 @@ function App() {
 
   const system = app.system;
 
-  const commandCounterRef = useRef(0);
-  const keyCommandRef = useRef('');
+  const [commandCounter, setCommandCounter] = useState(0);
+  const [keyCommand, setKeyCommand] = useState('');
 
   useEffect(() => {
     document.addEventListener('keydown', mmiKeyDown);
@@ -67,13 +67,13 @@ const mmiKeyDown = (event: KeyboardEvent) => {
       console.log('action', action);
 
       if (action !== undefined) {
-        keyCommandRef.current = action;
-        commandCounterRef.current += 1;
+          setKeyCommand(action);
+          setCommandCounter((c) => c + 1);
 
         if (action === "selectDown") {
           setTimeout(() => {
-            keyCommandRef.current = "selectUp";
-            commandCounterRef.current += 1;
+            setKeyCommand("selectUp");
+            setCommandCounter((c) => c + 1);
           }, 200);
         }
       }
@@ -130,8 +130,8 @@ const mmiKeyDown = (event: KeyboardEvent) => {
           {system.startedUp && ready ? (
             <>
               {<Carplay
-                commandCounter={commandCounterRef.current}
-                command={keyCommandRef.current}
+                commandCounter={commandCounter}
+                command={keyCommand}
               />}
 
               < Cardata />
