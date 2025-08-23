@@ -4,7 +4,7 @@ import { theme } from './theme/Theme';
 import styled, { ThemeProvider, StyleSheetManager } from 'styled-components';
 import isPropValid from '@emotion/is-prop-valid'; // Import isPropValid
 
-import { APP, KEY } from './store/Store';
+import { APP } from './store/Store';
 import { Socket } from './socket/Socket';
 
 import Init from './app/Init';
@@ -28,7 +28,6 @@ const AppContainer = styled.div`
 `;
 
 function App() {
-  const key = KEY((state) => state);
   const app = APP((state) => state);
 
   const system = app.system;
@@ -45,7 +44,7 @@ function App() {
 
 const mmiKeyDown = (event: KeyboardEvent) => {
   // Store last Keystroke in store to broadcast it
-  key.setKeyStroke(event.code);
+  app.setKeyStroke(event.code);
 
   // If keybinds are paused, do not process further
   const pauseKeyBinds = APP.getState().system.pauseKeyBinds;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense, useCallback } from 'react';
-import { APP, KEY } from '../../../store/Store';
+import { APP } from '../../../store/Store';
 import styled, { useTheme } from 'styled-components';
 import { Oval } from 'react-loader-spinner';
 
@@ -63,7 +63,6 @@ const TRANSITION_DURATION = 400;
 const MIN_DRAG_DISTANCE = 10;
 
 function Dashboard() {
-  const key = KEY((state) => state);
   const theme = useTheme();
   const dashBoardRef = useRef(null);
   const resizeDebounceTimeout = useRef(null);
@@ -342,9 +341,9 @@ function Dashboard() {
 
   // Keyboard navigation
   useEffect(() => {
-    if (key.keyStroke === app_bindings.left.value) swipeRight();
-    if (key.keyStroke === app_bindings.right.value) swipeLeft();
-  }, [key.keyStroke, app_bindings.left.value, app_bindings.right.value, swipeRight, swipeLeft]);
+    if (app.keyStroke === app_bindings.left.value) swipeRight();
+    if (app.keyStroke === app_bindings.right.value) swipeLeft();
+  }, [app.keyStroke, app_bindings.left.value, app_bindings.right.value, swipeRight, swipeLeft]);
 
   // Get transform and opacity for each component (memoized with fewer dependencies)
   const getComponentTransform = useCallback((index) => {

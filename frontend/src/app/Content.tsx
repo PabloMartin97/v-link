@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import styled, { css, useTheme } from 'styled-components';
 import { Fade } from '../theme/styles/Effects';
 
-import { APP, KEY } from '../store/Store';
+import { APP } from '../store/Store';
 
 import Dashboard from './pages/dashboard/Dashboard';
 import Carplay from './pages/carplay/Carplay';
@@ -104,7 +104,6 @@ const NavBlocker = styled.div`
 const Content = () => {
   const viewMap = { Dashboard, Carplay, Settings };
   const app = APP((state) => state);
-  const key = KEY((state) => state);
   const theme = useTheme();
 
   const cardPadding = 20;
@@ -244,9 +243,9 @@ const Content = () => {
 
   // Listen for key strokes to switch views
   useEffect(() => {
-    if (key.keyStroke === app.system.switch && !app.system.pauseKeyBinds)
+    if (app.keyStroke === app.system.switch && !app.system.pauseKeyBinds)
       cycleView();
-  }, [key.keyStroke]);
+  }, [app.keyStroke]);
 
   return (
     <>

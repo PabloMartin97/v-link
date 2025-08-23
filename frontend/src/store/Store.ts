@@ -1,25 +1,15 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
 
-const DATA = create(
-  immer((set) => ({
-    data: {},
-    update: (newData) =>
-      set((state) => {
-        Object.assign(state.data, newData);
-      }),
-  }))
-);
-
 const APP = create(
   immer((set) => ({
+    modules: {},
+    settings: {},
     system: {
       version: 'v3.0.3',
       view: '',
       switch: 'ArrowUp',
-      lastKey: '',
       lastUpdate: 0,
-      pauseKeyBinds: false,
 
       firstStart: true,
       settingPage: 1,
@@ -77,14 +67,32 @@ const APP = create(
       swcState: false,
       rtiState: false,
       ignState: true,
-
-
     },
-    settings: {},
-    modules: {},
-
 
     update: (updater) => set(updater),
+
+    // Handle keystrokes for MMI remote control
+    keyStroke: '',
+    setKeyStroke: (key) => {
+      set((state) => {
+        state.keyStroke = key
+      })
+      setTimeout(
+        () =>
+          set((state) => {
+            state.keyStroke = ''
+          }),
+        0
+      )
+    },
+
+    // Pause keybind processing
+    pauseKeyBinds: false,
+    setPauseKeyBinds: (paused) => {
+      set((state) => {
+        state.pauseKeyBinds = paused
+      })
+    },
   }))
 );
 
@@ -128,19 +136,15 @@ const RTI = create(
   }))
 );
 
-
-const KEY = create(
+const DATA = create(
   immer((set) => ({
-    keyStroke: '',
-    setKeyStroke: (key) => {
+    data: {},
+    update: (newData) =>
       set((state) => {
-        state.keyStroke = key;
-      });
-      setTimeout(() => set((state) => { state.keyStroke = ''; }), 0);
-    },
-    update: (updater) => set(updater),
+        Object.assign(state.data, newData);
+      }),
   }))
 );
 
 
-export { DATA, APP, CAN, SWC, ADC, RTI, KEY };
+export { APP, CAN, SWC, ADC, RTI, DATA };
