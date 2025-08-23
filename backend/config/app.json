@@ -57,6 +57,10 @@
     "contentPadding": {
       "value": 20,
       "label": "Dashboard Padding"
+    },
+    "exitToDash": {
+      "value": false,
+      "label": "Exit CarPlay to Dashboard"
     }
   },
   "shutdown": {

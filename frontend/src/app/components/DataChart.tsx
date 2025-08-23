@@ -276,7 +276,7 @@ const DataChart = ({
 
     const handleToggleRecording = () => {
         app.update((state) => {
-            state.system.recording = !state.system.recording;
+            state.system.isRecording = !state.system.isRecording;
         });
     };
 
@@ -310,7 +310,7 @@ const DataChart = ({
                     viewBox="0 0 50 50"
                     xmlns="http://www.w3.org/2000/svg"
                     style={{
-                        fill: system.recording ? 'red' : color_xGrid, // Change color based on recording state
+                        fill: system.isRecording ? 'red' : color_xGrid, // Change color based on recording state
                         borderRadius: '50%',
                         stroke: "#141414",  // Black outline for the button
                         strokeWidth: 4,   // Set outline thickness
@@ -319,7 +319,7 @@ const DataChart = ({
                     {/* Outer circle (the button's background) */}
                     <circle cx="25" cy="25" r="16" />
                     {/* Inner circle (the gap in the middle) */}
-                    <circle cx="25" cy="25" r="8" fill={system.recording ? 'red' : color_xGrid} />
+                    <circle cx="25" cy="25" r="8" fill={system.isRecording ? 'red' : color_xGrid} />
                 </svg>
             </RecordButton>
         </Container>

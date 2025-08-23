@@ -133,7 +133,7 @@ const Init = () => {
         socket.sys.emit('systemTask', 'start');
         setVisible(false)
         app.update((state) => {
-            state.system.config = true;
+            state.system.configLoaded = true;
         });
     }
 

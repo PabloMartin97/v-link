@@ -64,7 +64,7 @@ function Cardata() {
         autoOpen={app.settings.screen.autoOpen.value}
       />
       <Ignition
-        ignition={app.system.ignition}
+        ignition={app.system.ignState}
         autoShutdown={app.settings.shutdown.autoShutdown.value}
         shutdownDelay={app.settings.shutdown.shutdownDelay.value}
         messageTimeout={app.settings.shutdown.messageTimeout.value}
@@ -74,7 +74,7 @@ function Cardata() {
         data={data.data}
         resolution={app.settings.dash_charts.resolution.value}
         setCount={app.settings.constants.chart_input_current}
-        recording={app.system.recording}
+        recording={app.system.isRecording}
         settings={app.settings}
         modules={app.modules}
       />

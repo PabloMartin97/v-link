@@ -22,15 +22,12 @@ const APP = create(
       pauseKeyBinds: false,
 
       firstStart: true,
-
       settingPage: 1,
 
-      config: false,
+      configLoaded: false,
       initialized: false,
       startedUp: false,
-
-      ignition: true,
-      recording: false,
+      isRecording: false,
 
       windowSize: {
         width: 800,
@@ -79,6 +76,8 @@ const APP = create(
       adcState: false,
       swcState: false,
       rtiState: false,
+      ignState: true,
+
 
     },
     settings: {},

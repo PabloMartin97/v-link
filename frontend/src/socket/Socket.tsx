@@ -26,7 +26,7 @@ export const Socket = () => {
 
   /* Initialize App */
   useEffect(() => {
-    if (!store['app'].system.config) return;
+    if (!store['app'].system.configLoaded) return;
     if (loadedModules === totalModules) {
       socket.log.emit('Info', 'App ready.');
 
@@ -36,11 +36,11 @@ export const Socket = () => {
         state.system.view = state.settings.general.startPage.value;
       });
     }
-  }, [loadedModules, store['app'].system.config]);
+  }, [loadedModules, store['app'].system.configLoaded]);
 
   /* Wait for Settings */
   useEffect(() => {
-    if (!store['app'].system.config) return;
+    if (!store['app'].system.configLoaded) return;
 
     // Handles settings update for each module, ensuring each module loads once
     const handleSettings = (module) => (data) => {
@@ -54,7 +54,7 @@ export const Socket = () => {
     const handleIgnition = () => (ignStatus) => {
       console.log('Ignition: ', ignStatus);
       store['app'].update((state) => {
-        state.system.ignition = ignStatus;
+        state.system.ignState = ignStatus;
       });
     };
 
@@ -120,7 +120,7 @@ export const Socket = () => {
         socket.sys.off('ign', handleIgnition());
       }
     };
-  }, [store['app'].system.config, socket]);
+  }, [store['app'].system.configLoaded, socket]);
 
   // Connection status monitoring for all sockets
   useEffect(() => {

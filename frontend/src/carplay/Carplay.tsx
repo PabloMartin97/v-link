@@ -77,6 +77,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
   const width = app.system.carplaySize.width
   const height = app.system.carplaySize.height
+  const exitToDash = app.settings.general.exitToDash;
 
   const flattenConfig = (config: Record<string, any>) => {
 
@@ -90,13 +91,13 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     return result;
   };
 
-const config = useMemo(() => {
-  return {
-    ...flattenConfig(app.settings.dongle_config),
-    width: app.system.carplaySize.width,
-    height: app.system.carplaySize.height,
-  };
-}, [app.settings.dongle_config, app.system.carplaySize.width, app.system.carplaySize.height]);
+  const config = useMemo(() => {
+    return {
+      ...flattenConfig(app.settings.dongle_config),
+      width: app.system.carplaySize.width,
+      height: app.system.carplaySize.height,
+    };
+  }, [app.settings.dongle_config, app.system.carplaySize.width, app.system.carplaySize.height]);
 
 
   const mainElem = useRef<HTMLDivElement>(null)
@@ -240,9 +241,15 @@ const config = useMemo(() => {
               stopRecording()
               break
             case CommandMapping.requestHostUI:
-              app.update((state) => {
-                state.system.interface.navBar = true;
-              });
+              if (exitToDash) {
+                app.update((state) => {
+                  state.system.interface.view = "Dashboard";
+                });
+              } else {
+                app.update((state) => {
+                  state.system.interface.navBar = true;
+                });
+              }
           }
           break
         case 'failure':
