@@ -28,7 +28,11 @@ def activate_venv():
     activate_script = os.path.join(venv_path, "bin", "activate")
 
     if not os.path.exists(activate_script):
-        raise FileNotFoundError(f"Activation script for venv not found: {activate_script}")
+        logger.error(f"Activation script for venv not found: {activate_script}")
+        logger.error(f"Please ensure the virtual environment is set up correctly. Exiting...")
+        sys.exit(0)
+
+    os.system(f". {activate_script}")
 
     # Update PATH to include the virtual environment
     os.environ["PATH"] = os.path.join(venv_path, "bin") + os.pathsep + os.environ.get("PATH", "")
