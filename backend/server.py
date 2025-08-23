@@ -28,15 +28,12 @@ socketio = SocketIO(server, cors_allowed_origins="*", async_mode='eventlet')
 modules = ["app", "mmi", "can", "swc", "adc", "rti", "mst"]
 
 class ServerThread(threading.Thread):
-    def __init__(self):
+    def __init__(self, logger):
         super().__init__()
         self.daemon = True  # Ensure thread stops when main program exits
         self.app = server
         self.stop_event = threading.Event()
-        self.server_socket = eventlet.listen(('0.0.0.0', 4001))
-
-        logger.info("Server initialized on port 4001")
-        
+        self.server_socket = eventlet.listen(('0.0.0.0', 4001))        
 
     def run(self):
         logger.info("Starting Eventlet WSGI server...")
