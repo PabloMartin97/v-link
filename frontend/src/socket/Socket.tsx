@@ -20,6 +20,7 @@ export const Socket = () => {
   const totalModules = Object.keys(modules).length;
   const [loadedModules, setLoadedModules] = useState(0);
   const loadedModuleSet = useRef(new Set());
+  const listenersSetup = useRef(false);
 
   // Get sockets using the global function
   const socket = useNamespaces();
@@ -28,7 +29,7 @@ export const Socket = () => {
   useEffect(() => {
     if (!store['app'].system.configLoaded) return;
     if (loadedModules === totalModules) {
-      socket.log.emit('Info', 'App ready.');
+      socket.log.emit('info', `Frontend ready.`);
 
       store['app'].update((state) => {
         state.modules = modules;
@@ -38,11 +39,11 @@ export const Socket = () => {
     }
   }, [loadedModules, store['app'].system.configLoaded]);
 
-  /* Wait for Settings */
+  /* Setup Socket Listeners and Handle Connections */
   useEffect(() => {
     if (!store['app'].system.configLoaded) return;
 
-    // Handles settings update for each module, ensuring each module loads once
+    // Event handlers
     const handleSettings = (module) => (data) => {
       loadedModuleSet.current.add(module);
       setLoadedModules(loadedModuleSet.current.size);
@@ -51,61 +52,74 @@ export const Socket = () => {
       });
     };
 
-    const handleIgnition = () => (ignStatus) => {
-      console.log('Ignition: ', ignStatus);
+    const handleIgnition = (ignStatus) => {
       store['app'].update((state) => {
         state.system.ignState = ignStatus;
       });
     };
 
     const handleState = (module) => (data) => {
-      console.log('Thread state update from', module, data);
       store['app'].update((state) => {
         state.system[`${module}State`] = data;
       });
     };
 
-    // Setup listeners using the global socket connections
-    const setupListeners = () => {
-      // Register state and settings listeners for each module
+    const handleConnect = (socketName) => () => {
+      socket.log.emit('info', `${socketName} socket connected`);
+    };
+
+    const handleDisconnect = (socketName) => (reason) => {
+      socket.log.emit('info', `${socketName} socket disconnected: ${reason}`);
+    };
+
+    const handleError = (socketName) => (error) => {
+      socket.log.emit('error', `${socketName} socket connection error: ${error}`);
+    };
+
+    // Setup all listeners
+    const setupAllListeners = () => {
+      if (listenersSetup.current) return;
+
+      // Setup module listeners
       Object.keys(modules).forEach(module => {
         if (socket[module]) {
+          // Data listeners
           socket[module].on('state', handleState(module));
-          socket[module].emit('ping');
-          
           socket[module].on('settings', handleSettings(module));
+          
+          // Connection listeners
+          socket[module].on('connect', handleConnect(module));
+          socket[module].on('disconnect', handleDisconnect(module));
+          socket[module].on('connect_error', handleError(module));
+
+          // Initial requests
+          socket[module].emit('ping');
           socket[module].emit('load');
         }
       });
 
-      // Handle system events
+      // Setup system listeners
       if (socket.sys) {
-        socket.sys.on('ign', handleIgnition());
+        socket.sys.on('ign', handleIgnition);
+        socket.sys.on('connect', handleConnect('sys'));
+        socket.sys.on('disconnect', handleDisconnect('sys'));
+        socket.sys.on('connect_error', handleError('sys'));
+        
         socket.sys.emit('systemTask', 'ign');
       }
-    };
 
-    // Wait for all sockets to be connected before setting up listeners
-    const checkConnectionsAndSetup = () => {
-      const allConnected = Object.values(socket).every(socket => socket.connected);
-      
-      if (allConnected) {
-        setupListeners();
-      } else {
-        // Wait for connections
-        Object.entries(socket).forEach(([key, socket]) => {
-          if (!socket.connected) {
-            socket.on('connect', () => {
-              console.log(`${key} socket connected`);
-              // Check again if all are connected
-              setTimeout(checkConnectionsAndSetup, 100);
-            });
-          }
-        });
+      // Setup log socket listeners if it exists
+      if (socket.log) {
+        socket.log.on('connect', handleConnect('log'));
+        socket.log.on('disconnect', handleDisconnect('log'));
+        socket.log.on('connect_error', handleError('log'));
       }
+
+      listenersSetup.current = true;
     };
 
-    checkConnectionsAndSetup();
+    // Setup listeners immediately
+    setupAllListeners();
 
     // Cleanup function
     return () => {
@@ -113,45 +127,28 @@ export const Socket = () => {
         if (socket[module]) {
           socket[module].off('settings', handleSettings(module));
           socket[module].off('state', handleState(module));
+          socket[module].off('connect', handleConnect(module));
+          socket[module].off('disconnect', handleDisconnect(module));
+          socket[module].off('connect_error', handleError(module));
         }
       });
       
       if (socket.sys) {
-        socket.sys.off('ign', handleIgnition());
+        socket.sys.off('ign', handleIgnition);
+        socket.sys.off('connect', handleConnect('sys'));
+        socket.sys.off('disconnect', handleDisconnect('sys'));
+        socket.sys.off('connect_error', handleError('sys'));
       }
+
+      if (socket.log) {
+        socket.log.off('connect', handleConnect('log'));
+        socket.log.off('disconnect', handleDisconnect('log'));
+        socket.log.off('connect_error', handleError('log'));
+      }
+
+      listenersSetup.current = false;
     };
   }, [store['app'].system.configLoaded, socket]);
-
-  // Connection status monitoring for all sockets
-  useEffect(() => {
-    const handleConnect = (socketName) => () => {
-      console.log(`${socketName} socket connected`);
-    };
-
-    const handleDisconnect = (socketName) => (reason) => {
-      console.log(`${socketName} socket disconnected:`, reason);
-    };
-
-    const handleError = (socketName) => (error) => {
-      console.error(`${socketName} socket connection error:`, error);
-    };
-
-    // Add listeners for all sockets
-    Object.entries(socket).forEach(([socketName, namespace]) => {
-      namespace.on('connect', handleConnect(socketName));
-      namespace.on('disconnect', handleDisconnect(socketName));
-      namespace.on('connect_error', handleError(socketName));
-    });
-
-    return () => {
-      // Cleanup listeners
-      Object.entries(socket).forEach(([socketName, namespace]) => {
-        namespace.off('connect', handleConnect(socketName));
-        namespace.off('disconnect', handleDisconnect(socketName));
-        namespace.off('connect_error', handleError(socketName));
-      });
-    };
-  }, [socket]);
 
   return null;
 };

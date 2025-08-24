@@ -25,7 +25,7 @@ const Ignition: React.FC<DisplayProps> = ({
 
   const startShutdownTimer = () => {
     shutdownTimer.current = setTimeout(() => {
-      console.log('Shutting Down');
+      socket.log.emit('info', 'Shutting Down');
       socket.sys.emit('systemTask', 'shutdown'); // Uncomment to actually trigger shutdown
     }, shutdownDelay * 1000);
   };

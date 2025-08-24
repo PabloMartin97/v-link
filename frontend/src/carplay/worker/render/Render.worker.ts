@@ -5,6 +5,7 @@ import { InitEvent, RenderEvent, WorkerEvent } from './RenderEvents'
 import { WebGL2Renderer } from './WebGL2Renderer'
 import { WebGLRenderer } from './WebGLRenderer'
 import { WebGPURenderer } from './WebGPURenderer'
+import { useNamespaces } from '../../../socket/Namespaces'
 
 export interface FrameRenderer {
   draw(data: VideoFrame): void
@@ -12,6 +13,7 @@ export interface FrameRenderer {
 
 // eslint-disable-next-line no-restricted-globals
 const scope = self as unknown as Worker
+const socket = useNamespaces();
 
 type HostType = Window & typeof globalThis
 
@@ -60,6 +62,7 @@ export class RenderWorker {
 
   private onVideoDecoderOutputError = (err: Error) => {
     console.error(`H264 Render worker decoder error`, err)
+    socket.log.emit('error', `(CarPlay) H264 Render worker decoder error: ${err}`)
   }
 
   private decoder = new VideoDecoder({
@@ -100,7 +103,9 @@ export class RenderWorker {
       const decoderConfig = getDecoderConfig(frameData)
       if (decoderConfig) {
         this.decoder.configure(decoderConfig)
-        console.log(decoderConfig);
+        console.log(`(CarPlay) Decoder-config: ${decoderConfig}`);
+        socket.log.emit('debug', `(CarPlay) Decoder-config: ${decoderConfig}`)
+
 
         /* V-Link Mod */
         scope.postMessage({
@@ -121,6 +126,7 @@ export class RenderWorker {
         )
       } catch (e) {
         console.error(`H264 Render Worker decode error`, e)
+        socket.log.emit('error', `(CarPlay) H264 Render worker decoder error: ${e}`)
       }
     }
   }

@@ -69,7 +69,6 @@ const mmiKeyDown = (event: KeyboardEvent) => {
         (key) => dongleBindings[key].value === event.code
       );
       socket.log.emit('debug', 'Emitting carplay key-command: ', action);
-      console.log('Emitting carplay key-command: ', action);
 
       if (action !== undefined) {
           setKeyCommand(action);
@@ -99,10 +98,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
           const carplayFullscreen = containerRef.current.offsetHeight;
           const carplayWindowed = containerRef.current.offsetHeight - topBarHeight;
 
-          console.log(`Resizing window:
-            Fullscreen: ${containerRef.current.offsetWidth}x${carplayFullscreen}
-            Windowed: ${containerRef.current.offsetWidth}x${carplayWindowed}
-            Topbar: ${topBarHeight}`)
+          socket.log.emit('info', `Window size changed: {Fullscreen: ${containerRef.current.offsetWidth}x${carplayFullscreen}, Without Topbar: ${containerRef.current.offsetWidth}x${carplayWindowed}}`)
 
           appUpdate((state) => {
             state.system.windowSize.width = containerRef.current.offsetWidth;

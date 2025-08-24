@@ -121,7 +121,6 @@ const Settings = () => {
   Object.entries(modules).map(([key, module]) => {
     const currentModule = module((state) => state);
     if (currentModule.settings.type === 'data')
-      //console.log(key)
       Object.assign(dataStores, { [key]: currentModule.settings.sensors })
   });
 
@@ -182,7 +181,9 @@ const Settings = () => {
   // Change Settings
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
     setSave(false)
+
     //console.log(selectStore, key, name, targetSetting, currentSettings)
+
     const newSettings = structuredClone(currentSettings);
     let convertedValue
     if (selectStore != 'app') {
@@ -192,7 +193,9 @@ const Settings = () => {
       newSettings[key][name].value = convertedValue || targetSetting;
       newSettings[key][name].type = selectStore;
     } else {
+
       //console.log(key, name, targetSetting)
+      
       newSettings[key][name].value = targetSetting
     }
 
@@ -215,7 +218,6 @@ const Settings = () => {
     if (['quit', 'reboot', 'restart'].includes(request)) {
       openModal("Exiting...", "Please wait while the app is closing.", null, null)
       setTimeout(() => {
-        console.log('exiting')
         socket.sys.emit("systemTask", request);
       }, 1000)
     } else if (request === 'reset') {
@@ -323,6 +325,7 @@ const Settings = () => {
       // Get options
       //Check if value is a number or boolean
       const isText = (content.type === 'text')
+
       //console.log(content)
 
       const dropdown = (isText || typeof value === 'number' || typeof value === 'boolean' || key.includes('bindings'))
@@ -330,6 +333,7 @@ const Settings = () => {
         : (content.options || Object.keys(dataOptions).map((key) =>               //No?  Create dropdown from options
           key
         ))
+        
       //console.log(content.options, dataOptions)
       //console.log(dropdown)
 

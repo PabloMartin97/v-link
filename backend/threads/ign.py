@@ -54,11 +54,20 @@ class IGNThread(threading.Thread):
                 
                 # Check if the state has changed
                 if current_state != previous_state:
-                    if current_state == 0: #IGN_OFF = 0
+
+                    # For V-Link HAT < v1.2, set this to False
+                    IS_NEW_HAT = True  
+
+                    ignition_off_state = 0 if IS_NEW_HAT else 1
+
+                    if current_state == ignition_off_state:
+                        self.logger.info(f'[Ignition] OFF')
                         if not shared_state.dev:
-                            shared_state.ignStatus.clear()  # Ignition is OFF, so clear the state
+                            shared_state.ignStatus.clear()
                     else:
-                        shared_state.ignStatus.set()  # Ignition is ON, so set the state                    
+                        self.logger.info(f'[Ignition] ON')
+                        shared_state.ignStatus.set()
+
                     # Update previous state for the next iteration
                     previous_state = current_state
 

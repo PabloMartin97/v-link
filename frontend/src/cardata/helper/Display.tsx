@@ -11,7 +11,7 @@ const Display: React.FC<DisplayProps> = ({ autoOpen }) => {
     // Auto-open Display Unit
     useEffect(() => {
         if (autoOpen) {
-            console.log('Opening RTI')
+            socket.log.emit('info', 'Opening RTI')
             socket.sys.emit("systemTask", "rti")
         }
     }, [])

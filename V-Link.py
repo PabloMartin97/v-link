@@ -153,7 +153,7 @@ class VLINK:
         if thread_name in shared_state.THREADS:
             thread = shared_state.THREADS[thread_name]
             if isinstance(thread, threading.Thread) and thread.is_alive():
-                logger.info(f'{thread_name} thread is already running.')
+                logger.info(f'[V-Link] "{thread_name}" thread is already running.')
                 return
 
         thread_class = self.threads[thread_name]
@@ -165,13 +165,13 @@ class VLINK:
 
         time.sleep(.05)
         if not thread.is_alive():
-            logger.error(f'{thread_name} failed to start.')
+            logger.error(f'[V-Link] "{thread_name}" failed to start.')
         else:
-            logger.info(f'[V-Link] {thread_name.capitalize()} thread started.')
+            logger.info(f'[V-Link] {thread_name}-thread started.')
 
 
     def stop_thread(self, thread_name):
-        logger.info(f'Stopping {thread_name} thread.')
+        logger.info(f'[V-Link] Stopping {thread_name} thread.')
         if thread_name in shared_state.THREADS:
             thread = shared_state.THREADS[thread_name]
             if isinstance(thread, threading.Thread) and thread.is_alive():
@@ -179,7 +179,7 @@ class VLINK:
                     thread.stop_thread()
                     thread.join()
                 except Exception as e:
-                    logger.error(f'Error stopping thread {thread_name}: {e}')
+                    logger.error(f'[V-Link] Error stopping thread {thread_name}: {e}')
                 finally:
                     shared_state.THREADS[thread_name] = None
 
@@ -243,7 +243,7 @@ class VLINK:
 
     def process_restart_event(self):
         if shared_state.restart_event.is_set():
-            logger.info('Restarting App')
+            logger.info('[V-Link] Restarting App')
             shared_state.restart_event.clear()
 
             for thread_name, thread in shared_state.THREADS.items():
@@ -264,10 +264,10 @@ class VLINK:
             )
 
             if  not shared_state.hdmiStatus:
-                logger.info('Toggle HDMI Off')
+                logger.info('[V-Link] Toggle HDMI Off')
                 os.system(hdmi_off)
             else:
-                logger.info('Toggle HDMI On')
+                logger.info('[V-Link] Toggle HDMI On')
                 os.system(hdmi_on)
 
             shared_state.hdmiStatus = not shared_state.hdmiStatus

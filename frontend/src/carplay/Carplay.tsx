@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { findDevice, requestDevice, CommandMapping, } from 'node-carplay/web'
 import { eventEmitter } from '../app/helper/EventEmitter';
+import { useNamespaces } from '../socket/Namespaces';
 
 import styled, { css, useTheme } from 'styled-components';
 
@@ -70,6 +71,7 @@ interface CarplayProps {
 
 function Carplay({ command, commandCounter }: CarplayProps) {
 
+  const socket = useNamespaces();
 
   const carplaySettings = APP((state) => state.system.carplay)
   const content         = APP((state) => state.system.interface.content)
@@ -91,16 +93,19 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         result[key] = value.value;
       }
     });
-    console.log(result)
     return result;
   };
 
   const config = useMemo(() => {
-    return {
+    const carplayConfig = {
       ...flattenConfig(dongleConfig),
       width: width,
       height: height,
     };
+    
+    socket.log.emit('info', `(CarPlay) Config: ${JSON.stringify(carplayConfig)}`);
+
+    return carplayConfig;
   }, [dongleConfig, width, height]);
 
 
@@ -165,6 +170,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       const { type } = ev.data;
       switch (type) {
         case 'streamStarted':
+          socket.log.emit('info', '(CarPlay) Stream started')
           // This useEffect will notify when the phone is connected and the stream started
           appUpdate((state) => {
             state.system.carplay.connected = true;
@@ -182,7 +188,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
   useEffect(() => {
     const handleEvent = () => {
-      console.log('pairing')
+      socket.log.emit('info', '(CarPlay) Pair Dongle')
       pairDongle();
     };
 
@@ -200,7 +206,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       const { type } = ev.data
       switch (type) {
         case 'plugged':
-          console.log('Worker connected')
+          console.log('(CarPlay) Worker connected')
+          socket.log.emit('debug', '(CarPlay) Worker Connected')
 
           appUpdate((state) => {
             state.system.carplay.worker = true;
@@ -208,7 +215,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
           break
         case 'unplugged':
-          console.log('Worker disconnected')
+          console.log('(CarPlay) Worker disconnected')
+          socket.log.emit('debug', '(CarPlay) Worker Disconnected')
 
           appUpdate((state) => {
             state.system.carplay.worker = false;
@@ -219,7 +227,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           });
 
           if (phoneState)
-            console.log('phone still connected... streaming error?')
+            console.log('(CarPlay) Phone still connected... Streaming error?')
+            socket.log.emit('debug', '(CarPlay) Phone still connected... Streaming error?')
 
           break
         case 'requestBuffer':
@@ -258,9 +267,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           break
         case 'failure':
           if (retryTimeoutRef.current == null) {
-            console.error(
-              `Carplay initialization failed -- Reloading page in ${RETRY_DELAY_MS}ms`,
-            )
+            console.error(`Carplay initialization failed -- Reloading page in ${RETRY_DELAY_MS}ms`,)
+            socket.log.emit('info', `Carplay initialization failed -- Trying to reload page.`,)
             retryTimeoutRef.current = setTimeout(() => {
               window.location.reload()
             }, RETRY_DELAY_MS)
@@ -274,7 +282,6 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     const element = mainElem?.current
     if (!element) return;
     const observer = new ResizeObserver(() => {
-      //console.log("size change")
       carplayWorker.postMessage({ type: 'frame' })
     })
     observer.observe(element)
@@ -294,6 +301,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         carplayWorker.postMessage({ type: 'start', payload: { config } })
 
         console.log('Phone connected')
+        socket.log.emit('info', '(CarPlay) Phone connected')
         setPhoneState(true)
 
         appUpdate((state) => {
@@ -301,6 +309,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         });
       } else {
         console.log('Phone disconnected')
+        socket.log.emit('info', '(CarPlay) Phone disconnected')
+
         setPhoneState(false)
         appUpdate((state) => {
           state.system.carplay.phone = false;
@@ -314,6 +324,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   useEffect(() => {
     navigator.usb.onconnect = async () => {
       console.log('Dongle connected')
+      socket.log.emit('info', '(CarPlay) Dongle connected')
 
       appUpdate((state) => {
         state.system.carplay.dongle = true;
@@ -327,6 +338,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       if (!device) {
         carplayWorker.postMessage({ type: 'stop' })
         console.log('Dongle disconnected')
+        socket.log.emit('info', '(CarPlay) Dongle disconnected')
+
         setPhoneState(false)
 
         appUpdate((state) => {

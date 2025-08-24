@@ -8,6 +8,7 @@ import {
 import { PcmPlayer } from 'pcm-ringbuf-player'
 import { AudioPlayerKey, CarPlayWorker } from './worker/types'
 import { createAudioPlayerKey } from './worker/utils'
+import { useNamespaces } from '../socket/Namespaces'
 
 //TODO: allow to configure
 const defaultAudioVolume = 1
@@ -20,6 +21,8 @@ const useCarplayAudio = (
   const [mic, setMic] = useState<WebMicrophone | null>(null)
   const [audioPlayers] = useState(new Map<AudioPlayerKey, PcmPlayer>())
 
+  const socket = useNamespaces();
+
   const getAudioPlayer = useCallback(
     (audio: AudioData): PcmPlayer => {
       const { decodeType, audioType } = audio
@@ -28,7 +31,10 @@ const useCarplayAudio = (
       let player = audioPlayers.get(audioKey)
       if (player) return player
       player = new PcmPlayer(format.frequency, format.channel)
-      console.log(player)
+
+      console.log(`(CarPlay) Player: ${player}`)
+      socket.log.emit('debug', `(CarPlay) Player: ${player}`)
+
 
       audioPlayers.set(audioKey, player)
       player.volume(defaultAudioVolume)
@@ -60,7 +66,10 @@ const useCarplayAudio = (
             break
           case AudioCommand.AudioMediaStart:
           case AudioCommand.AudioOutputStart:
-            console.log(audio)
+
+            console.log(`(CarPlay) Audio: ${audio}`)
+            socket.log.emit('debug', `(CarPlay) Audio: ${audio}`)
+
             const mediaPlayer = getAudioPlayer(audio)
             mediaPlayer.volume(defaultAudioVolume)
             break
@@ -81,6 +90,7 @@ const useCarplayAudio = (
         setMic(mic)
       } catch (err) {
         console.warn('Failed to init microphone', err)
+        socket.log.emit('error', `(CarPlay) Failed to init microphone: ${err}`)
       }
     }
 

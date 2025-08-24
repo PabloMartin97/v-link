@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
-import styled, { css, keyframes, useTheme } from "styled-components";
-import { eventEmitter } from "../../../app/helper/EventEmitter";
-import { APP } from "../../../store/Store";
-import { Typography } from "../../../theme/styles/Typography";
-import { Link } from "../../../theme/styles/Inputs";
-import { CustomIcon } from "../../../theme/styles/Icons";
+import React, { useState, useEffect, useCallback } from 'react';
+import styled, { css, keyframes, useTheme } from 'styled-components';
+import { eventEmitter } from '../../../app/helper/EventEmitter';
+import { APP } from '../../../store/Store';
+import { Typography } from '../../../theme/styles/Typography';
+import { Link } from '../../../theme/styles/Inputs';
+import { CustomIcon } from '../../../theme/styles/Icons';
+import { useNamespaces } from '../../../socket/Namespaces';
 
 // Keyframes for opening and closing the chainlink
 const openChainLeft = keyframes`
@@ -64,6 +65,7 @@ const Container = styled.div`
 
 function Carplay() {
     const theme = useTheme();
+    const socket = useNamespaces();
     
     const themeColor      = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
     const carplaySettings = APP((state) => state.system.carplay);
@@ -84,29 +86,36 @@ function Carplay() {
                 const devices = await navigator.usb.getDevices();
 
                 if (devices.length > 0) {
-                    console.log("Devices found:", devices);
+                    console.log(`(CarPlay) Devices found: ${devices}`);
+                    socket.log.emit('info', `(CarPlay) Devices found: ${devices}`);
                     appUpdate((state) => {
                         state.system.carplay.paired = true;
                     });
                     return true;
                 } else {
-                    console.log("No devices connected or authorized.");
+                    if(attempts < 1) {
+                        console.log('(CarPlay) No devices connected or authorized. Retrying...');
+                        socket.log.emit('info', `(CarPlay) No devices connected or authorized. Retrying...`);
+                    }
 
                     if (++attempts < maxAttempts) {
                         setTimeout(retryCheck, interval);
                     } else {
-                        console.log("Max attempts reached. No devices found.");
+                        console.log('(CarPlay) Max attempts reached. No devices found');
+                        socket.log.emit('info', `(CarPlay) Max attempts reached. No devices found`);
                     }
 
                     return false;
                 }
             } catch (error) {
-                console.error("Error checking devices:", error);
+                console.error('(CarPlay) Error checking devices:', error);
+                socket.log.emit('info', `(CarPlay) Error checking devices: ${error}`);
 
                 if (++attempts < maxAttempts) {
                     setTimeout(retryCheck, interval);
                 } else {
-                    console.log("Max attempts reached. Stopping retry.");
+                    console.log('(CarPlay) Max attempts reached. Stopping retry');
+                    socket.log.emit('info', `(CarPlay) Max attempts reached. Stopping retry`);
                 }
                 return false;
             }
@@ -124,7 +133,10 @@ function Carplay() {
     const onClick = () => {
         if (!carplaySettings.paired) {
             // Send event to carplay component to pair the dongle
-            eventEmitter.dispatchEvent(new Event("pairDongle"));
+            console.log('(CarPlay) Pairing Dongle');
+            socket.log.emit('info', `(CarPlay) Pairing Dongle`);
+
+            eventEmitter.dispatchEvent(new Event('pairDongle'));
             checkDevice();
             setIsActive(!isActive);
         } else {
@@ -140,17 +152,17 @@ function Carplay() {
             <Body2>
                 {carplaySettings.paired && carplaySettings.dongle
                     ? carplaySettings.connected && carplaySettings.worker
-                        ? "LAUNCHING..."
-                        : "CONNECT iPHONE / ANDROID DEVICE"
-                    : "CLICK TO PAIR DONGLE"}
+                        ? 'LAUNCHING...'
+                        : 'CONNECT iPHONE / ANDROID DEVICE'
+                    : 'CLICK TO PAIR DONGLE'}
             </Body2>
             <Link
                 onClick={() => onClick()}
                 isActive={isActive}
                 style={{
-                    width: "150px",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: '150px',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                 }}
             >
                 <CustomIcon
@@ -184,30 +196,30 @@ function Carplay() {
                             carplaySettings.dongle &&
                             carplaySettings.worker
                         }
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="-10 -10 61 36.5"
+                        xmlns='http://www.w3.org/2000/svg'
+                        viewBox='-10 -10 61 36.5'
                     >
                         <defs>
                             {carplaySettings.worker && (
-                                <filter id="glow" x="-50%" y="-50%" width="400%" height="400%">
+                                <filter id='glow' x='-50%' y='-50%' width='400%' height='400%'>
                                     {/* Add a blur effect */}
-                                    <feGaussianBlur stdDeviation="2" result="blurredGlow" />
+                                    <feGaussianBlur stdDeviation='2' result='blurredGlow' />
                                     {/* Merge the original and the blurred path */}
                                     <feMerge>
-                                        <feMergeNode in="blurredGlow" />
-                                        <feMergeNode in="SourceGraphic" />
+                                        <feMergeNode in='blurredGlow' />
+                                        <feMergeNode in='SourceGraphic' />
                                     </feMerge>
                                 </filter>
                             )}
                         </defs>
-                        <g className="cls-1" filter={carplaySettings.worker ? "url(#glow)" : undefined}>
+                        <g className='cls-1' filter={carplaySettings.worker ? 'url(#glow)' : undefined}>
                             <path
-                                className="left"
-                                d="M13,14.5h-5c-4,0-6-3.5-6-6s2-6.5,6-6.5h10c4,0,6,3.5,6,6.5"
+                                className='left'
+                                d='M13,14.5h-5c-4,0-6-3.5-6-6s2-6.5,6-6.5h10c4,0,6,3.5,6,6.5'
                             />
                             <path
-                                className="right"
-                                d="M28,2h5c4,0,6,3.5,6,6s-2,6.5-6,6.5h-10c-4,0-6-3.5-6-6.5"
+                                className='right'
+                                d='M28,2h5c4,0,6,3.5,6,6s-2,6.5-6,6.5h-10c-4,0-6-3.5-6-6.5'
                             />
                         </g>
                     </SvgContainer>

@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { Typography } from '../theme/styles/Typography';
-import { Button } from "../theme/styles/Inputs";
+import { Button } from '../theme/styles/Inputs';
 import { APP } from '../store/Store';
 
 import { useNamespaces } from '../socket/Namespaces';
 const socket = useNamespaces();
-//socket.log.emit("error", "Could not load profile. Exiting.")
+//socket.log.emit('error', 'Could not load profile. Exiting.')
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -129,7 +129,7 @@ const Init = () => {
     const appUpdate = APP((state) => state.update);
 
     const startApp = () => {
-        console.log("Config-files found, loading settings.");
+        socket.log.emit('info', 'Config-files found, loading settings.');
         socket.sys.emit('systemTask', 'start');
         setVisible(false)
         appUpdate((state) => {
@@ -141,8 +141,8 @@ const Init = () => {
     useEffect(() => {
         // Checks whether .config/v-link/ exists
         // Returns either true or an object with selectable profiles.
-        socket.log.emit("info", `Checking for existing config files...`);
-         socket.sys.emit('systemTask', "checkProfile", (data) => {
+        socket.log.emit('info', `Checking for existing config files...`);
+        socket.sys.emit('systemTask', 'checkProfile', (data) => {
             if (data === true) {
                 startApp();
             } else {
@@ -175,7 +175,7 @@ const Init = () => {
 
     const handleSelectEngine = (engine, index) => {
         setSelectedIndex(index);
-        socket.sys.emit("info", `Selected profile: ${engine}`);
+        socket.log.emit('info', `Selected profile: ${engine}`);
 
         const vehicle = {
             platform: platform,
@@ -183,12 +183,12 @@ const Init = () => {
         };
 
 
-        socket.sys.emit("systemTask", "loadProfile", vehicle, (data) => {
+        socket.sys.emit('systemTask', 'loadProfile', vehicle, (data) => {
             if (data.result) {
                 startApp();
             } else {
-                socket.log.emit("error", "Could not load profile. Exiting.")
-                socket.sys.emit("systemTask", "quit")
+                socket.log.emit('error', 'Could not load profile. Exiting.')
+                socket.sys.emit('systemTask', 'quit')
             }
         });
 
@@ -199,9 +199,9 @@ const Init = () => {
         visible ?
             <Container>
                 <Box>
-                    <div style={{ display: "flex", flexShrink: 1, flexDirection: "column", alignItems: "center" }}>
+                    <div style={{ display: 'flex', flexShrink: 1, flexDirection: 'column', alignItems: 'center' }}>
                         <Title>
-                            {platform ? "Please select the engine type:" : "Please select your vehicle platform:"}
+                            {platform ? 'Please select the engine type:' : 'Please select your vehicle platform:'}
                         </Title>
                     </div>
                     <Options>
@@ -222,9 +222,9 @@ const Init = () => {
                                     platform={platform}
                                 >
                                     <svg
-                                        width="100"
-                                        height="100"
-                                        fill="white"
+                                        width='100'
+                                        height='100'
+                                        fill='white'
                                         onClick={() =>
                                             platform
                                                 ? null
@@ -237,7 +237,7 @@ const Init = () => {
                                     </svg>
                                 </SVGContainer>
                                 <Button
-                                    style={{ backgroundColor: platform ? undefined : "transparent" }}
+                                    style={{ backgroundColor: platform ? undefined : 'transparent' }}
                                     onClick={() =>
                                         platform
                                             ? handleSelectEngine(item, index)
@@ -252,7 +252,7 @@ const Init = () => {
                     <Options>
                         {platform && (
                             <Button
-                                style={{ width: "25%" }}
+                                style={{ width: '25%' }}
                                 onClick={() => {
                                     setPlatform(null);
                                     setOptions(Object.keys(profiles));
@@ -263,9 +263,9 @@ const Init = () => {
                             </Button>
                         )}
                         <Button
-                            style={{ width: "25%" }}
+                            style={{ width: '25%' }}
                             onClick={() =>
-                                socket.sys.emit("systemTask", "quit")
+                                socket.sys.emit('systemTask', 'quit')
                             }
                         >
                             <Caption2>EXIT</Caption2>

@@ -52,9 +52,6 @@ const Recorder: React.FC<RecorderProps> = ({ data, resolution, recording, settin
 
                     // Update the ref with the latest data for export
                     recordedDataRef.current = updated;
-
-                    console.log(updated); // Log the updated data
-
                     return updated;
                 });
             }, resolution);
