@@ -42,7 +42,6 @@ def check_settings():
                 if d.is_dir():
                     subdirs = [sub.name for sub in d.iterdir() if sub.is_dir()]
                     result[d.name] = subdirs
-            print (result)
             return result
         except Exception as e:
             logger.error(f'Error reading directories: {e}')

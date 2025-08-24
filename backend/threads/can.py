@@ -197,8 +197,8 @@ class CANThread(threading.Thread):
             except Exception as e:
                 self.logger.error(f'[CAN] Error stopping Notifier: {e}')
 
-        #for bus in self.can_buses.values():
-        #    bus.shutdown()
+        for bus in self.can_buses.values():
+            bus.shutdown()
 
 
 #############################################################
@@ -318,7 +318,6 @@ class CANListener(can.Listener):
     def on_message_received(self, msg):
         try:
             if msg.arbitration_id in self.sensors_by_id:
-                print(msg)
                 data = list(msg.data)
                 if shared_state.verbose:
                     message_hex = ' '.join(f'{byte:02X}' for byte in msg.data)
