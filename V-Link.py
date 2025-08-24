@@ -1,4 +1,4 @@
-"""
+'''
     V-Link - A modular, open-source infotainment system.
     Copyright (C) 2024
     Author:     Louis Raymond - github.com/BoostedMoose
@@ -16,7 +16,7 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
+'''
 
 import sys
 import os
@@ -25,19 +25,19 @@ import subprocess
 
 def activate_venv():
     venv_path = f"/home/{os.getenv('USER')}/v-link/venv"
-    activate_script = os.path.join(venv_path, "bin", "activate")
+    activate_script = os.path.join(venv_path, 'bin', 'activate')
 
     if not os.path.exists(activate_script):
-        logger.error(f"Activation script for venv not found: {activate_script}")
-        logger.error(f"Please ensure the virtual environment is set up correctly. Exiting...")
+        logger.error(f'[V-Link] Activation script for venv not found: {activate_script}')
+        logger.error(f'[V-Link] Please ensure the virtual environment is set up correctly. Exiting...')
         sys.exit(0)
 
-    os.system(f". {activate_script}")
+    os.system(f'. {activate_script}')
 
     # Update PATH to include the virtual environment
-    os.environ["PATH"] = os.path.join(venv_path, "bin") + os.pathsep + os.environ.get("PATH", "")
+    os.environ['PATH'] = os.path.join(venv_path, 'bin') + os.pathsep + os.environ.get('PATH', '')
     # Add site-packages to sys.path
-    site_packages = os.path.join(venv_path, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
+    site_packages = os.path.join(venv_path, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
     sys.path.insert(0, site_packages)
 
 activate_venv()
@@ -69,14 +69,14 @@ from backend.logger import logger
 
 from backend.shared.shared_state import shared_state
 
-rpiModel = ""
-rpiProtocol = ""
+rpiModel = ''
+rpiProtocol = ''
 
 class VLINK:
     def __init__(self):
         self.exit_event = shared_state.exit_event
-        self.rpiModel = ""
-        self.rpiProtocol =""
+        self.rpiModel = ''
+        self.rpiProtocol =''
         self.threads = {
             'server':   ServerThread,
 
@@ -93,6 +93,8 @@ class VLINK:
         if shared_state.pimost:
             self.threads['mst'] = MOSTThread
 
+        logger.info('Starting V-Link 3.1.0')
+
     def detect_rpi(self):
 
         try:
@@ -107,8 +109,8 @@ class VLINK:
                         found = True
                         break
                 if not found:
-                    logger.error(f"No Raspberry Pi detected.")
-                    self.rpiModel = "Unknown"
+                    logger.error(f'No Raspberry Pi detected.')
+                    self.rpiModel = 'Unknown'
                     shared_state.rpiModel = 4
 
             
@@ -148,11 +150,10 @@ class VLINK:
         time.sleep(.05)
 
     def start_thread(self, thread_name, logger):
-        logger.info(f"Starting {thread_name} thread.")
         if thread_name in shared_state.THREADS:
             thread = shared_state.THREADS[thread_name]
             if isinstance(thread, threading.Thread) and thread.is_alive():
-                logger.info(f"{thread_name} thread is already running.")
+                logger.info(f'{thread_name} thread is already running.')
                 return
 
         thread_class = self.threads[thread_name]
@@ -164,13 +165,13 @@ class VLINK:
 
         time.sleep(.05)
         if not thread.is_alive():
-            logger.error(f"{thread_name} failed to start.")
+            logger.error(f'{thread_name} failed to start.')
         else:
-            logger.info(f"{thread_name} thread started.")
+            logger.info(f'[V-Link] {thread_name.capitalize()} thread started.')
 
 
     def stop_thread(self, thread_name):
-        logger.info(f"Stopping {thread_name} thread.")
+        logger.info(f'Stopping {thread_name} thread.')
         if thread_name in shared_state.THREADS:
             thread = shared_state.THREADS[thread_name]
             if isinstance(thread, threading.Thread) and thread.is_alive():
@@ -178,7 +179,7 @@ class VLINK:
                     thread.stop_thread()
                     thread.join()
                 except Exception as e:
-                    logger.error(f"Error stopping thread {thread_name}: {e}")
+                    logger.error(f'Error stopping thread {thread_name}: {e}')
                 finally:
                     shared_state.THREADS[thread_name] = None
 
@@ -230,7 +231,7 @@ class VLINK:
 
     def process_exit_event(self):
         if self.exit_event.is_set():
-            logger.info("Exiting App")
+            logger.info('Exiting App')
             self.exit_event.clear()
 
             shared_state.rtiStatus = False
@@ -242,7 +243,7 @@ class VLINK:
 
     def process_restart_event(self):
         if shared_state.restart_event.is_set():
-            logger.info("Restarting App")
+            logger.info('Restarting App')
             shared_state.restart_event.clear()
 
             for thread_name, thread in shared_state.THREADS.items():
@@ -257,16 +258,16 @@ class VLINK:
         if shared_state.hdmi_event.is_set():
             shared_state.hdmi_event.clear()
             hdmi_on, hdmi_off = (
-                ("wlr-randr --output HDMI-A-1 --on", "wlr-randr --output HDMI-A-1 --off")
+                ('wlr-randr --output HDMI-A-1 --on', 'wlr-randr --output HDMI-A-1 --off')
                 if shared_state.sessionType == 'wayland'
-                else ("vcgencmd display_power 1", "vcgencmd display_power 0")
+                else ('vcgencmd display_power 1', 'vcgencmd display_power 0')
             )
 
             if  not shared_state.hdmiStatus:
-                logger.info("Toggle HDMI Off")
+                logger.info('Toggle HDMI Off')
                 os.system(hdmi_off)
             else:
-                logger.info("Toggle HDMI On")
+                logger.info('Toggle HDMI On')
                 os.system(hdmi_on)
 
             shared_state.hdmiStatus = not shared_state.hdmiStatus
@@ -300,17 +301,17 @@ def non_blocking_input(prompt):
 
 def setup_arguments():
     parser = argparse.ArgumentParser(
-        description="Application Manual:\n\n"
-                "This application can be run in various modes for development, testing, and production. "
-                "Use the flags below to customize behavior.\n",
+        description='Application Manual:\n\n'
+                'This application can be run in various modes for development, testing, and production. '
+                'Use the flags below to customize behavior.\n',
         formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-    parser.add_argument("--vcan", action="store_true", help="Simulate CAN-Bus")
-    parser.add_argument("--vlin", action="store_true", help="Simulate LIN-Bus")
-    parser.add_argument("--vite", action="store_false", help="Start on Vite-Port 5173")
-    parser.add_argument("--nokiosk", action="store_false", help="Start in windowed mode")
-    parser.add_argument("--dev", action="store_true", help="Development mode")
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('--vcan', action='store_true', help='Simulate CAN-Bus')
+    parser.add_argument('--vlin', action='store_true', help='Simulate LIN-Bus')
+    parser.add_argument('--vite', action='store_false', help='Start on Vite-Port 5173')
+    parser.add_argument('--nokiosk', action='store_false', help='Start in windowed mode')
+    parser.add_argument('--dev', action='store_true', help='Development mode')
 
     return parser.parse_args()
 
@@ -318,24 +319,24 @@ def setup_arguments():
 def display_thread_states():
     clear_screen()
     # Display the app name and version
-    print("V-Link 3.1.0 | Boosted Moose")
+    print('V-Link 3.1.0 | Boosted Moose')
     print('Device: ', vlink.rpiModel, ' | ', vlink.rpiProtocol)
-    print(f"RTI state: {'Up' if shared_state.rtiStatus else 'Down'}")
-    print(f"IGN state: {'High' if shared_state.ignStatus else 'Low'}")
-    print("")
-    print("=" * 52)  # Decorative line
-    print("")
-    print("Thread states:")
+    print(f'RTI state: {"Up" if shared_state.rtiStatus else "Down"}')
+    print(f'IGN state: {"High" if shared_state.ignStatus else "Low"}')
+    print('')
+    print('=' * 52)  # Decorative line
+    print('')
+    print('Thread states:')
 
-    thread_names = ["Server", "App", "CAN", "SWC", "ADC", "RTI", "VCAN"]
+    thread_names = ['Server', 'App', 'CAN', 'SWC', 'ADC', 'RTI', 'VCAN']
     thread_states = [
         shared_state.THREADS.get(name.lower(), None).is_alive() if shared_state.THREADS.get(name.lower()) else False
         for name in thread_names
     ]
 
     table_data = [thread_names, thread_states]
-    table = tabulate(table_data, tablefmt="fancy_grid")
-    print("\n" + table)
+    table = tabulate(table_data, tablefmt='fancy_grid')
+    print('\n' + table)
 
 
 if __name__ == '__main__':
@@ -363,11 +364,10 @@ if __name__ == '__main__':
     shared_state.ignStatus.set()
 
     # Start frontend:
-    time.sleep(.5)
     vlink.start_thread('app', logger)
 
     # if(shared_state.verbose):
-    vlink.print_thread_states()
+    #vlink.print_thread_states()
 
     try:
         while not vlink.exit_event.is_set():
@@ -383,7 +383,7 @@ if __name__ == '__main__':
 
             time.sleep(.1)
     except KeyboardInterrupt:
-            print("\n\nExiting...\n")
+            print('\n\nExiting...\n')
     finally:
             vlink.join_threads()
             logger.info('Done.')
@@ -393,18 +393,18 @@ if __name__ == '__main__':
 
                 #Set up update process
                 current_dir = os.path.dirname(os.path.abspath(__file__))
-                script_path = os.path.join(current_dir, "Update.sh")
+                script_path = os.path.join(current_dir, 'Update.sh')
 
                 # Launch updater in a new terminal window
                 try:
-                    logger.info("Starting update...")
+                    logger.info('Starting update...')
                     subprocess.Popen([
-                        "lxterminal",
-                        f"--title=V-Link Updater",
-                        "--command",
-                        f"sh -c 'sh \"{script_path}\"; exec bash'",
+                        'lxterminal',
+                        f'--title=V-Link Updater',
+                        '--command',
+                        f"sh -c 'sh \"{script_path}\"; exec bash'"
                     ])
                 except Exception as e:
-                    logger.error(f"Update failed: {e}")
+                    logger.error(f'Update failed: {e}')
 
             sys.exit(0)

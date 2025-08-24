@@ -14,18 +14,18 @@ from .                      import settings
 from .shared.shared_state   import shared_state
 
 import logging
-logger = logging.getLogger("vlink")
+logger = logging.getLogger('vlink')
 
 # Flask configuration
 server = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist'), static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist', 'assets'), static_url_path='/assets')
 server.config['SECRET_KEY'] = 'v-link'
-CORS(server, resources={r"/*": {"origins": "*"}})
+CORS(server, resources={r'/*': {'origins': '*'}})
 
 # Socket.io configuration
-socketio = SocketIO(server, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(server, cors_allowed_origins='*', async_mode='eventlet')
 
 # Define modules
-modules = ["app", "mmi", "can", "swc", "adc", "rti", "mst"]
+modules = ['app', 'mmi', 'can', 'swc', 'adc', 'rti', 'mst']
 
 class ServerThread(threading.Thread):
     def __init__(self, logger):
@@ -36,8 +36,6 @@ class ServerThread(threading.Thread):
         self.server_socket = eventlet.listen(('0.0.0.0', 4001))        
 
     def run(self):
-        logger.info("Starting Eventlet WSGI server...")
-
         try:
             # Run the server in a green thread
             eventlet.spawn(self._serve)
@@ -58,10 +56,10 @@ class ServerThread(threading.Thread):
             eventlet.wsgi.server(
                 self.server_socket,
                 self.app,
-                log=open(os.devnull, "w"),  # Suppress logs
+                log=open(os.devnull, 'w'),  # Suppress logs
             )
         except eventlet.StopServe:
-            logger.info("Server stopped gracefully.")
+            logger.info(f'[Server] Server stopped.')
 
     def stop_thread(self):
         if shared_state.verbose:
@@ -81,15 +79,12 @@ class ServerThread(threading.Thread):
             # If the state has changed, send a message to the frontend
             if current_ignStatus != previous_ignStatus:
                 if current_ignStatus:
-                    logger.debug("Ignition ON, sending event to frontend.")
                     socketio.emit('ign', True, namespace='/sys')
                 else:
-                    logger.debug("Ignition OFF, sending event to frontend.")
                     socketio.emit('ign', False, namespace='/sys')
 
                 # Update the previous state to the current state
                 previous_ignStatus = current_ignStatus
-
             eventlet.sleep(0.1)  # Allow other tasks to run while checking ignition state
 
         
@@ -114,7 +109,7 @@ class ServerThread(threading.Thread):
     # Send notification when frontend connects via socket.io
     @socketio.on('connect', namespace='/')
     def handle_connect():
-        if (shared_state.verbose): logger.info("Client connected")
+        if (shared_state.verbose): logger.info('Client connected')
 
 
 
@@ -143,7 +138,7 @@ class ServerThread(threading.Thread):
 
         # Toggle module status
         def toggle_state():
-            if (shared_state.verbose): logger.info('Toggling Thread')
+            if (shared_state.verbose): logger.info(f'[Server] Toggling Thread')
             getattr(shared_state, toggle_attr).set()
 
             thread_state = shared_state.THREADS.get(module, None)
@@ -174,20 +169,23 @@ class ServerThread(threading.Thread):
     # Handle UI update requests
     @socketio.on('request', namespace='/data')
     def handle_can_request():
-        request_timestamp = time.time()
+        try:
+            request_timestamp = time.time()
 
-        # Limit output to 2 decimal places
-        data = {
-            k: round(v, 2) if isinstance(v, float) else v
-            for k, v in shared_state.car_data.items()
-        }
+            # Limit output to 2 decimal places
+            data = {
+                k: round(v, 2) if isinstance(v, float) else v
+                for k, v in shared_state.car_data.items()
+            }
 
-        payload = {
-            'timestamp': request_timestamp,
-            'data': data
-        }
+            payload = {
+                'timestamp': request_timestamp,
+                'data': data
+            }
 
-        socketio.emit('data', payload, namespace='/data')
+            socketio.emit('data', payload, namespace='/data')
+        except Exception as e:
+            logger.error(f'[Server] Error handling data request: {e}')
 
 
 
@@ -195,6 +193,7 @@ class ServerThread(threading.Thread):
     @socketio.on('systemTask', namespace='/sys')
     def handle_system_task(args, payload=None):
         if   args == 'checkProfile':
+            logger.info(f'[Server] Check for existing profiles')
             # Checks whether .config/v-link/ exists
             # Returns either true or an object with selectable profiles.
             result = settings.check_settings()
@@ -202,78 +201,97 @@ class ServerThread(threading.Thread):
         
         elif args == 'loadProfile':
             # Loads the profile which was selected through the frontend.
+            logger.info(f'[Server] Load Profiles and copy settings')
             result = settings.copy_files(payload)
             if result:
-                logger.info("All settings copied and ready")
-                return {"result": result}
+                return {'result': result}
             
         elif args == 'start':
             # Loads the profile which was selected through the frontend.
-            logger.info('Starting all threads')
+            logger.info(f'[Server] Start all threads')
             shared_state.start_event.set()
 
         elif args == 'reboot':
-            subprocess.run("sudo reboot -h now", shell=True)
+            # Reboots the system
+            logger.info(f'[Server] Reboot system')
+            subprocess.run('sudo reboot -h now', shell=True)
 
         elif args == 'shutdown':
-            subprocess.run("sudo shutdown -h now", shell=True)
+            # Shuts down the system
+            logger.info(f'[Server] Shutdown system')
+            subprocess.run('sudo shutdown -h now', shell=True)
 
         elif args == 'reset':
+            # Resets settings to default and restarts the application
+            logger.info(f'[Server] Reset settings to default')
             settings.reset_settings()
             shared_state.restart_event.set()
 
         elif args == 'rti':
+            # Toggles RTI and HDMI status
+            logger.info(f'[Server] Toggle RTI/HDMI')
             shared_state.rtiStatus = not shared_state.rtiStatus
             shared_state.hdmiStatus = shared_state.rtiStatus
-            logger.debug(f"HDMI status: {shared_state.hdmiStatus}")
-            logger.debug(f"RTI status: {shared_state.rtiStatus}")
-            socketio.emit('state', shared_state.rtiStatus, namespace="/rti")
+
+            socketio.emit('state', shared_state.rtiStatus, namespace='/rti')
             if not shared_state.dev:
                 shared_state.hdmi_event.set()
 
         elif args == 'quit':
+            # Quits the application
+            logger.info(f'[Server] Quit application')
             shared_state.exit_event.set()
 
         elif args == 'restart':
+            # Restarts the application (namely the frontend)
+            logger.info(f'[Server] Restart application')
             shared_state.restart_event.set()
 
         elif args == 'hdmi':
+            # Toggles HDMI on/off
+            logger.info(f'[Server] Toggle HDMI')
             shared_state.hdmiStatus = not shared_state.hdmiStatus
             if not shared_state.dev:
                 shared_state.hdmi_event.set()
 
         elif args == 'update':
+            # Updates the application
+            logger.info(f'[Server] Update Application')
             shared_state.update_event.set()
 
         elif args == 'ign':
-            socketio.emit('ign', shared_state.ignStatus.is_set(), namespace="/sys")
+            # Sends the current ignition status to the frontend
+            logger.info(f'[Server] Ignition status request')
+            socketio.emit('ign', shared_state.ignStatus.is_set(), namespace='/sys')
 
         else:
-            logger.debug(f"Unknown action: {args}")
+            logger.debug(f'[Server] Unknown action: {args}')
 
 
+    # Handle force MOST switch request
     @socketio.on('force_switch', namespace='/most')
     def handle_force_switch():
-        most_thread = shared_state.THREADS.get("pimost", None)
+        logger.info(f'[Server] Force MOST switch')
+        most_thread = shared_state.THREADS.get('pimost', None)
 
         if most_thread and most_thread.is_alive():
             most_thread.force_switch()
 
-    ## not really used yet, we can perform certain actions based on MOST messages here or in pimost.py
+    # Currently unused, we can perform certain actions based on MOST messages here or in pimost.py
     @socketio.on('most_message', namespace='/most')
     def print_most_message(args):
-        logger.debug(f"Received most message on most namespace: {args}")
+        logger.debug(f'[Server] Received most message on most namespace: {args}')
 
 
     # Handle UI log messages
     @socketio.on('info', namespace='/log')
     def handle_frontend_error(args):
-        logger.info(f"[FRONTEND]: {args}")
+        logger.info(f'[Frontend] {args}')
 
     @socketio.on('debug', namespace='/log')
     def handle_frontend_error(args):
-        logger.debug(f"[FRONTEND]: {args}")
+        logger.debug(f'[Frontend] {args}')
 
     @socketio.on('error', namespace='/log')
     def handle_frontend_error(args):
-        logger.error(f"[FRONTEND]: {args}")
+        logger.error(f'[Frontend] {args}')

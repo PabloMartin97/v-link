@@ -54,7 +54,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
   setKeyStroke(event.code);
 
   // If keybinds are paused, do not process further
-  const pauseKeyBinds = APP((state) => state.system.pauseKeyBinds);
+  const pauseKeyBinds = APP.getState().system.pauseKeyBinds;
   socket.log.emit('info', `Keybinds paused: ${pauseKeyBinds}`);
   if(pauseKeyBinds) return;
 
@@ -68,7 +68,8 @@ const mmiKeyDown = (event: KeyboardEvent) => {
       const action = Object.keys(dongleBindings).find(
         (key) => dongleBindings[key].value === event.code
       );
-      console.log('action', action);
+      socket.log.emit('debug', 'Emitting carplay key-command: ', action);
+      console.log('Emitting carplay key-command: ', action);
 
       if (action !== undefined) {
           setKeyCommand(action);

@@ -11,7 +11,7 @@ class APPThread(threading.Thread):
         super().__init__()
         self.logger = logger
 
-        self.url = f"http://localhost:{4001 if shared_state.vite else 5173}"
+        self.url = f'http://localhost:{4001 if shared_state.vite else 5173}'
         self.browser = None
         self._stop_event = threading.Event()
 
@@ -32,30 +32,30 @@ class APPThread(threading.Thread):
 
     def start_browser(self):
         standard_flags = [
-            "--enable-experimental-web-platform-features",
-            "--enable-features=SharedArrayBuffer",
-            "--autoplay-policy=no-user-gesture-required",
-            #"--disable-extensions",
-            "--disable-logging",
-            "--log-level=3"
+            '--enable-experimental-web-platform-features',
+            '--enable-features=SharedArrayBuffer',
+            '--autoplay-policy=no-user-gesture-required',
+            #'--disable-extensions',
+            '--disable-logging',
+            '--log-level=3'
         ]
 
         if shared_state.isKiosk:
             mode = [
-                "--kiosk",
-                "--ozone-platform=wayland",
-                "--start-maximized"
+                '--kiosk',
+                '--ozone-platform=wayland',
+                '--start-maximized'
             ]
         else:
             mode = [
-                "--disable-resize",
-                "--window-size=800,480"
+                '--disable-resize',
+                '--window-size=800,480'
             ]
 
         flags = standard_flags + mode
 
         # Final command as list
-        command = ["chromium-browser", self.url] + flags
+        command = ['chromium-browser', self.url] + flags
 
         self.browser = subprocess.Popen(
             command,
@@ -64,7 +64,7 @@ class APPThread(threading.Thread):
             stdin=subprocess.DEVNULL
         )
         #self.browser = subprocess.Popen(command)
-        self.logger.info(f"Chromium browser started with PID: {self.browser.pid}")
+        self.logger.info(f'[Browser] Chromium browser started with PID: "{self.browser.pid}"')
 
 
     def close_browser(self):
@@ -77,7 +77,7 @@ class APPThread(threading.Thread):
                 try:
                     self.browser.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    self.logger.warning("Browser did not terminate in time; killing it now.")
+                    self.logger.warning('[Browser] Chromium did not close in time; Trying to kill thread.')
                     self.browser.kill()
                     self.browser.wait()
 
@@ -85,6 +85,6 @@ class APPThread(threading.Thread):
                 subprocess.run(['pkill', '-P', str(self.browser.pid)], check=False)
 
             except Exception as e:
-                self.logger.error(f"Error stopping frontend: {e}")
+                self.logger.error(f'[Browser] Error stopping chromium: {e}')
         else:
-            self.logger.error("Chromium not found on this system.")
+            self.logger.error('[Browser] Chromium not found on this system.')

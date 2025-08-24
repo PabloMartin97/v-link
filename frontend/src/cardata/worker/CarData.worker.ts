@@ -17,6 +17,7 @@ socket.can.on("settings", handlesensorSettings);
 socket.adc.on("settings", handlesensorSettings);
 
 socket.data.on("data", (data) => {
+  console.log('Data received in worker:', data);
   if (data && typeof data.timestamp === 'number' && data.data) {
     latestData = { values: data.data, timestamp: Date.now() }
   }

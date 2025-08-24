@@ -19,25 +19,29 @@ class IGNThread(threading.Thread):
     def run(self):
         # Initialize GPIO pin here after the thread starts
         try:
-            self.release_gpio()
+            #self.release_gpio()
+            self.logger.info(f'[Ignition] Claiming GPIO')
             lgpio.gpio_claim_input(self.chip, self.IGNITION_PIN)
             
             # Monitor ignition pin
             self.monitor_ignition()
         except lgpio.error as e:
-            self.logger.error(f"Error during GPIO initialization: {e}")
+            self.logger.error(f'[Ignition] Error during GPIO initialization: {e}')
 
 
     def stop_thread(self):
         self._stop_event.set()
-        self.release_gpio()
-        lgpio.gpiochip_close(self.chip)
+        try:
+            self.release_gpio()
+            lgpio.gpiochip_close(self.chip)
+        except lgpio.error as e:
+            self.logger.error(f'[Ignition] Could not release GPIO: {e}')
 
     def release_gpio(self):
             try:
                 lgpio.gpio_free(self.chip, self.IGNITION_PIN)
             except lgpio.error as e:
-                self.logger.error(f"Could not release GPIO Pin {self.IGNITION_PIN}: {e}")
+                self.logger.error(f'[Ignition] Could not release GPIO Pin {self.IGNITION_PIN}: {e}')
 
 
     def monitor_ignition(self):
@@ -59,7 +63,7 @@ class IGNThread(threading.Thread):
                     previous_state = current_state
 
             except lgpio.error as e:
-                self.logger.error(f"Error reading GPIO {self.IGNITION_PIN}: {e}")
+                self.logger.error(f'[Ignition] Error reading GPIO {self.IGNITION_PIN}: {e}')
                 time.sleep(1)  # Avoid tight looping if there's a problem
                 continue
 

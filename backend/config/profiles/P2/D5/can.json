@@ -3,7 +3,7 @@
     "name": "can",
     "interfaces": [
         {
-            "enabled": true,
+            "enabled": false,
             "bustype": "socketcan",
             "channel": "can1",
             "is_extended": true,

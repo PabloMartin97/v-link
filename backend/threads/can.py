@@ -10,7 +10,7 @@ class Config:
     def __init__(self, logger):
         self.logger = logger
 
-        self.can_settings = settings.load_settings("can")
+        self.can_settings = settings.load_settings('can')
         self.interfaces = []
         self.sensors = {}
 
@@ -18,23 +18,23 @@ class Config:
         self.load_sensors()
 
     def load_interfaces(self):
-        for iface in self.can_settings["interfaces"]:
-            if iface["enabled"]:
+        for iface in self.can_settings['interfaces']:
+            if iface['enabled']:
                 self.interfaces.append({
-                    "channel": iface["channel"],
-                    "bustype": iface["bustype"],
-                    "is_extended": iface["is_extended"],
-                    "bitrate": iface["bitrate"],
+                    'channel': iface['channel'],
+                    'bustype': iface['bustype'],
+                    'is_extended': iface['is_extended'],
+                    'bitrate': iface['bitrate'],
                 })
 
     def load_sensors(self):
         # Make sure can_data exists
-        if not hasattr(shared_state, "can_data"):
+        if not hasattr(shared_state, 'can_data'):
             shared_state.can_data = {}
 
         for key, sensor in self.can_settings['sensors'].items():
             try:
-                iface = sensor["interface"]
+                iface = sensor['interface']
 
                 if not sensor['enabled']:
                     continue
@@ -55,31 +55,29 @@ class Config:
                 dlc = 0xC8 + len(message_data)
 
                 message_bytes = [dlc, target, action, parameter0, parameter1, 0x01, 0x00, 0x00]
-                scale = sensor["scale"]
+                scale = sensor['scale']
 
-                if not isinstance(scale, str) or "value" not in scale:
-                    raise ValueError(f"Invalid scale format for sensor {key}")
+                if not isinstance(scale, str) or 'value' not in scale:
+                    raise ValueError(f'Invalid scale format for sensor "{key}"')
                 
                 sensor_entry = {
-                    "key": key,
-                    "label": sensor['label'],
-                    "channel": sensor['interface'],
-                    "type": sensor['type'],
-                    "req_id": [req_id],
-                    "rep_id": [rep_id],
-                    "message_bytes": message_bytes,
-                    "scale": scale,
-                    "is_16bit": sensor['is_16bit'],
-                    "app_id": sensor['app_id'],
-                    "priority": sensor['priority'],
-                    "last_requested_time": 0
+                    'key': key,
+                    'label': sensor['label'],
+                    'channel': sensor['interface'],
+                    'type': sensor['type'],
+                    'req_id': [req_id],
+                    'rep_id': [rep_id],
+                    'message_bytes': message_bytes,
+                    'scale': scale,
+                    'is_16bit': sensor['is_16bit'],
+                    'app_id': sensor['app_id'],
+                    'priority': sensor['priority'],
                 }
 
                 self.sensors[iface].append(sensor_entry)
-                self.logger.debug(f"Loaded sensor '{key}' on {iface}")
 
             except Exception as e:
-                self.logger.error(f"Error loading sensor '{key}': {e}")
+                self.logger.error(f'[CAN] Error loading sensor "{key}" on "{iface}": {e}')
 
 
 class CANThread(threading.Thread):
@@ -111,60 +109,60 @@ class CANThread(threading.Thread):
         interfaces_to_process = []
 
         if shared_state.vCan:
-            self.logger.info("vCAN mode is enabled. Overriding CAN settings to use vcan0.")
+            self.logger.debug('[CAN] vCAN mode is enabled. Overriding CAN settings to use vcan0.')
             all_sensors = [sensor for sensor_list in self.config.sensors.values() for sensor in sensor_list]
             
             if all_sensors:
                 interfaces_to_process.append({
-                    "channel": "vcan0",
-                    "bustype": "socketcan",
-                    "bitrate": 500000,
-                    "is_extended": True,  # Assume extended for debugging simplicity
-                    "sensors": all_sensors,
+                    'channel': 'vcan0',
+                    'bustype': 'socketcan',
+                    'bitrate': 500000,
+                    'is_extended': True,  # Assume extended for debugging simplicity
+                    'sensors': all_sensors,
                 })
         else:
             for interface in self.config.interfaces:
-                channel = interface["channel"]
+                channel = interface['channel']
                 sensors_for_channel = self.config.sensors.get(channel, [])
                 
                 if sensors_for_channel:
                     interfaces_to_process.append({
-                        "channel": channel,
-                        "bustype": interface["bustype"],
-                        "bitrate": interface["bitrate"],
-                        "is_extended": interface["is_extended"],
-                        "sensors": sensors_for_channel,
+                        'channel': channel,
+                        'bustype': interface['bustype'],
+                        'bitrate': interface['bitrate'],
+                        'is_extended': interface['is_extended'],
+                        'sensors': sensors_for_channel,
                     })
 
         # --- Unified Initialization Loop ---
         for iface_cfg in interfaces_to_process:
-            channel = iface_cfg["channel"]
-            sensors = iface_cfg["sensors"]
-            is_extended = iface_cfg["is_extended"]
+            channel = iface_cfg['channel']
+            sensors = iface_cfg['sensors']
+            is_extended = iface_cfg['is_extended']
 
             try:
                 bus = can.interface.Bus(
                     channel=channel,
-                    bustype=iface_cfg["bustype"],
-                    bitrate=iface_cfg["bitrate"]
+                    bustype=iface_cfg['bustype'],
+                    bitrate=iface_cfg['bitrate']
                 )
                 self.can_buses[channel] = bus
 
                 # Gather all reply IDs for filtering
-                rep_ids = {s["rep_id"][0] for s in sensors}
+                rep_ids = {s['rep_id'][0] for s in sensors}
             
                 # Apply filters
                 if rep_ids:
-                    filters = [{"can_id": r_id, "can_mask": 0x1FFFFFFF if is_extended else 0x7FF, "extended": is_extended} for r_id in rep_ids]
+                    filters = [{'can_id': r_id, 'can_mask': 0x1FFFFFFF if is_extended else 0x7FF, 'extended': is_extended} for r_id in rep_ids]
                     bus.set_filters(filters)
-                    self.logger.info(f"Applied {len(rep_ids)} filters to {channel}.")
+                    self.logger.info(f'[CAN] Applied {len(rep_ids)} filter(s) to "{channel}".')
 
-                self.logger.info(f"Initialized {bus}")
+                self.logger.info(f'[CAN] Initialized {bus}')
 
                 # Group sensors by reply ID for listeners
                 sensors_by_id = {}
                 for sensor in sensors:
-                    rep_id = sensor["rep_id"][0]
+                    rep_id = sensor['rep_id'][0]
                     sensors_by_id.setdefault(rep_id, []).append(sensor)
 
                 # Start Scheduler only if there are sensors to request
@@ -183,7 +181,7 @@ class CANThread(threading.Thread):
                     self.notifiers[channel] = notifier
 
             except Exception as e:
-                self.logger.error(f"Failed to initialize CAN interface {channel}: {e}")
+                self.logger.error(f'[CAN] Failed to initialize CAN interface "{channel}": {e}')
 
 
 
@@ -197,10 +195,10 @@ class CANThread(threading.Thread):
             try:
                 notifier.stop()
             except Exception as e:
-                self.logger.error(f"Error stopping Notifier: {e}")
+                self.logger.error(f'[CAN] Error stopping Notifier: {e}')
 
-        for bus in self.can_buses.values():
-            bus.shutdown()
+        #for bus in self.can_buses.values():
+        #    bus.shutdown()
 
 
 #############################################################
@@ -223,9 +221,11 @@ class CANScheduler(threading.Thread):
 
         for device_id, sensor_list in sensors_config.items():
             for sensor in sensor_list:
-                prio = sensor.get("priority", 2)
-                self.logger.debug(f"Adding sensor {sensor['key']} with priority {prio}")
-                self.prio_sensors.setdefault(prio, []).append(sensor)
+                try:
+                    prio = sensor.get('priority', 2)
+                    self.prio_sensors.setdefault(prio, []).append(sensor)
+                except Exception as e:
+                    self.logger.error(f'[CAN] Error adding sensor "{sensor["key"]}" with priority "{prio}"')
 
         # Keep track of the last sent sensor for each priority (round robin)
         self.rotation = {
@@ -242,7 +242,7 @@ class CANScheduler(threading.Thread):
             })
         
     def run(self):
-        self.logger.info("CANScheduler started.")
+        self.logger.info('[CAN] Message Scheduler started.')
         while not self._stop_event.is_set():
             # Get next token from pool (i.e. priority)
             token = next(self.token_stream)
@@ -254,24 +254,22 @@ class CANScheduler(threading.Thread):
                 try:
                     # Construct message
                     msg = can.Message(
-                        arbitration_id=sensor["req_id"][0],
-                        data=bytes(sensor["message_bytes"]),
+                        arbitration_id=sensor['req_id'][0],
+                        data=bytes(sensor['message_bytes']),
                         is_extended_id=self.is_extended
                     )
 
                     # Send message
                     self.can_bus.send(msg)
                     
-                    #self.logger.debug(f"{sensor['label']}: {msg}")
+                    #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')
 
                 except Exception as e:
                     err_msg = str(e)
-                    self.logger.error(f"Failed to send message: {err_msg}")
-
-                    if "Error Code 105" in err_msg:
-                        self.logger.error("No CAN network found. Stopping CANScheduler.")
-                        self._stop_event.set()
-                        break
+                    self.logger.error(f'[CAN] Failed to send message: {err_msg}')
+                    
+                    self.logger.error(f'[CAN] Bus not available, stopping thread.')
+                    self._stop_event.set()
 
             # Sleep to maintain 0.01s interval between messages
             time.sleep(0.01)
@@ -320,28 +318,23 @@ class CANListener(can.Listener):
     def on_message_received(self, msg):
         try:
             if msg.arbitration_id in self.sensors_by_id:
+                print(msg)
                 data = list(msg.data)
                 if shared_state.verbose:
-                    message_hex = " ".join(f"{byte:02X}" for byte in msg.data)
-                    #self.logger.debug(f"Parsing message: {message_hex}")
+                    message_hex = ' '.join(f'{byte:02X}' for byte in msg.data)
+                    #self.logger.debug(f'Parsing message: {message_hex}')
 
-                for sensor in self.sensors_by_id[msg.arbitration_id]:
-                    
+                for sensor in self.sensors_by_id[msg.arbitration_id]:                    
                     if (
-                        data[3] == sensor["message_bytes"][3] and  # match parameter0
-                        data[4] == sensor["message_bytes"][4]):    # match parameter1
+                        data[3] == sensor['message_bytes'][3] and  # match parameter0
+                        data[4] == sensor['message_bytes'][4]):    # match parameter1
 
-                        value = ((data[5] << 8) | data[6] if sensor["is_16bit"] else data[5])
+                        value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
                         
-                        converted_value = eval(sensor["scale"], {"value": value})
+                        converted_value = eval(sensor['scale'], {'value': value})
                         shared_state.update_car_data(sensor['key'], float(converted_value))
-
-                        #with shared_state.car_data_lock:
-                        #    snapshot = shared_state.car_data.copy() 
-                        #print(snapshot)
-                        #shared_state.car_data[sensor['key']] = float(converted_value)
 
                         return
                     
         except Exception as e:
-            self.logger.error(f"CAN listener error: {e}")
+            self.logger.error(f'[CAN] CAN listener error: {e}')

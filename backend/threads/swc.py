@@ -13,22 +13,22 @@ from .. import settings
 from ..shared.shared_state import shared_state
 
 import logging
-logger = logging.getLogger("vlink")
+logger = logging.getLogger('vlink')
 
 
 def current_time_ms():
-    """Get current time in milliseconds"""
+    # Get current time in milliseconds
     return int(time.time() * 1000)
 
 
 def time_elapsed(start_time):
-    """Calculate elapsed time from start_time in milliseconds"""
+    # Calculate elapsed time from start_time in milliseconds
     return current_time_ms() - start_time
 
 
 class InterfaceType(Enum):
-    CAN = "can"
-    LIN = "lin"
+    CAN = 'can'
+    LIN = 'lin'
 
 
 class ButtonState(Enum):
@@ -38,7 +38,7 @@ class ButtonState(Enum):
 
 
 class LinFrame:
-    """Helper class for LIN frame processing"""
+    # Helper class for LIN frame processing
     MAX_BYTES = 8
 
     def __init__(self):
@@ -64,7 +64,7 @@ class LinFrame:
 
 
 class ButtonHandler:
-    """Handles button presses, long presses, and joystick movements"""
+    # Handles button presses, long presses, and joystick movements
     
     def __init__(self, click_timeout, long_press_duration, mouse_speed):
         self.click_timeout = click_timeout
@@ -81,26 +81,26 @@ class ButtonHandler:
 
         # Hardcoded keymap
         self.button_actions = {
-            "BTN_ENTER": lambda: self._mouse_click() if self.mouse_mode else self._key_press(uinput.KEY_SPACE),
-            "BTN_BACK": lambda: self._key_press(uinput.KEY_BACKSPACE),
-            "BTN_NEXT": lambda: self._key_press(uinput.KEY_N),
-            "BTN_PREV": lambda: self._key_press(uinput.KEY_V),
-            "BTN_YES": lambda: self._key_press(uinput.KEY_A),
-            "BTN_NO": lambda: self._key_press(uinput.KEY_R),
-            "BTN_VOL_UP": lambda: self._key_press(uinput.KEY_U),
-            "BTN_VOL_DOWN": lambda: self._key_press(uinput.KEY_D)
+            'BTN_ENTER': lambda: self._mouse_click() if self.mouse_mode else self._key_press(uinput.KEY_SPACE),
+            'BTN_BACK': lambda: self._key_press(uinput.KEY_BACKSPACE),
+            'BTN_NEXT': lambda: self._key_press(uinput.KEY_N),
+            'BTN_PREV': lambda: self._key_press(uinput.KEY_V),
+            'BTN_YES': lambda: self._key_press(uinput.KEY_A),
+            'BTN_NO': lambda: self._key_press(uinput.KEY_R),
+            'BTN_VOL_UP': lambda: self._key_press(uinput.KEY_U),
+            'BTN_VOL_DOWN': lambda: self._key_press(uinput.KEY_D)
         }
 
         self.joystick_actions = {
-            "BTN_UP": (-1, uinput.KEY_UP, (0, -1)),
-            "BTN_DOWN": (-1, uinput.KEY_DOWN, (0, 1)),
-            "BTN_LEFT": (-1, uinput.KEY_LEFT, (-1, 0)),
-            "BTN_RIGHT": (-1, uinput.KEY_RIGHT, (1, 0))
+            'BTN_UP': (-1, uinput.KEY_UP, (0, -1)),
+            'BTN_DOWN': (-1, uinput.KEY_DOWN, (0, 1)),
+            'BTN_LEFT': (-1, uinput.KEY_LEFT, (-1, 0)),
+            'BTN_RIGHT': (-1, uinput.KEY_RIGHT, (1, 0))
         }
 
         self.long_press_actions = {
-            "BTN_ENTER": self._toggle_rti_status,
-            "BTN_PREV": self._toggle_mouse_mode
+            'BTN_ENTER': self._toggle_rti_status,
+            'BTN_PREV': self._toggle_mouse_mode
         }
 
         # Initialize uinput device
@@ -141,14 +141,14 @@ class ButtonHandler:
 
     # Main entry point for handling a key press
     def _handle_button(self, button_name):
-        """Handle button press logic"""
+        # Handle button press logic
         now = current_time_ms()
 
         if button_name != self.current_button:
             if self.current_button:
                 self._release_button()
                 
-            logger.debug(f"Button pressed: {button_name}")
+            logger.debug(f'Button pressed: {button_name}')
             action = self.button_actions.get(button_name)
             if action:
                 action()
@@ -169,7 +169,7 @@ class ButtonHandler:
 
     # Execute long press action
     def _long_press_action(self, button_name):
-        logger.debug(f"Long press: {button_name}")
+        logger.debug(f'Long press: {button_name}')
         action = self.long_press_actions.get(button_name)
         if action:
             action()
@@ -223,12 +223,12 @@ class ButtonHandler:
     def _toggle_rti_status(self):
         shared_state.rtiStatus = not shared_state.rtiStatus
         shared_state.hdmi_event.set()
-        logger.info(f"RTI status: {shared_state.rtiStatus}")
+        logger.debug(f'[SWC] RTI status: {shared_state.rtiStatus}')
 
     # Toggle mouse mode
     def _toggle_mouse_mode(self):
         self.mouse_mode = not self.mouse_mode
-        logger.info(f"Mouse mode: {self.mouse_mode}")
+        logger.debug(f'[SWC] Mouse mode: {self.mouse_mode}')
 
 
 #############################################################
@@ -245,7 +245,7 @@ class SWCInterface(ABC):
     
     # Parse button/joystick mappings - implemented by subclasses
     def _parse_mappings(self):
-        """Parse button/joystick mappings - implemented by subclasses"""
+        # Parse button/joystick mappings - implemented by subclasses
         pass
     
     @abstractmethod
@@ -262,7 +262,7 @@ class SWCInterface(ABC):
         
         for pattern, button_name in expected_patterns.items():
             if self._message_matches_pattern(message_data, pattern):
-                logger.debug(f"SWC button: {button_name}")
+                logger.debug(f'[SWC] Button pressed: {button_name}')
                 self.button_handler.handle(button_name)
                 return True
         return False
@@ -309,7 +309,7 @@ class CAN(SWCInterface):
     # Initialize CAN interface
     def start(self):
         try:
-            channel = "vcan0" if shared_state.vCan else self.config['interface']['name']
+            channel = 'vcan0' if shared_state.vCan else self.config['interface']['name']
             bustype = self.config['interface']['bustype']
             bitrate = self.config['interface']['bitrate']
             is_extended = self.config['interface']['is_extended']
@@ -317,7 +317,7 @@ class CAN(SWCInterface):
             self.can_bus = can.interface.Bus(channel=channel, bustype=bustype, bitrate=bitrate)
             
             # Set filter
-            filters = [{"can_id": self.rep_id, "can_mask": 0x1FFFFFFF, "extended": is_extended}]
+            filters = [{'can_id': self.rep_id, 'can_mask': 0x1FFFFFFF, 'extended': is_extended}]
             self.can_bus.set_filters(filters)
             
             # Create a custom listener class
@@ -332,14 +332,14 @@ class CAN(SWCInterface):
             listener = MessageListener(self._handle_can_message)
             self.notifier = can.Notifier(self.can_bus, [listener])
             
-            logger.info(f"CAN SWC initialized on {channel}")
+            logger.info(f'[SWC] CAN initialized on "{channel}"')
             
         except Exception as e:
-            logger.error(f"CAN SWC init failed: {e}")
+            logger.error(f'[SWC] CAN init failed: {e}')
             raise
     
     def stop(self):
-        """Stop CAN interface"""
+        # Stop CAN interface
         self._stop_event.set()
         if self.notifier:
             self.notifier.stop()
@@ -347,7 +347,7 @@ class CAN(SWCInterface):
             self.can_bus.shutdown()
     
     def _handle_can_message(self, msg):
-        """Handle CAN message"""
+        # Handle CAN message
         try:
             if msg.arbitration_id != self.rep_id:
                 return
@@ -359,11 +359,11 @@ class CAN(SWCInterface):
                 return
             
             if not self._handle_message(message_data, self.control_lookup):
-                message_hex = " ".join(f"{byte:02X}" for byte in message_data)
-                logger.debug(f"Unknown CAN SWC: {message_hex}")
+                message_hex = ' '.join(f'{byte:02X}' for byte in message_data)
+                logger.debug(f'[SWC] Unknown CAN SWC: {message_hex}')
                 
         except Exception as e:
-            logger.error(f"CAN message error: {e}")
+            logger.error(f'[SWC] CAN message error: {e}')
 
 
 #############################################################
@@ -389,7 +389,7 @@ class LIN(SWCInterface):
         for mapping_type in ['button', 'joystick']:
             for name, command in self.config[mapping_type].items():
                 if command:
-                    hex_string = "".join(cmd.replace("0x", "") for cmd in command)
+                    hex_string = ''.join(cmd.replace('0x', '') for cmd in command)
                     self.control_lookup[bytes.fromhex(hex_string)] = name
     
     # Check LIN message pattern
@@ -400,17 +400,17 @@ class LIN(SWCInterface):
     def start(self):
         try:
             if not shared_state.vLin:
-                port = "/dev/ttyAMA0" if shared_state.rpiModel == 5 else "/dev/ttyS0"
+                port = '/dev/ttyAMA0' if shared_state.rpiModel == 5 else '/dev/ttyS0'
                 self.lin_serial = serial.Serial(port=port, baudrate=9600, timeout=1)
-                logger.info(f"LIN SWC initialized on {port}")
+                logger.info(f'[SWC] LIN SWC initialized on {port}')
             else:
-                logger.info("Virtual LIN mode enabled")
+                logger.info('[SWC] Emulated LIN mode enabled')
             
             self.processing_thread = threading.Thread(target=self._process_data, daemon=True)
             self.processing_thread.start()
             
         except Exception as e:
-            logger.error(f"LIN SWC init failed: {e}")
+            logger.error(f'[SWC] LIN SWC init failed: {e}')
             raise
     
     # Stop LIN interface
@@ -429,7 +429,7 @@ class LIN(SWCInterface):
             else:
                 self._read_from_serial()
         except Exception as e:
-            logger.error(f"LIN processing error: {e}")
+            logger.error(f'[SWC] LIN processing error: {e}')
     
     # Read from serial port
     def _read_from_serial(self):
@@ -444,7 +444,7 @@ class LIN(SWCInterface):
     def _read_from_file(self):
         time.sleep(10)  # Wait for app start
         try:
-            with open(Path(__file__).parent.parent / "dev/lin_test.txt", "r") as file:
+            with open(Path(__file__).parent.parent / 'dev/lin_test.txt', 'r') as file:
                 for line in file:
                     if self._stop_event.is_set():
                         break
@@ -453,7 +453,7 @@ class LIN(SWCInterface):
                         self._process_byte(byte.to_bytes(1, 'big'))
                     time.sleep(0.1)
         except Exception as e:
-            logger.error(f"LIN file error: {e}")
+            logger.error(f'[SWC] LIN file error: {e}')
     
     # Process incoming byte
     def _process_byte(self, byte):
@@ -480,14 +480,14 @@ class LIN(SWCInterface):
                 not self.lin_frame.is_valid()):
                 return
             
-            frame_data = b"".join(self.lin_frame.get_byte(i).to_bytes(1, 'big') for i in range(5))
+            frame_data = b''.join(self.lin_frame.get_byte(i).to_bytes(1, 'big') for i in range(5))
             
             if not self._handle_message(frame_data, self.control_lookup):
-                frame_hex = " ".join(f"{b:02X}" for b in frame_data)
-                logger.debug(f"Unknown LIN SWC: {frame_hex}")
+                frame_hex = ' '.join(f'{b:02X}' for b in frame_data)
+                logger.debug(f'[SWC] Unknown LIN frame: {frame_hex}')
                 
         except Exception as e:
-            logger.error(f"LIN frame error: {e}")
+            logger.error(f'[SWC] LIN frame error: {e}')
 
 
 #############################################################
@@ -504,13 +504,13 @@ class SWCThread(threading.Thread):
         self._initialize()
     
     def _initialize(self):
-        """Initialize SWC components"""
+        # Initialize SWC components
         try:
-            config = settings.load_settings("swc")
+            config = settings.load_settings('swc')
             controls_config = config.get('controls', {})
             
             if not controls_config.get('enabled', False):
-                logger.info("SWC controls disabled")
+                logger.info('[SWC] Controls disabled')
                 return
             
             # Initialize button handler
@@ -529,28 +529,27 @@ class SWCThread(threading.Thread):
             elif interface_name.startswith('lin'):
                 self.interface = LIN(controls_config, button_handler, logger)
             else:
-                raise ValueError(f"Unknown SWC interface: {interface_name}")
+                raise ValueError(f'[SWC] Unknown interface: {interface_name}')
             
-            logger.info(f"SWC initialized with {interface_name} interface")
+            logger.info(f'[SWC] Initialized with "{interface_name}" interface')
             
         except Exception as e:
-            logger.error(f"SWC initialization failed: {e}")
+            logger.error(f'[SWC] Initialization failed: {e}')
             raise
     
     def run(self):
-        """Main thread execution"""
+        # Main thread execution 
         if not self.interface:
             return
             
         try:
-            logger.info("Starting SWC")
             self.interface.start()
             
             while not self._stop_event.is_set():
                 time.sleep(1)
                 
         except Exception as e:
-            logger.error(f"SWC runtime error: {e}")
+            logger.error(f'[SWC] Runtime error: {e}')
         finally:
             if self.interface:
                 self.interface.stop()
