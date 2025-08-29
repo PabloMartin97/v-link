@@ -33,6 +33,7 @@ def check_settings():
 
     # If user config already exists and contains files, return True
     if USER_CONFIG_DIR.exists() and any(USER_CONFIG_DIR.iterdir()):
+        load_modules()
         return True
     else:
         # Scan profile directories and return available platforms + engines.
@@ -40,8 +41,9 @@ def check_settings():
             result = {}
             for d in DEFAULT_PROFILES_DIR.iterdir():
                 if d.is_dir():
-                    subdirs = [sub.name for sub in d.iterdir() if sub.is_dir()]
-                    result[d.name] = subdirs
+                    subdirs = [sub.name for sub in d.iterdir() if sub.is_dir() and sub.name != "Default"]
+                    if subdirs:
+                        result[d.name] = subdirs
             return result
         except Exception as e:
             logger.error(f'Error reading directories: {e}')
@@ -100,10 +102,17 @@ def copy_files(data):
     try:
         logger.info(f'[Settings] Copying files to user config directory...')
         # Copy base + profile-specific config files into user config directory.
-        platform = data.get('platform')
-        engine = data.get('engine')
 
-        profile_config = DEFAULT_CONFIG_DIR / 'profiles' / platform / engine
+        if data == "Default":
+            profile_config = DEFAULT_CONFIG_DIR / 'profiles' / 'Default'
+
+        else:
+            platform = data.get('platform')
+            engine = data.get('engine')
+
+            profile_config = DEFAULT_CONFIG_DIR / 'profiles' / platform / engine
+
+
         USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
         def copy_json_files(src: Path, dst: Path):
@@ -115,21 +124,50 @@ def copy_files(data):
         copy_json_files(DEFAULT_CONFIG_DIR, USER_CONFIG_DIR)
         copy_json_files(profile_config, USER_CONFIG_DIR)
 
-        # --- Modify app.json after copying ---
+        # Modify app.json after copying
         app_json_path = USER_CONFIG_DIR / 'app.json'
-        if app_json_path.exists():
-            with app_json_path.open('r', encoding='utf-8') as f:
-                config = json.load(f)
+        
+        with app_json_path.open('r', encoding='utf-8') as f:
+            config = json.load(f)
 
-            constants = config.get('constants', {})
-            constants['profile'] = data
-            config['constants'] = constants
+        constants = config.get('constants', {})
+        constants['profile'] = data
+        config['constants'] = constants
 
-            with app_json_path.open('w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2)
-                f.write('\n')  # ensure trailing newline
+        # If a _profile.json exists, load its modules and override
+        profile_json_path = USER_CONFIG_DIR / '_profile.json'
+        if profile_json_path.exists():
+            try:
+                with profile_json_path.open('r', encoding='utf-8') as pf:
+                    profile_data = json.load(pf)
 
+                modules = profile_data.get('modules', {})
+                if modules:
+                    constants['modules'] = modules
+                    logger.info(f"[Settings] Merged modules from _profile.json into app.json")
+            except Exception as e:
+                logger.error(f"[Settings] Error merging _profile.json: {e}")
+                shared_state.exit_event.set()
+
+        with app_json_path.open('w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+            f.write('\n')  # ensure trailing newline
+        
+        load_modules()
         return True
     except Exception as e:
         logger.error(f'[Settings] Error copying files: {e}')
         return False
+    
+# Setting a shared_state based on _profile.json
+def load_modules():
+    app_json_path = USER_CONFIG_DIR / 'app.json'
+    if app_json_path.exists():
+        with app_json_path.open('r', encoding='utf-8') as f:
+            config = json.load(f)
+        constants = config.get('constants', {})
+
+        shared_state.canModule = constants['modules']['can']
+        shared_state.swcModule = constants['modules']['can']
+        shared_state.rtiModule = constants['modules']['can']
+        shared_state.adcModule = constants['modules']['can']

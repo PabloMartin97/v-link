@@ -201,8 +201,12 @@ class ServerThread(threading.Thread):
         
         elif args == 'loadProfile':
             # Loads the profile which was selected through the frontend.
-            logger.info(f'[Server] Load Profiles and copy settings')
-            result = settings.copy_files(payload)
+            if payload == "Default":
+                logger.info(f'[Server] Loading default profile')
+                result = settings.copy_files("Default")
+            else:
+                logger.info(f'[Server] Load Profile and copy settings')
+                result = settings.copy_files(payload)
             if result:
                 return {'result': result}
             

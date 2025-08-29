@@ -1,0 +1,11 @@
+{
+    "type": "profile",
+    "name": "p2_d5",
+
+    "modules": {
+        "can": true,
+        "rti": true,
+        "swc": true,
+        "adc": false
+    }
+}

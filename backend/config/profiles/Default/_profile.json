@@ -1,0 +1,11 @@
+{
+    "type": "profile",
+    "name": "default",
+
+    "modules": {
+        "can": false,
+        "rti": false,
+        "swc": false,
+        "adc": false
+    }
+}

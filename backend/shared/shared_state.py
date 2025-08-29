@@ -49,6 +49,12 @@ class SharedState:
         self.ignStatus = threading.Event()
         self.shutdown_pi = threading.Event()
 
+        #Module states:
+        self.canModule = False
+        self.swcModule = False
+        self.rtiModule = False
+        self.adcModule = False
+
 
         # store threads
         self.THREADS = {

@@ -128,8 +128,12 @@ const Init = () => {
 
     const appUpdate = APP((state) => state.update);
 
-    const startApp = () => {
-        socket.log.emit('info', 'Config-files found, loading settings.');
+    const startApp = (custom_config) => {
+        if (custom_config)
+            socket.log.emit('info', 'Config-files found, loading settings.');
+        else
+            socket.log.emit('info', 'Default profile selected, loading settings.');
+
         socket.sys.emit('systemTask', 'start');
         setVisible(false)
         appUpdate((state) => {
@@ -185,7 +189,7 @@ const Init = () => {
 
         socket.sys.emit('systemTask', 'loadProfile', vehicle, (data) => {
             if (data.result) {
-                startApp();
+                startApp(true);
             } else {
                 socket.log.emit('error', 'Could not load profile. Exiting.')
                 socket.sys.emit('systemTask', 'quit')
@@ -260,6 +264,20 @@ const Init = () => {
                                 }}
                             >
                                 <Caption2>BACK</Caption2>
+                            </Button>
+                        )}
+                        {!platform && (
+                            <Button
+                                style={{ width: '25%' }}
+                                onClick={() =>
+                                    socket.sys.emit('systemTask', 'loadProfile', "Default", (data) => {
+                                        if (data.result) {
+                                            startApp(false);
+                                        }
+                                    })
+                                }
+                            >
+                                <Caption2>SKIP</Caption2>
                             </Button>
                         )}
                         <Button

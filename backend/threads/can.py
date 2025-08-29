@@ -174,7 +174,7 @@ class CANThread(threading.Thread):
                 # Setup Listeners
                 listeners = []
                 if sensors:
-                    listeners.append(CANListener(sensors_by_id, self.logger))
+                    listeners.append(CANListener(sensors_by_id, canScheduler, self.logger))
                 
                 if listeners:
                     notifier = can.Notifier(bus, listeners)
@@ -219,6 +219,9 @@ class CANScheduler(threading.Thread):
         # Group sensors by priority (1 = highest, 3 = lowest)
         self.prio_sensors = {1: [], 2: [], 3: []}
 
+        # Track when last message was sent - NEW VARIABLE
+        self.last_message_time = 0
+
         for device_id, sensor_list in sensors_config.items():
             for sensor in sensor_list:
                 try:
@@ -244,36 +247,44 @@ class CANScheduler(threading.Thread):
     def run(self):
         self.logger.info('[CAN] Message Scheduler started.')
         while not self._stop_event.is_set():
-            # Get next token from pool (i.e. priority)
-            token = next(self.token_stream)
+            # Check if 2 seconds have passed since last message
+            current_time = time.time()
+            if current_time - self.last_message_time >= 2.0:
+                # Get next token from pool (i.e. priority)
+                token = next(self.token_stream)
 
-            if self.prio_sensors[token]:
-                #Select next sensor based on the token
-                sensor = self.return_sensor(token)
+                if self.prio_sensors[token]:
+                    #Select next sensor based on the token
+                    sensor = self.return_sensor(token)
 
-                try:
-                    # Construct message
-                    msg = can.Message(
-                        arbitration_id=sensor['req_id'][0],
-                        data=bytes(sensor['message_bytes']),
-                        is_extended_id=self.is_extended
-                    )
+                    try:
+                        # Construct message
+                        msg = can.Message(
+                            arbitration_id=sensor['req_id'][0],
+                            data=bytes(sensor['message_bytes']),
+                            is_extended_id=self.is_extended
+                        )
 
-                    # Send message
-                    self.can_bus.send(msg)
-                    
-                    #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')
+                        # Send message
+                        self.can_bus.send(msg)
+                        print(msg)
+                        self.last_message_time = current_time
+                        
+                        #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')
 
-                except Exception as e:
-                    err_msg = str(e)
-                    self.logger.error(f'[CAN] Failed to send message: {err_msg}')
-                    
-                    self.logger.error(f'[CAN] Bus not available, stopping thread.')
-                    self._stop_event.set()
+                    except Exception as e:
+                        err_msg = str(e)
+                        self.logger.error(f'[CAN] Failed to send message: {err_msg}')
+                        
+                        self.logger.error(f'[CAN] Bus not available, stopping thread.')
+                        self._stop_event.set()
 
             # Sleep to maintain 0.01s interval between messages
             time.sleep(0.01)
 
+    def reset_message_timer(self):
+        # Reset timeout when valid response is received
+        self.last_message_time = 0
 
     def return_sensor(self, priority):
         #Get the next index of the message in the selected priority group
@@ -282,7 +293,6 @@ class CANScheduler(threading.Thread):
 
         #Select sensor based on index
         sensor = sensors[index % len(sensors)]
-
 
         self.rotation[priority] = (index + 1) % len(sensors)
         return sensor
@@ -310,9 +320,9 @@ class CANScheduler(threading.Thread):
 #############################################################
 
 class CANListener(can.Listener):
-    def __init__(self, sensors_by_id, logger):
+    def __init__(self, sensors_by_id, scheduler, logger):
         self.logger = logger
-
+        self.scheduler = scheduler
         self.sensors_by_id = sensors_by_id
 
     def on_message_received(self, msg):
@@ -332,6 +342,9 @@ class CANListener(can.Listener):
                         
                         converted_value = eval(sensor['scale'], {'value': value})
                         shared_state.update_car_data(sensor['key'], float(converted_value))
+
+                        # Reset timer to allow next message
+                        self.scheduler.reset_message_timer()
 
                         return
                     

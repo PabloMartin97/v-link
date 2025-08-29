@@ -138,16 +138,20 @@ class VLINK:
             self.start_thread('mst', logger)
             time.sleep(.05)
 
+        if shared_state.canModule:
+            self.start_thread('can', logger)
+            time.sleep(.05)
+        if shared_state.rtiModule:
+            self.start_thread('rti', logger)
+            time.sleep(.05)
+        if shared_state.adcModule:
+            self.start_thread('adc', logger)
+            time.sleep(.05)
+        if shared_state.swcModule:
+            self.start_thread('swc', logger)
+            time.sleep(.05)
+
         vlink.start_thread('ign', logger)
-        time.sleep(.05)
-        self.start_thread('can', logger)
-        time.sleep(.05)
-        self.start_thread('rti', logger)
-        time.sleep(.05)
-        self.start_thread('adc', logger)
-        time.sleep(.05)
-        self.start_thread('swc', logger)
-        time.sleep(.05)
 
     def start_thread(self, thread_name, logger):
         if thread_name in shared_state.THREADS:

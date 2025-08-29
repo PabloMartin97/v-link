@@ -12,6 +12,12 @@
         "Race",
         "Charts"
       ]
+    },
+    "modules": {
+      "can": false,
+      "rti": false,
+      "swc": false,
+      "adc": false
     }
   },
   "general": {
