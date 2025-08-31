@@ -184,8 +184,6 @@ const Settings = () => {
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
     setSave(false)
 
-    //console.log(selectStore, key, name, targetSetting, currentSettings)
-
     const newSettings = structuredClone(currentSettings);
     let convertedValue
     if (selectStore != 'app') {
@@ -195,9 +193,6 @@ const Settings = () => {
       newSettings[key][name].value = convertedValue || targetSetting;
       newSettings[key][name].type = selectStore;
     } else {
-
-      //console.log(key, name, targetSetting)
-
       newSettings[key][name].value = targetSetting
     }
 
@@ -309,7 +304,6 @@ const Settings = () => {
       let value, label;
       const dataOptions = {}
 
-      console.log(content)
       // Get current value
       if (content.value != "") {
         if (type === "data" && content.type != null && content.type != 'text') {    // Is the setting responsible for handling data and is a data type assigned?               
@@ -335,16 +329,11 @@ const Settings = () => {
       //Check if value is a number or boolean
       const isText = (content.type === 'text')
 
-      //console.log(content)
-
       const dropdown = (isText || typeof value === 'number' || typeof value === 'boolean' || key.includes('bindings'))
         ? null                                                                    //Yes? Return null
         : (content.options || Object.keys(dataOptions).map((key) =>               //No?  Create dropdown from options
           key
         ))
-
-      //console.log(content.options, dataOptions)
-      //console.log(dropdown)
 
       // Check for boolean setting
       const isBoolean = typeof value === 'boolean';                               // Checks if the setting is a boolean.
@@ -352,7 +341,6 @@ const Settings = () => {
 
 
       const handleChange = (event) => {
-        //console.log(event)
         const { name, value, checked, type } = event.target;                      // Grab info from the handler
         const newValue = type === 'checkbox' ? checked :                          // Check if type is a boolean
           type === 'number' ? Number(value) : value;               // Check if type is a number
@@ -366,8 +354,6 @@ const Settings = () => {
         }
 
         const targetSetting = isBoolean ? checked : newValue                      // Handle targetSetting based on type
-        //console.log(name)
-
         handleSettingChange(selectStore, key, name, targetSetting, settingsObj);     // Execute change of settings
       };
 
@@ -510,58 +496,66 @@ const Settings = () => {
             <Element>
               <Title>Toggle Modules</Title>
             </Element>
-            
-            <Element>
-              <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={canState} onChange={() => { handleIO("can", socket.can) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
 
-            <Element>
-              <Caption2>{`ADC ${adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={adcState} onChange={() => { handleIO("adc", socket.adc) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
+            {settings.constants.modules.can &&
+              <Element>
+                <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={canState} onChange={() => { handleIO("can", socket.can) }} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
 
-            <Element>
-              <Caption2>{`SWC ${swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
+            {settings.constants.modules.adc &&
+              <Element>
+                <Caption2>{`ADC ${adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={adcState} onChange={() => { handleIO("adc", socket.adc) }} disabled={!settings.constants.modules.adc} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
 
-            <Element>
-              <Caption2>{`RTI ${rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={rtiState} onChange={() => { handleIO("rti", socket.rti) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
+            {settings.constants.modules.swc &&
+              <Element>
+                <Caption2>{`SWC ${swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} disabled={!settings.constants.modules.swc} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
+
+            {settings.constants.modules.rti &&
+              <Element>
+                <Caption2>{`RTI ${rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={rtiState} onChange={() => { handleIO("rti", socket.rti) }} disabled={!settings.constants.modules.rti} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
             <p />
           </>
         }

@@ -7,14 +7,16 @@
             "bustype": "socketcan",
             "channel": "can1",
             "is_extended": false,
-            "bitrate": 125000
+            "bitrate": 125000,
+            "wait_for_ecu": false
         },
         {
             "enabled": true,
             "bustype": "socketcan",
             "channel": "can2",
             "is_extended": false,
-            "bitrate": 500000
+            "bitrate": 500000,
+            "wait_for_ecu": false
         }
     ],
     "sensors": {

@@ -25,6 +25,7 @@ class Config:
                     'bustype': iface['bustype'],
                     'is_extended': iface['is_extended'],
                     'bitrate': iface['bitrate'],
+                    'wait_for_ecu': iface['wait_for_ecu']
                 })
 
     def load_sensors(self):
@@ -50,11 +51,10 @@ class Config:
                 parameter1 = int(sensor['parameter'][1], 16)
 
                 # calculate dlc
-                message_data = [rep_id, target, action, parameter0, parameter1]
-                message_data = [byte for byte in message_data if byte != 0]
+                message_data = [target, action, parameter0, parameter1, 0x01]
                 dlc = 0xC8 + len(message_data)
 
-                message_bytes = [dlc, target, action, parameter0, parameter1, 0x01, 0x00, 0x00]
+                message_bytes = [dlc, *message_data, 0x00, 0x00]
                 scale = sensor['scale']
 
                 if not isinstance(scale, str) or 'value' not in scale:
@@ -167,14 +167,14 @@ class CANThread(threading.Thread):
 
                 # Start Scheduler only if there are sensors to request
                 if sensors:
-                    canScheduler = CANScheduler(sensors_by_id, bus, is_extended, self.logger)
+                    canScheduler = CANScheduler(sensors_by_id, bus, is_extended, self.logger, wait_for_ecu=any(i.get('wait_for_ecu') for i in self.config.interfaces if i['channel'] == channel))
                     self.broadcast_tasks.append(canScheduler)
                     canScheduler.start()
 
                 # Setup Listeners
                 listeners = []
                 if sensors:
-                    listeners.append(CANListener(sensors_by_id, canScheduler, self.logger))
+                    listeners.append(CANListener(sensors_by_id, self.logger, canScheduler.events))
                 
                 if listeners:
                     notifier = can.Notifier(bus, listeners)
@@ -206,25 +206,35 @@ class CANThread(threading.Thread):
 #############################################################
 
 class CANScheduler(threading.Thread):
-    def __init__(self, sensors_config, can_bus, is_extended, logger):
+    def __init__(self, sensors_config, can_bus, is_extended, logger, wait_for_ecu=False):
         super().__init__()
         self.daemon = True
         self.logger = logger
         self.can_bus = can_bus
         self.is_extended = is_extended
         self._stop_event = threading.Event()
+        self.wait_for_ecu = wait_for_ecu
 
         self.interval = 0.01  # 100Hz tick, one message every 10ms
+        self.events = {}
+
+        # Initialize events for all reply IDs if wait_for_ecu is enabled
+        if self.wait_for_ecu:
+            for device_id, sensor_list in sensors_config.items():
+                for sensor in sensor_list:
+                    if sensor['type'] != 'internal':
+                        rep_id = sensor['rep_id'][0]
+                        self.events.setdefault(rep_id, threading.Event())
 
         # Group sensors by priority (1 = highest, 3 = lowest)
         self.prio_sensors = {1: [], 2: [], 3: []}
 
-        # Track when last message was sent - NEW VARIABLE
-        self.last_message_time = 0
-
         for device_id, sensor_list in sensors_config.items():
             for sensor in sensor_list:
                 try:
+                    if sensor['type'] == 'internal':
+                        continue
+
                     prio = sensor.get('priority', 2)
                     self.prio_sensors.setdefault(prio, []).append(sensor)
                 except Exception as e:
@@ -247,43 +257,47 @@ class CANScheduler(threading.Thread):
     def run(self):
         self.logger.info('[CAN] Message Scheduler started.')
         while not self._stop_event.is_set():
-            # Check if 2 seconds have passed since last message
-            current_time = time.time()
-            if current_time - self.last_message_time >= 2.0:
-                # Get next token from pool (i.e. priority)
-                token = next(self.token_stream)
+            # Get next token from pool (i.e. priority)
+            token = next(self.token_stream)
 
-                if self.prio_sensors[token]:
-                    #Select next sensor based on the token
-                    sensor = self.return_sensor(token)
+            if self.prio_sensors[token]:
+                #Select next sensor based on the token
+                sensor = self.return_sensor(token)
 
-                    try:
-                        # Construct message
-                        msg = can.Message(
-                            arbitration_id=sensor['req_id'][0],
-                            data=bytes(sensor['message_bytes']),
-                            is_extended_id=self.is_extended
-                        )
+                try:
+                    # Construct message
+                    msg = can.Message(
+                        arbitration_id=sensor['req_id'][0],
+                        data=bytes(sensor['message_bytes']),
+                        is_extended_id=self.is_extended
+                    )
 
-                        # Send message
-                        self.can_bus.send(msg)
-                        self.last_message_time = current_time
-                        
-                        #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')
+                    rep_id = sensor['rep_id'][0]
+                    evt = None
 
-                    except Exception as e:
-                        err_msg = str(e)
-                        self.logger.error(f'[CAN] Failed to send message: {err_msg}')
-                        
-                        self.logger.error(f'[CAN] Bus not available, stopping thread.')
-                        self._stop_event.set()
+                    if self.wait_for_ecu:
+                        evt = self.events.get(rep_id)
+                        if evt:
+                            evt.clear()
+
+                    self.can_bus.send(msg)
+
+                    if self.wait_for_ecu and evt:
+                        if not evt.wait(timeout=1.0):
+                            self.logger.warning(f'[CAN] Timeout waiting for response to {sensor["label"]}')
+                    
+                    #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')
+
+                except Exception as e:
+                    err_msg = str(e)
+                    self.logger.error(f'[CAN] Failed to send message: {err_msg}')
+                    
+                    self.logger.error(f'[CAN] Bus not available, stopping thread.')
+                    self._stop_event.set()
 
             # Sleep to maintain 0.01s interval between messages
             time.sleep(0.01)
 
-    def reset_message_timer(self):
-        # Reset timeout when valid response is received
-        self.last_message_time = 0
 
     def return_sensor(self, priority):
         #Get the next index of the message in the selected priority group
@@ -292,6 +306,7 @@ class CANScheduler(threading.Thread):
 
         #Select sensor based on index
         sensor = sensors[index % len(sensors)]
+
 
         self.rotation[priority] = (index + 1) % len(sensors)
         return sensor
@@ -319,33 +334,33 @@ class CANScheduler(threading.Thread):
 #############################################################
 
 class CANListener(can.Listener):
-    def __init__(self, sensors_by_id, scheduler, logger):
+    def __init__(self, sensors_by_id, logger, events=None):
         self.logger = logger
-        self.scheduler = scheduler
         self.sensors_by_id = sensors_by_id
+        self.events = events or {}
 
     def on_message_received(self, msg):
         try:
-            if msg.arbitration_id in self.sensors_by_id:
+            for sensor in self.sensors_by_id.get(msg.arbitration_id, []):
                 data = list(msg.data)
                 if shared_state.verbose:
-                    message_hex = ' '.join(f'{byte:02X}' for byte in msg.data)
+                    message_hex = ' '.join(f'{byte:02X}' for byte in data)
                     #self.logger.debug(f'Parsing message: {message_hex}')
 
-                for sensor in self.sensors_by_id[msg.arbitration_id]:                    
-                    if (
-                        data[3] == sensor['message_bytes'][3] and  # match parameter0
-                        data[4] == sensor['message_bytes'][4]):    # match parameter1
+                if (
+                    data[3] == sensor['message_bytes'][3] and  # match parameter0
+                    data[4] == sensor['message_bytes'][4]):    # match parameter1
 
-                        value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
-                        
-                        converted_value = eval(sensor['scale'], {'value': value})
-                        shared_state.update_car_data(sensor['key'], float(converted_value))
+                    value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
 
-                        # Reset timer to allow next message
-                        self.scheduler.reset_message_timer()
+                    converted_value = eval(sensor['scale'], {'value': value})
+                    shared_state.update_car_data(sensor['key'], float(converted_value))
 
-                        return
+                    evt = self.events.get(sensor['rep_id'][0])
+                    if evt:
+                        evt.set()
+
+                    return
                     
         except Exception as e:
             self.logger.error(f'[CAN] CAN listener error: {e}')

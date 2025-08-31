@@ -55,7 +55,6 @@ class SharedState:
         self.rtiModule = False
         self.adcModule = False
 
-
         # store threads
         self.THREADS = {
             "server":   None,

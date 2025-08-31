@@ -87,24 +87,30 @@ const ScrollerContent = styled.div`
 const TopBar = () => {
   const theme = useTheme();
 
-  const topBarActive   = APP(state => state.settings.side_bars.topBar.value);
-  const topBarHeight   = APP(state => state.settings.side_bars.topBarHeight.value);
-  const colorTheme     = APP(state => state.settings.general.colorTheme.value.toLowerCase());
-  const dashSettings   = APP(state => state.settings.dash_topbar);
-  const view           = APP(state => state.system.view);
-  const content        = APP(state => state.system.interface.content);
-  const navBar         = APP(state => state.system.interface.navBar);
-  const phone          = APP(state => state.system.carplay.phone);
-  const wifiState      = APP(state => state.system.wifiState);
-  const modules        = APP(state => state.modules);
+  const topBarActive = APP(state => state.settings.side_bars.topBar.value);
+  const topBarHeight = APP(state => state.settings.side_bars.topBarHeight.value);
+  const colorTheme = APP(state => state.settings.general.colorTheme.value.toLowerCase());
+  const dashSettings = APP(state => state.settings.dash_topbar);
+  const view = APP(state => state.system.view);
+  const content = APP(state => state.system.interface.content);
+  const navBar = APP(state => state.system.interface.navBar);
+  const phone = APP(state => state.system.carplay.phone);
+  const wifiState = APP(state => state.system.wifiState);
+  const modules = APP(state => state.modules);
+  const data = DATA(state => state.data);
 
 
   const valueName = dashSettings.value.value;
   const valueType = dashSettings.value.type;
 
-  const valueID = modules[valueType]((state) => state.settings.sensors[valueName].app_id);
-  const valueData = DATA((state) => state.data[valueName]);
-  const valueLimit = modules[valueType]((state) => state.settings.sensors[valueName].limit_start);
+  const sensor =
+    valueType && valueName
+      ? modules[valueType]((state) => state.settings.sensors[valueName]) || {}
+      : {};
+
+  const valueID    = sensor.app_id ?? "err";      // fallback icon ID
+  const valueData  = data[valueName] ?? "N/A";   // fallback value
+  const valueLimit = sensor.limit_start ?? Infinity;
 
   const [time, setDate] = useState(new Date());
 
@@ -120,7 +126,7 @@ const TopBar = () => {
   );
 
   return (
-    <Topbar 
+    <Topbar
       isActive={
         topBarActive &&
         view === 'Carplay' &&
@@ -145,7 +151,9 @@ const TopBar = () => {
               inactiveColor={theme.colors.medium}
               glowColor={theme.colors.theme[colorTheme].default}
             >
+              {sensor.app_id && 
               <use xlinkHref={`/assets/svg/icons/data/${valueID}.svg#${valueID}`}></use>
+              }
             </CustomIcon>
             <Caption1>{valueData}</Caption1>
           </ScrollerContent>

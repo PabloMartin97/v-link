@@ -122,7 +122,7 @@ def copy_files(data):
 
         # Copy base + profile-specific configs
         copy_json_files(DEFAULT_CONFIG_DIR, USER_CONFIG_DIR)
-        if data is not "default":
+        if data != "default":
             copy_json_files(profile_config, USER_CONFIG_DIR)
 
 
@@ -130,12 +130,15 @@ def copy_files(data):
         try:
             app_settings = load_settings('app')
             modules = app_settings.get('constants', {}).get('modules', {})
+            profile = app_settings.get('constants', {}).get('profile', {})
 
             for module_file in USER_CONFIG_DIR.glob("*.json"):
                 name = module_file.stem  # e.g. "can" from "can.json"
                 if name != "app":  # don’t toggle app.json itself
                     modules[name] = True
-
+            
+            app_settings['constants']['profile'] = data
+            
             save_settings('app', app_settings)
         except Exception as e:
             logger.error(f'[Settings] Error loading app settings: {e}')
@@ -155,6 +158,6 @@ def load_modules():
     constants = settings.get('constants', {})
 
     shared_state.canModule = constants['modules']['can']
-    shared_state.swcModule = constants['modules']['can']
-    shared_state.rtiModule = constants['modules']['can']
-    shared_state.adcModule = constants['modules']['can']
+    shared_state.swcModule = constants['modules']['swc']
+    shared_state.rtiModule = constants['modules']['rti']
+    shared_state.adcModule = constants['modules']['adc']
