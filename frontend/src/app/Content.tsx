@@ -263,7 +263,7 @@ const Content = () => {
     <>
       {startedUp && (
         <>
-          <TopBar />
+          {/*<TopBar />*/}
           <NavBar isHovering={isHovering} swipeProgress={Math.min(swipeDistance / 100, 1)} />
           <MainContainer
             sidebarSettings={sidebarSettings}

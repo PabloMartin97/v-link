@@ -76,24 +76,22 @@ const LinearGauge = () => {
     const centerName = settings.gauge_3.value;
     const centerType = settings.gauge_3.type;
 
-    
+    // Helper to safely get sensor config
+    const getSensorConfig = (moduleSelector, sensorName) => {
+        if (!moduleSelector || !sensorName) return {};
+        const sensor = moduleSelector((state) => state.settings.sensors[sensorName]);
+        return (sensor && typeof sensor === 'object') ? sensor : {};
+    };
+
     // Get modules selector functions
     const progressModuleSelector = APP((state) => state.modules[progressType]);
     const topLeftModuleSelector = APP((state) => state.modules[topLeftType]);
     const centerModuleSelector = APP((state) => state.modules[centerType]);
 
-    // Use the selector functions to get sensor configs
-    const progressSensorConfig = progressModuleSelector?.((state) => 
-        state.settings.sensors[progressName]
-    ) ?? {};
-    
-    const topLeftSensorConfig = topLeftModuleSelector?.((state) => 
-        state.settings.sensors[topLeftName]
-    ) ?? {};
-    
-    const centerSensorConfig = centerModuleSelector?.((state) => 
-        state.settings.sensors[centerName]
-    ) ?? {};
+    // Use safe lookup
+    const progressSensorConfig = getSensorConfig(progressModuleSelector, progressName);
+    const topLeftSensorConfig = getSensorConfig(topLeftModuleSelector, topLeftName);
+    const centerSensorConfig = getSensorConfig(centerModuleSelector, centerName);
 
     // Memoize data extraction to avoid repeated calculations
     const gaugeData = useMemo(() => {
@@ -102,18 +100,18 @@ const LinearGauge = () => {
                 name: progressName,
                 type: progressType,
                 value: data[progressName] ?? 0,
-                unit: progressSensorConfig.unit ?? '',
+                unit: progressSensorConfig.unit ?? 'N/A',
                 maxValue: progressSensorConfig.max_value ?? 100,
                 limitStart: progressSensorConfig.limit_start ?? 80,
                 minValue: progressSensorConfig.min_value ?? 0,
             },
             topLeft: {
                 value: data[topLeftName] ?? 0,
-                unit: topLeftSensorConfig.unit ?? '',
+                unit: topLeftSensorConfig.unit ?? 'N/A',
             },
             center: {
                 value: data[centerName] ?? 0,
-                unit: centerSensorConfig.unit ?? '',
+                unit: centerSensorConfig.unit ?? 'N/A',
             }
         };
     }, [

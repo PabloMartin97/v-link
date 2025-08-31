@@ -267,7 +267,6 @@ class CANScheduler(threading.Thread):
 
                         # Send message
                         self.can_bus.send(msg)
-                        print(msg)
                         self.last_message_time = current_time
                         
                         #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')

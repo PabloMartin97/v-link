@@ -67,16 +67,20 @@ export const RadialGauge = ({
     const modules = APP((state) => state.modules);
     const theme = useTheme()
     const data = DATA((state) => state.data)    
-    let value = DATA((state) => state.data[sensor])
-
     // Load interface config based on type
     const store = modules[type];
-    const settings = store ? store((state) => state.settings.sensors[sensor]) : {};
-    const label = settings.label
+    // Use safe lookup for sensor settings
+    const settings = store
+        ? store((state) => state.settings.sensors[sensor]) || {}
+        : {};
+    
+    const label = settings.label ?? "N/A";
+    const maxValue = settings.max_value ?? 100;  // default max
+    const minValue = settings.min_value ?? 0;    // default min
+    const limitStart = settings.limit_start ?? 80;
+    const unit = settings.unit ?? "";
 
-    const maxValue = settings.max_value
-    const minValue = settings.min_value
-    const limitStart = settings.limit_start
+    let value = data[sensor] ?? minValue;
 
     const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
     // State variables for SVG content and rendering

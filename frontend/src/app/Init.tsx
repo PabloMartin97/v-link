@@ -136,6 +136,7 @@ const Init = () => {
 
         socket.sys.emit('systemTask', 'start');
         setVisible(false)
+        
         appUpdate((state) => {
             state.system.configLoaded = true;
         });
@@ -146,7 +147,7 @@ const Init = () => {
         // Checks whether .config/v-link/ exists
         // Returns either true or an object with selectable profiles.
         socket.log.emit('info', `Checking for existing config files...`);
-        socket.sys.emit('systemTask', 'checkProfile', (data) => {
+        socket.sys.emit('systemTask', 'check', (data) => {
             if (data === true) {
                 startApp();
             } else {
@@ -187,8 +188,8 @@ const Init = () => {
         };
 
 
-        socket.sys.emit('systemTask', 'loadProfile', vehicle, (data) => {
-            if (data.result) {
+        socket.sys.emit('systemTask', 'load', vehicle, (data) => {
+            if (data) {
                 startApp(true);
             } else {
                 socket.log.emit('error', 'Could not load profile. Exiting.')
@@ -270,8 +271,8 @@ const Init = () => {
                             <Button
                                 style={{ width: '25%' }}
                                 onClick={() =>
-                                    socket.sys.emit('systemTask', 'loadProfile', "Default", (data) => {
-                                        if (data.result) {
+                                    socket.sys.emit('systemTask', 'load', "default", (data) => {
+                                        if (data) {
                                             startApp(false);
                                         }
                                     })

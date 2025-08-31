@@ -34,7 +34,7 @@
       ]
     },
     "startPage": {
-      "value": "Dashboard",
+      "value": "Carplay",
       "label": "Startpage",
       "options": [
         "Dashboard",
@@ -117,8 +117,8 @@
     "title": "Classic Dash",
     "type": "data",
     "message_data": {
-      "type": "can",
-      "value": "boost",
+      "type": "",
+      "value": "",
       "label": "Sensor"
     },
     "message_option": {
@@ -139,36 +139,36 @@
     "message_text": {
       "type": "text",
       "label": "Message",
-      "value": "Boost above threshold!"
+      "value": "Warning!"
     },
     "gauge_1": {
-      "type": "can",
-      "value": "boost",
+      "type": "",
+      "value": "",
       "label": "Gauge 1"
     },
     "gauge_2": {
-      "type": "can",
-      "value": "speed",
+      "type": "",
+      "value": "",
       "label": "Gauge 2"
     },
     "gauge_3": {
-      "type": "can",
-      "value": "rpm",
+      "type": "",
+      "value": "",
       "label": "Gauge 3"
     },
     "gauge_4": {
-      "type": "can",
-      "value": "lambda1",
+      "type": "",
+      "value": "",
       "label": "Gauge 3"
     },
     "value_1": {
-      "type": "adc",
-      "value": "temperature",
+      "type": "",
+      "value": "",
       "label": "Bottom Left"
     },
     "value_2": {
-      "type": "adc",
-      "value": "pressure",
+      "type": "",
+      "value": "",
       "label": "Bottom Right"
     }
   },
@@ -176,48 +176,48 @@
     "title": "Race Dash",
     "type": "data",
     "gauge_1": {
-      "type": "can",
-      "value": "rpm",
+      "type": "",
+      "value": "",
       "label": "Progress Bar"
     },
     "gauge_2": {
-      "type": "can",
-      "value": "boost",
+      "type": "",
+      "value": "",
       "label": "Top Left"
     },
     "gauge_3": {
-      "type": "can",
-      "value": "speed",
+      "type": "",
+      "value": "",
       "label": "Center"
     },
     "value_1": {
-      "type": "can",
-      "value": "voltage",
+      "type": "",
+      "value": "",
       "label": "Value 1"
     },
     "value_2": {
-      "type": "can",
-      "value": "intake",
+      "type": "",
+      "value": "",
       "label": "Value 2"
     },
     "value_3": {
-      "type": "can",
-      "value": "coolant",
+      "type": "",
+      "value": "",
       "label": "Value 3"
     },
     "value_4": {
-      "type": "can",
-      "value": "speed",
+      "type": "",
+      "value": "",
       "label": "Value 4"
     },
     "value_5": {
-      "type": "can",
-      "value": "lambda1",
+      "type": "",
+      "value": "",
       "label": "Value 5"
     },
     "value_6": {
-      "type": "can",
-      "value": "lambda2",
+      "type": "",
+      "value": "",
       "label": "Value 6"
     }
   },
@@ -235,23 +235,23 @@
       "label": "Resolution (ms)"
     },
     "value_1": {
-      "type": "adc",
-      "value": "pressure",
+      "type": "",
+      "value": "",
       "label": "Value 1"
     },
     "value_2": {
-      "type": "adc",
-      "value": "temperature",
+      "type": "",
+      "value": "",
       "label": "Value 2"
     },
     "value_3": {
-      "type": "can",
-      "value": "coolant",
+      "type": "",
+      "value": "",
       "label": "Value 3"
     },
     "value_4": {
-      "type": "can",
-      "value": "rpm",
+      "type": "",
+      "value": "",
       "label": "Value 4"
     }
   },
@@ -259,8 +259,8 @@
     "title": "TopBar",
     "type": "data",
     "value": {
-      "type": "adc",
-      "value": "pressure",
+      "type": "",
+      "value": "",
       "label": "Value"
     }
   },

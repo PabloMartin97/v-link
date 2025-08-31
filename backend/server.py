@@ -192,14 +192,14 @@ class ServerThread(threading.Thread):
     # Handle system  tasks
     @socketio.on('systemTask', namespace='/sys')
     def handle_system_task(args, payload=None):
-        if   args == 'checkProfile':
+        if   args == 'check':
             logger.info(f'[Server] Check for existing profiles')
             # Checks whether .config/v-link/ exists
             # Returns either true or an object with selectable profiles.
             result = settings.check_settings()
             return result
         
-        elif args == 'loadProfile':
+        elif args == 'load':
             # Loads the profile which was selected through the frontend.
             if payload == "Default":
                 logger.info(f'[Server] Loading default profile')
@@ -208,6 +208,7 @@ class ServerThread(threading.Thread):
                 logger.info(f'[Server] Load Profile and copy settings')
                 result = settings.copy_files(payload)
             if result:
+                socketio.emit('settings', settings.load_settings('app'), namespace='/app')
                 return {'result': result}
             
         elif args == 'start':

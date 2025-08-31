@@ -95,10 +95,20 @@ const DataList = (dashPage, itemCount, columns) => {
             if (!isNaN(boxIndex)) {
                 const dataName = dashPage[`value_${boxIndex + 1}`].value;
                 const dataType = dashPage[`value_${boxIndex + 1}`].type;
-                const dataLabel = modules[dataType]((state) => state.settings.sensors[dataName].label);
-                const dataUnit = modules[dataType]((state) => state.settings.sensors[dataName].unit);
-                const dataLimit = modules[dataType]((state) => state.settings.sensors[dataName].limit_start);
-                const dataValue = data[dataName];
+
+                let sensor = {};
+
+                // safely fetch the sensor config
+                if (dataType != "") {
+                    sensor = modules[dataType](
+                        (state) => state.settings.sensors[dataName]
+                    ) || {};  // <- fallback to empty object if "" or undefined
+                }
+
+                const dataLabel = sensor.label ?? "N/A";
+                const dataUnit = sensor.unit ?? "";
+                const dataLimit = sensor.limit_start ?? Infinity;
+                const dataValue = data[dataName] ?? "N/A";
 
                 const valueBox = (
                     <Svg key={`value_${boxIndex + 1}`} viewBox={`0 0 ${theme.interaction.buttonWidth} 30`}>
@@ -116,8 +126,8 @@ const DataList = (dashPage, itemCount, columns) => {
                         <rect
                             x="0"
                             y="0"
-                            width= {`${theme.interaction.buttonWidth}px`}
-                            height= {`${theme.interaction.buttonHeight}px`}
+                            width={`${theme.interaction.buttonWidth}px`}
+                            height={`${theme.interaction.buttonHeight}px`}
                             rx="12"
                             ry="12"
                             fill="rgba(0, 0, 0, 0.2)"

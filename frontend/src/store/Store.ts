@@ -154,5 +154,12 @@ const DATA = create(
   }))
 );
 
+const modules = {
+  app: APP,
+  can: CAN,
+  swc: SWC,
+  adc: ADC,
+  rti: RTI,
+}
 
-export { APP, CAN, SWC, ADC, RTI, DATA };
+export { APP, CAN, SWC, ADC, RTI, DATA, modules };

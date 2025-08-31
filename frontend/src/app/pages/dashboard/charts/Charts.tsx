@@ -38,6 +38,7 @@ const Charts = () => {
 
     return (
         <Container>
+          {
             <Chart>
                 <DataChart
                     length={dashChartsSettings.length.value}
@@ -49,6 +50,7 @@ const Charts = () => {
                     color_yGrid={theme.colors.dark}
                 />
             </Chart>
+            }
             <List>
                 {Datalist}
             </List>

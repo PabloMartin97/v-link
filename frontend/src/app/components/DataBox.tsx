@@ -53,9 +53,12 @@ const Svg = styled.svg`
 const DataBox = () => {
     const theme = useTheme();
     const data = DATA((state) => state.data);
+    const modules = APP((state) => state.modules);
+
 
     const dash_classic = APP((state) => state.settings.dash_classic);
     const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+
 
     // Extract settings
     const leftName = dash_classic.value_1.value;
@@ -66,50 +69,45 @@ const DataBox = () => {
     const centerType = dash_classic.message_data.type;
 
 
-
-    // Get modules selector functions
-    const leftModuleSelector = APP((state) => state.modules[leftType]);
-    const rightModuleSelector = APP((state) => state.modules[rightType]);
-    const centerModuleSelector = APP((state) => state.modules[centerType]);
-
-    // Use the selector functions to get sensor configs
-    const leftSensorConfig = leftModuleSelector?.((state) =>
-        state.settings.sensors[leftName]
-    ) ?? {};
-    const rightSensorConfig = rightModuleSelector?.((state) =>
-        state.settings.sensors[rightName]
-    ) ?? {};
-    const centerSensorConfig = centerModuleSelector?.((state) =>
-        state.settings.sensors[centerName]
-    ) ?? {};
-
     const padding = 20;
     const containerRef = useRef<HTMLDivElement>(null);
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const { width, height } = dimensions;
+
+    const getSensorConfig = (modules, type, name) => {
+        if (!type) return {}; // empty type → return empty object
+        const selector = modules[type];
+        if (!selector) return {};
+        const sensor = selector((state) => state.settings.sensors[name]);
+        return sensor && typeof sensor === "object" ? sensor : {};
+    };
+
+    const leftSensorConfig = getSensorConfig(modules, leftType, leftName);
+    const rightSensorConfig = getSensorConfig(modules, rightType, rightName);
+    const centerSensorConfig = getSensorConfig(modules, centerType, centerName);
 
     // Memoize dashboard data
     const dashData = useMemo(() => {
         return {
             left: {
                 name: leftName,
-                data: data[leftName],
-                id: leftSensorConfig.app_id,
-                limit: leftSensorConfig.limit_start,
+                data: data[leftName] ?? "N/A",
+                id: leftSensorConfig.app_id ?? null,
+                limit: leftSensorConfig.limit_start ?? Infinity,
             },
             right: {
                 name: rightName,
-                data: data[rightName],
-                id: rightSensorConfig.app_id,
-                limit: rightSensorConfig.limit_start,
+                data: data[rightName] ?? "N/A",
+                id: rightSensorConfig.app_id ?? null,
+                limit: rightSensorConfig.limit_start ?? Infinity,
             },
             center: {
                 name: centerName,
-                data: data[centerName],
-                id: centerSensorConfig.app_id,
-                limit: dash_classic.message_threshold.value,
-                msg: dash_classic.message_text.value,
-                operator: dash_classic.message_option.value,
+                data: data[centerName] ?? "N/A",
+                id: centerSensorConfig.app_id ?? null,
+                limit: dash_classic.message_threshold.value ?? Infinity,
+                msg: dash_classic.message_text.value ?? "No Message",
+                operator: dash_classic.message_option.value ?? "=",
             },
         };
     }, [
@@ -124,7 +122,6 @@ const DataBox = () => {
         dash_classic.message_text.value,
         dash_classic.message_option.value,
     ]);
-
 
     const { customMsg, toggle } = useMemo(() => {
         const { data: centerData, limit, msg, operator } = dashData.center;
@@ -193,9 +190,11 @@ const DataBox = () => {
                     inactiveColor={themeColors.inactiveColor}
                     glowColor={themeColors.glowColor}
                 >
-                    <use
-                        xlinkHref={`/assets/svg/icons/data/${dashData.left.id}.svg#${dashData.left.id}`}
-                    />
+                    {dashData.left.id != null &&
+                        <use
+                            xlinkHref={`/assets/svg/icons/data/${dashData.left.id}.svg#${dashData.left.id}`}
+                        />
+                    }
                 </CustomIcon>
 
                 <CustomIcon
@@ -215,9 +214,11 @@ const DataBox = () => {
                     inactiveColor={themeColors.inactiveColor}
                     glowColor={themeColors.glowColor}
                 >
-                    <use
-                        xlinkHref={`/assets/svg/icons/data/${dashData.right.id}.svg#${dashData.right.id}`}
-                    />
+                    {dashData.right.id != null &&
+                        <use
+                            xlinkHref={`/assets/svg/icons/data/${dashData.right.id}.svg#${dashData.right.id}`}
+                        />
+                    }
                 </CustomIcon>
             </Icons>
 

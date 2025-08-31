@@ -10,6 +10,7 @@ import { APP } from '../../../store/Store';
 import { openModal } from '../../components/Modal';
 
 import { useNamespaces } from '../../../socket/Namespaces';
+import { current } from 'immer';
 const socket = useNamespaces();
 
 const Container = styled.div`
@@ -74,17 +75,17 @@ const Settings = () => {
   const Caption2 = Typography.Caption2
 
   /* Load Stores */
-  const modules       = APP((state) => state.modules)
-  const settings      = APP((state) => state.settings)
-  const appUpdate     = APP((state) => state.update)
-  const themeColor    = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+  const modules = APP((state) => state.modules)
+  const settings = APP((state) => state.settings)
+  const appUpdate = APP((state) => state.update)
+  const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
   const versionNumber = APP((state) => state.system.version);
-  const settingPage   = APP((state) => state.system.settingPage);
+  const settingPage = APP((state) => state.system.settingPage);
 
-  const rtiState      = APP((state) => state.system.rtiState);
-  const canState      = APP((state) => state.system.canState);
-  const adcState      = APP((state) => state.system.adcState);
-  const swcState      = APP((state) => state.system.swcState);
+  const rtiState = APP((state) => state.system.rtiState);
+  const canState = APP((state) => state.system.canState);
+  const adcState = APP((state) => state.system.adcState);
+  const swcState = APP((state) => state.system.swcState);
 
   const theme = useTheme();
 
@@ -95,12 +96,12 @@ const Settings = () => {
 
   /* Ping modules to get thread state */
   useEffect(() => {
-      
-      Object.keys(modules).forEach(module => {
-        if (socket[module]) {
-          socket[module].emit('ping');
-        }
-      });
+
+    Object.keys(modules).forEach(module => {
+      if (socket[module]) {
+        socket[module].emit('ping');
+      }
+    });
   }, [modules]);
 
   /* Reset container to top when settings are reset */
@@ -120,8 +121,9 @@ const Settings = () => {
   const dataStores = {}
   Object.entries(modules).map(([key, module]) => {
     const currentModule = module((state) => state);
-    if (currentModule.settings.type === 'data')
+    if (currentModule.settings.type && currentModule.settings.type === 'data') {
       Object.assign(dataStores, { [key]: currentModule.settings.sensors })
+    }
   });
 
   /* Add Settings */
@@ -195,7 +197,7 @@ const Settings = () => {
     } else {
 
       //console.log(key, name, targetSetting)
-      
+
       newSettings[key][name].value = targetSetting
     }
 
@@ -278,7 +280,7 @@ const Settings = () => {
     // NOTES: Settings are grouped into types
     // "System" Settings control the appearance and behaviour of the app. This is the main settings file.
     // "Data" Settings provide parameters for the app and certain system settings
-    // "Interface" Settings provide parameter for the behaviour of the interface modules RTI
+    // "Interface" Settings provide parameter for the behaviour of the interface modules
 
     // System Settings is grouped into different objects. e.g.:
     /*  {
@@ -307,20 +309,27 @@ const Settings = () => {
       let value, label;
       const dataOptions = {}
 
+      console.log(content)
       // Get current value
-      if (type === "data" && content.type != null && content.type != 'text') {             // Is the setting responsible for handling data and is a data type assigned?               
-        label = content.label
-        value = dataStores[content.type][content.value].label    // Read content from combined data store
-        Object.keys(dataStores).forEach((storeType) => {         // Dataoptions is mapping the sensor, e.g. "Boost" to the corresponding settingsfile, in this case "can"
-          Object.keys(dataStores[storeType]).forEach((key) => {
-            const label = dataStores[storeType][key].label       // YES? Grab label from combined data store
-            dataOptions[label] = storeType                       // YES? Grab data type from combined data store
-          });
-        });
+      if (content.value != "") {
+        if (type === "data" && content.type != null && content.type != 'text') {    // Is the setting responsible for handling data and is a data type assigned?               
+          label = content.label
+          value = dataStores[content.type][content.value].label                     // Read content from combined data store
+        } else {
+          label = content.label                                                     // NO?  Grab label from "system"-store
+          value = content.value                                                     // NO?  Grab value from "system"-store
+        }
       } else {
-        label = content.label                                    // NO?  Grab label from "system"-store
-        value = content.value                                    // NO?  Grab value from "system"-store
+        label = content.label
+        value = content.value
       }
+
+      Object.keys(dataStores).forEach((storeType) => {                          // Dataoptions is mapping the sensor, e.g. "Boost" to the corresponding settingsfile, in this case "can"
+        Object.keys(dataStores[storeType]).forEach((key) => {
+          const label = dataStores[storeType][key].label                        // YES? Grab label from combined data store
+          dataOptions[label] = storeType                                        // YES? Grab data type from combined data store
+        });
+      });
 
       // Get options
       //Check if value is a number or boolean
@@ -333,7 +342,7 @@ const Settings = () => {
         : (content.options || Object.keys(dataOptions).map((key) =>               //No?  Create dropdown from options
           key
         ))
-        
+
       //console.log(content.options, dataOptions)
       //console.log(dropdown)
 
@@ -417,6 +426,9 @@ const Settings = () => {
                 onChange={handleChange}
                 value={value}
               >
+                <option value="" disabled>
+                  Select Sensor
+                </option>
                 {dropdown.map((option) => (
                   <option key={option.value || option} value={option.value || option}>
                     {option.label || option}
@@ -495,6 +507,10 @@ const Settings = () => {
             {renderSetting("shutdown", currentSettings)}
             {renderSetting("side_bars", currentSettings)}
 
+            <Element>
+              <Title>Toggle Modules</Title>
+            </Element>
+            
             <Element>
               <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
               <Divider />

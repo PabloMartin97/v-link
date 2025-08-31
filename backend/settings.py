@@ -103,7 +103,7 @@ def copy_files(data):
         logger.info(f'[Settings] Copying files to user config directory...')
         # Copy base + profile-specific config files into user config directory.
 
-        if data == "Default":
+        if data == "default":
             profile_config = DEFAULT_CONFIG_DIR / 'profiles' / 'Default'
 
         else:
@@ -122,52 +122,39 @@ def copy_files(data):
 
         # Copy base + profile-specific configs
         copy_json_files(DEFAULT_CONFIG_DIR, USER_CONFIG_DIR)
-        copy_json_files(profile_config, USER_CONFIG_DIR)
+        if data is not "default":
+            copy_json_files(profile_config, USER_CONFIG_DIR)
 
-        # Modify app.json after copying
-        app_json_path = USER_CONFIG_DIR / 'app.json'
-        
-        with app_json_path.open('r', encoding='utf-8') as f:
-            config = json.load(f)
 
-        constants = config.get('constants', {})
-        constants['profile'] = data
-        config['constants'] = constants
+        # Set modules states in app based on available config files
+        try:
+            app_settings = load_settings('app')
+            modules = app_settings.get('constants', {}).get('modules', {})
 
-        # If a _profile.json exists, load its modules and override
-        profile_json_path = USER_CONFIG_DIR / '_profile.json'
-        if profile_json_path.exists():
-            try:
-                with profile_json_path.open('r', encoding='utf-8') as pf:
-                    profile_data = json.load(pf)
+            for module_file in USER_CONFIG_DIR.glob("*.json"):
+                name = module_file.stem  # e.g. "can" from "can.json"
+                if name != "app":  # don’t toggle app.json itself
+                    modules[name] = True
 
-                modules = profile_data.get('modules', {})
-                if modules:
-                    constants['modules'] = modules
-                    logger.info(f"[Settings] Merged modules from _profile.json into app.json")
-            except Exception as e:
-                logger.error(f"[Settings] Error merging _profile.json: {e}")
-                shared_state.exit_event.set()
-
-        with app_json_path.open('w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2)
-            f.write('\n')  # ensure trailing newline
+            save_settings('app', app_settings)
+        except Exception as e:
+            logger.error(f'[Settings] Error loading app settings: {e}')
+            shared_state.exit_event.set()
+            return False
         
         load_modules()
         return True
+    
     except Exception as e:
         logger.error(f'[Settings] Error copying files: {e}')
         return False
     
-# Setting a shared_state based on _profile.json
+# Setting a shared_state based on app.json
 def load_modules():
-    app_json_path = USER_CONFIG_DIR / 'app.json'
-    if app_json_path.exists():
-        with app_json_path.open('r', encoding='utf-8') as f:
-            config = json.load(f)
-        constants = config.get('constants', {})
+    settings = load_settings('app')
+    constants = settings.get('constants', {})
 
-        shared_state.canModule = constants['modules']['can']
-        shared_state.swcModule = constants['modules']['can']
-        shared_state.rtiModule = constants['modules']['can']
-        shared_state.adcModule = constants['modules']['can']
+    shared_state.canModule = constants['modules']['can']
+    shared_state.swcModule = constants['modules']['can']
+    shared_state.rtiModule = constants['modules']['can']
+    shared_state.adcModule = constants['modules']['can']

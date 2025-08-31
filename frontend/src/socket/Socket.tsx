@@ -1,23 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { APP, CAN, SWC, ADC, RTI } from '../store/Store';
+import { APP, modules } from '../store/Store';
 import { useNamespaces } from './Namespaces';
 
-// Define modules so the individual stores can be referenced in the app state
-const modules = {
-  app: APP,
-  can: CAN,
-  swc: SWC,
-  adc: ADC,
-  rti: RTI
-};
-
 export const Socket = () => {
-  // Initialize all Zustand stores and map them to module names
-  const store = Object.fromEntries(
-    Object.entries(modules).map(([key, useStore]) => [key, useStore()])
-  );
-
-  const totalModules = Object.keys(modules).length;
+  const [appConfigLoaded, setAppConfigLoaded] = useState(false);
+  const [activeModules, setActiveModules] = useState({});
   const [loadedModules, setLoadedModules] = useState(0);
   const loadedModuleSet = useRef(new Set());
   const listenersSetup = useRef(false);
@@ -25,63 +12,111 @@ export const Socket = () => {
   // Get sockets using the global function
   const socket = useNamespaces();
 
-  /* Initialize App */
-  useEffect(() => {
-    if (!store['app'].system.configLoaded) return;
-    if (loadedModules === totalModules) {
-      socket.log.emit('info', `Frontend ready.`);
+  // Initialize all Zustand stores (we'll filter active ones later)
+  const allStores = Object.fromEntries(
+    Object.entries(modules).map(([key, useStore]) => [key, useStore()])
+  );
 
-      store['app'].update((state) => {
-        state.modules = modules;
-        state.system.startedUp = true;
-        state.system.view = state.settings.general.startPage.value;
-      });
-    }
-  }, [loadedModules, store['app'].system.configLoaded]);
+  // Reusable event handlers
+  const handleSettings = (module) => (data) => {
+            console.log(data)
 
-  /* Setup Socket Listeners and Handle Connections */
-  useEffect(() => {
-    if (!store['app'].system.configLoaded) return;
+    if (data) {
+      if (module === 'app') {
+        // Special handling for app settings to determine active modules
+        setAppConfigLoaded(true);
+        
+        // Determine which modules should be active based on app config
+        const moduleConfig = data.constants?.modules || {};
 
-    // Event handlers
-    const handleSettings = (module) => (data) => {
-      loadedModuleSet.current.add(module);
-      setLoadedModules(loadedModuleSet.current.size);
-      store[module].update((state) => {
+        console.log(module)
+        const modulesToActivate = { app: APP }; // Always include app
+        
+        Object.entries(moduleConfig).forEach(([moduleName, isEnabled]) => {
+          if (isEnabled && modules[moduleName]) {
+            modulesToActivate[moduleName] = modules[moduleName];
+          }
+        });
+        
+        setActiveModules(modulesToActivate);
+      }
+
+      // Only count as loaded if this module is supposed to be active
+      if (module === 'app' || (activeModules[module])) {
+        loadedModuleSet.current.add(module);
+        setLoadedModules(loadedModuleSet.current.size);
+      }
+
+      allStores[module].update((state) => {
         state.settings = data;
       });
+    }
+  };
+
+  const handleIgnition = (ignStatus) => {
+    allStores['app'].update((state) => {
+      state.system.ignState = ignStatus;
+    });
+  };
+
+  const handleState = (module) => (data) => {
+    allStores['app'].update((state) => {
+      state.system[`${module}State`] = data;
+    });
+  };
+
+  const handleConnect = (socketName) => () => {
+    socket.log.emit('info', `${socketName} socket connected`);
+  };
+
+  const handleDisconnect = (socketName) => (reason) => {
+    socket.log.emit('info', `${socketName} socket disconnected: ${reason}`);
+  };
+
+  const handleError = (socketName) => (error) => {
+    socket.log.emit('error', `${socketName} socket connection error: ${error}`);
+  };
+
+  /* Step 1: Load App Settings First */
+  useEffect(() => {
+    if (!socket.app || listenersSetup.current) return;
+
+    // Setup app-specific listeners first
+    const setupAppListeners = () => {
+      socket.app.on('settings', handleSettings('app'));
+      socket.app.on('connect', handleConnect('app'));
+      socket.app.on('disconnect', handleDisconnect('app'));
+      socket.app.on('connect_error', handleError('app'));
+
+      // Request app settings
+      socket.app.emit('ping');
+      socket.app.emit('load');
     };
 
-    const handleIgnition = (ignStatus) => {
-      store['app'].update((state) => {
-        state.system.ignState = ignStatus;
-      });
+    setupAppListeners();
+    listenersSetup.current = true;
+
+    // Cleanup function for app listeners
+    return () => {
+      if (socket.app) {
+        socket.app.off('settings', handleSettings('app'));
+        socket.app.off('connect', handleConnect('app'));
+        socket.app.off('disconnect', handleDisconnect('app'));
+        socket.app.off('connect_error', handleError('app'));
+      }
     };
+  }, [socket.app]);
 
-    const handleState = (module) => (data) => {
-      store['app'].update((state) => {
-        state.system[`${module}State`] = data;
-      });
-    };
+  /* Step 2: Setup Other Module Listeners Based on App Config */
+  useEffect(() => {
+    if (!appConfigLoaded || Object.keys(activeModules).length === 0) return;
 
-    const handleConnect = (socketName) => () => {
-      socket.log.emit('info', `${socketName} socket connected`);
-    };
-
-    const handleDisconnect = (socketName) => (reason) => {
-      socket.log.emit('info', `${socketName} socket disconnected: ${reason}`);
-    };
-
-    const handleError = (socketName) => (error) => {
-      socket.log.emit('error', `${socketName} socket connection error: ${error}`);
-    };
-
-    // Setup all listeners
-    const setupAllListeners = () => {
-      if (listenersSetup.current) return;
-
-      // Setup module listeners
-      Object.keys(modules).forEach(module => {
+    const setupModuleListeners = () => {
+      console.log(activeModules)
+      // Setup listeners for all active modules (except app, which is already set up)
+      Object.keys(activeModules).forEach(module => {
+        if (module === 'app') return; // Skip app as it's already set up
+        
         if (socket[module]) {
           // Data listeners
           socket[module].on('state', handleState(module));
@@ -114,23 +149,20 @@ export const Socket = () => {
         socket.log.on('disconnect', handleDisconnect('log'));
         socket.log.on('connect_error', handleError('log'));
       }
-
-      listenersSetup.current = true;
     };
 
-    // Setup listeners immediately
-    setupAllListeners();
+    setupModuleListeners();
 
-    // Cleanup function
+    // Cleanup function for module listeners
     return () => {
-      Object.keys(modules).forEach(module => {
-        if (socket[module]) {
-          socket[module].off('settings', handleSettings(module));
-          socket[module].off('state', handleState(module));
-          socket[module].off('connect', handleConnect(module));
-          socket[module].off('disconnect', handleDisconnect(module));
-          socket[module].off('connect_error', handleError(module));
-        }
+      Object.keys(activeModules).forEach(module => {
+        if (module === 'app' || !socket[module]) return;
+        
+        socket[module].off('settings', handleSettings(module));
+        socket[module].off('state', handleState(module));
+        socket[module].off('connect', handleConnect(module));
+        socket[module].off('disconnect', handleDisconnect(module));
+        socket[module].off('connect_error', handleError(module));
       });
       
       if (socket.sys) {
@@ -145,10 +177,25 @@ export const Socket = () => {
         socket.log.off('disconnect', handleDisconnect('log'));
         socket.log.off('connect_error', handleError('log'));
       }
-
-      listenersSetup.current = false;
     };
-  }, [store['app'].system.configLoaded, socket]);
+  }, [appConfigLoaded, activeModules, socket]);
+
+  /* Step 3: Initialize App When All Active Modules Are Loaded */
+  useEffect(() => {
+    if (!appConfigLoaded) return;
+    
+    const totalActiveModules = Object.keys(activeModules).length;
+    
+    if (loadedModules === totalActiveModules) {
+      socket.log.emit('info', `Frontend ready with ${totalActiveModules} active modules.`);
+
+      allStores['app'].update((state) => {
+        state.modules = activeModules; // Use only active modules
+        state.system.startedUp = true;
+        state.system.view = state.settings.general.startPage.value;
+      });
+    }
+  }, [loadedModules, appConfigLoaded, activeModules]);
 
   return null;
 };
