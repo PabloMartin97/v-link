@@ -65,6 +65,8 @@ from backend.threads.ign         import IGNThread
 from backend.threads.swc         import SWCThread
 
 
+from backend.reverse             import REVERSEThread
+
 from backend.logger import logger
 
 from backend.shared.shared_state import shared_state
@@ -86,6 +88,7 @@ class VLINK:
             'rti':      RTIThread,
             'ign':      IGNThread,
             'swc':      SWCThread,
+            'reverse':  REVERSEThread,
           
             'vcan':     VCANThread,
         }
@@ -133,6 +136,9 @@ class VLINK:
         if shared_state.vCan:
             self.start_thread('vcan', logger)
             time.sleep(.05)
+
+        self.start_thread('reverse', logger)
+        time.sleep(.05)
 
         if shared_state.pimost:
             self.start_thread('mst', logger)
@@ -227,6 +233,10 @@ class VLINK:
         if shared_state.toggle_ign.is_set():
             self.toggle_thread('ign')
             shared_state.toggle_ign.clear()
+        
+        if shared_state.toggle_reverse.is_set():
+            self.toggle_thread('reverse')
+            shared_state.toggle_reverse.clear()
 
         if shared_state.toggle_swc.is_set():
             self.toggle_thread('swc')
@@ -332,7 +342,8 @@ def display_thread_states():
     print('')
     print('Thread states:')
 
-    thread_names = ['Server', 'App', 'CAN', 'SWC', 'ADC', 'RTI', 'VCAN']
+    thread_names = ['Server', 'App', 'CAN', 'SWC', 'ADC', 'RTI', 'VCAN', 'REVERSE']
+    
     thread_states = [
         shared_state.THREADS.get(name.lower(), None).is_alive() if shared_state.THREADS.get(name.lower()) else False
         for name in thread_names

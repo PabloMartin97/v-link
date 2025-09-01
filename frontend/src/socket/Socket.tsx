@@ -1,6 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import { APP, modules } from '../store/Store';
 import { useNamespaces } from './Namespaces';
+import { scryptSync } from 'crypto';
+
+
+const socket = useNamespaces
+
+// System channel (ignition, reverse,  etc.)
+// LOG de sanity: ver TODO lo que llega por /sys
+//sysChannel.onAny((event, ...args) => console.log('[SYS]', event, ...args));
+
+// (opcional) log específico del evento reverse
+//socket.sys.on('reverse', (v: boolean) => console.log('[SYS reverse]', v));
+
+// Specific channel to handle rearcam power (energía GPIO + estado)
+const rearcamChannel = socket.can;
+
+// Helpers for Rearcam
+export const rearcam = {
+  mount: () => socket.cam.emit('mount'),
+  unmount: () => socket.cam.emit('unmount'),
+  status: () => socket.cam.emit('status'),
+};
 
 export const Socket = () => {
   const [appConfigLoaded, setAppConfigLoaded] = useState(false);
@@ -15,7 +36,7 @@ export const Socket = () => {
   // Initialize all Zustand stores (we'll filter active ones later)
   const allStores = Object.fromEntries(
     Object.entries(modules).map(([key, useStore]) => [key, useStore()])
-  );
+  ) as Record<string, ReturnType<typeof APP>>;
 
   // Reusable event handlers
   const handleSettings = (module) => (data) => {
@@ -75,6 +96,27 @@ export const Socket = () => {
 
   const handleError = (socketName) => (error) => {
     socket.log.emit('error', `${socketName} socket connection error: ${error}`);
+  };
+
+
+  const handleReverse = () => (reverseStatus: boolean) => {
+    console.log('Reverse: ', reverseStatus);
+    store['app'].update((state: any) => {
+      state.system.reverse = reverseStatus;
+    });
+  };
+  
+  const handleRearcamCameraStatus = (payload: { on: boolean; error?: string }) => {
+    store['app'].update((state: any) => {
+      state.system.rearcam = !!payload.on;
+      state.system.rearcamError = payload.error || null;
+    });
+  };
+
+  const handleRearcamState = (on: boolean) => {
+    store['app'].update((state: any) => {
+      state.system.rearcam = !!on;
+    });
   };
 
   /* Step 1: Load App Settings First */
@@ -149,6 +191,14 @@ export const Socket = () => {
         socket.log.on('disconnect', handleDisconnect('log'));
         socket.log.on('connect_error', handleError('log'));
       }
+
+      // Setup cam socket listeners if it exists
+      if (socket.cam) {
+        socket.cam.on('camera/status', handleRearcamCameraStatus);
+        socket.cam.on('state', handleRearcamState);
+
+        socket.cam.emit('status');
+      }
     };
 
     setupModuleListeners();
@@ -177,6 +227,11 @@ export const Socket = () => {
         socket.log.off('disconnect', handleDisconnect('log'));
         socket.log.off('connect_error', handleError('log'));
       }
+
+      if (socket.cam) {
+        socket.cam.off('camera/status', handleRearcamCameraStatus);
+        socket.cam.off('state', handleRearcamState);
+      }
     };
   }, [appConfigLoaded, activeModules, socket]);
 
@@ -192,7 +247,7 @@ export const Socket = () => {
       allStores['app'].update((state) => {
         state.modules = activeModules; // Use only active modules
         state.system.startedUp = true;
-        state.system.view = state.settings.general.startPage.value;
+        state.system.view = state.settings?.general?.startPage?.value ?? state.system.view ?? '/';
       });
     }
   }, [loadedModules, appConfigLoaded, activeModules]);
