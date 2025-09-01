@@ -6,10 +6,12 @@ import { APP } from '../store/Store';
 
 import Dashboard from './pages/dashboard/Dashboard';
 import Carplay from './pages/carplay/Carplay';
+import Rearcam from './pages/rearcam/Rearcam';
 import Settings from './pages/settings/Settings';
 import NavBar from '../app/sidebars/NavBar';
 import SideBar from '../app/sidebars/SideBar';
 import TopBar from '../app/sidebars/TopBar';
+import { io } from "socket.io-client";
 
 const MainContainer = styled.div`
   position: absolute;
@@ -39,7 +41,6 @@ const Card = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: center;
-
   overflow: hidden;
 
   animation: ${({ theme, currentView, carplayVisible, minHeight, maxHeight, collapseLength, stream }) => {
@@ -74,13 +75,10 @@ const Card = styled.div`
 const Page = styled.div`
   position: relative;  
   flex: 1;
-
   display: flex;
   flex-direction: column;
-  
   border-radius: 7px;
   background: ${({ theme }) => theme.colors.gradients.gradient1};
-
   overflow: hidden;
 `;
 
@@ -90,19 +88,17 @@ const NavBlocker = styled.div`
     isActive
       ? `${sidebarSettings.navBarHeight.value - contentPadding}px`
       : '0'};
-
   animation: ${({ theme, isActive, collapseLength, minHeight, maxHeight }) => css`
     ${isActive
       ? theme.animations.getVerticalExpand(minHeight, maxHeight)
       : theme.animations.getVerticalCollapse(minHeight, maxHeight)} ${collapseLength}s ease-in-out forwards;
   `};
-
   background: none;
   transition: height 0.3s ease-in-out;
 `;
 
 const Content = () => {
-  const viewMap = { Dashboard, Carplay, Settings };
+  const viewMap = { Dashboard, Carplay, Rearcam, Settings };
 
   const appUpdate         = APP((state) => state.update);
   const keyStroke         = APP((state) => state.keyStroke);
@@ -115,6 +111,7 @@ const Content = () => {
   const appBindings       = APP((state) => state.settings.app_bindings);
   const contentPadding    = APP((state) => state.settings.general.contentPadding.value);
   const view              = APP((state) => state.system.view);
+  const reverse           = APP((state) => state.system.reverse);
 
   const theme = useTheme();
 
@@ -132,6 +129,68 @@ const Content = () => {
   const [isHovering, setIsHovering] = useState(false);
   const timerRef = useRef(null);
 
+  // Reverse refs + timer (to exit from rearcam)
+  const previousView = useRef(null);
+  const reverseNavigated = useRef(false);
+  const exitTimerRef = useRef(null);
+
+  /* Socket connection for reverse camera */
+  useEffect(() => {
+    const sysChannel = io("ws://localhost:4001/sys", { transports: ["websocket"] });
+
+    const onReverse = (active) => {
+      console.log("[SYS] reverse (frontend)", active);
+      appUpdate((state) => {
+        state.system.reverse = active;
+      });
+    };
+
+    sysChannel.on("reverse", onReverse);
+
+    return () => {
+      sysChannel.off("reverse", onReverse);
+      sysChannel.close();
+    };
+  }, [appUpdate]);
+
+  /* Reverse camera logic */
+  useEffect(() => {
+    // Open reverse: cancel timer and show reverse 
+    if (reverse) {
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+      if (view !== 'Rearcam') {
+        previousView.current = view;
+        reverseNavigated.current = true;
+        appUpdate((state) => {
+          state.system.view = 'Rearcam';
+        });
+      }
+      return;
+    }
+
+    // Exit: wait before return
+    if (view === 'Rearcam' && reverseNavigated.current && exitTimerRef.current === null) {
+      exitTimerRef.current = window.setTimeout(() => {
+        appUpdate((state) => {
+          state.system.view = previousView.current || 'Dashboard';
+        });
+        reverseNavigated.current = false;
+        previousView.current = null;
+        exitTimerRef.current = null;
+      }, 7000); // REAR TIMER!!! IN ms
+    }
+
+    return () => {
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, [reverse, view, appUpdate]);
+
   /* Handle view changes and fade */
   useEffect(() => {
     if (view === 'Carplay' && interfaceSettings.carplay) {
@@ -144,7 +203,21 @@ const Content = () => {
           state.system.interface.navBar = false;
         });
       }, fadeLength);
-    } else if (view === currentView && !interfaceSettings.carplay) {
+      return;
+    }
+
+    // FAST-PATH for RearCamera, instant change
+    if (view === 'Rearcam' && currentView !== 'Rearcam') {
+      setCurrentView('Rearcam');
+      setFadePage('fade-in');
+      appUpdate((state) => {
+        state.system.interface.content = true;
+        state.system.interface.navBar = true;
+      });
+      return;
+    }
+
+    if (view === currentView && !interfaceSettings.carplay) {
       setFadePage('fade-in');
       appUpdate((state) => {
         state.system.interface.content = true;
@@ -161,7 +234,7 @@ const Content = () => {
         });
       }, fadeLength);
     }
-  }, [view, interfaceSettings.carplay]);
+  }, [view, interfaceSettings.carplay, currentView, appUpdate, fadeLength]);
 
   /* Carplay connection effect */
   useEffect(() => {
@@ -170,7 +243,7 @@ const Content = () => {
     } else {
       appUpdate((state) => { state.system.interface.carplay = false; });
     }
-  }, [carplaySettings]);
+  }, [carplaySettings, appUpdate]);
 
   /* Auto-hide NavBar */
   useEffect(() => {
@@ -188,7 +261,7 @@ const Content = () => {
     }
 
     return () => { clearTimeout(timerRef.current); };
-  }, [view, interfaceSettings.navBar]);
+  }, [view, interfaceSettings.navBar, appUpdate]);
 
   /* Swipe detection handlers */
   const handlePointerDown = (event) => {
@@ -228,11 +301,15 @@ const Content = () => {
       setIsHovering(event.clientY > window.innerHeight * (deadZone / 100));
     };
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
   }, []);
 
   const renderView = () => {
-    const Component = viewMap[currentView];
+    const key = viewMap[currentView] ? currentView : 'Dashboard';
+    const Component = viewMap[key];
     if (!Component) {
       console.error(`Component for view "${currentView}" is undefined.`);
       return null;
@@ -244,7 +321,7 @@ const Content = () => {
     appUpdate((state) => {
       state.system.switch = appBindings.switch.value;
     });
-  }, [appBindings.switch]);
+  }, [appBindings.switch, appUpdate]);
 
   const cycleView = () => {
     const viewKeys = Object.keys(viewMap);
@@ -257,7 +334,7 @@ const Content = () => {
   useEffect(() => {
     if ( !pauseKeyBinds && keyStroke === switchPage )
       cycleView();
-  }, [keyStroke]);
+  }, [keyStroke, pauseKeyBinds, switchPage]);
 
   return (
     <>

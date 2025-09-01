@@ -1,0 +1,326 @@
+=== Boot Diagnostics Log: 2025-09-01T17:16:36.748058 ===
+
+
+--- Uptime ---
+17:16:36 up 2 min,  2 users,  load average: 5,64, 1,84, 0,66
+
+--- Kernel Version ---
+Linux raspberrypi 6.12.34+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.34-1+rpt1~bookworm (2025-06-26) aarch64 GNU/Linux
+
+--- GPIO Summary ---
+gpiochip0 - 58 lines:
+	line   0:     "ID_SDA"       unused   input  active-high 
+	line   1:     "ID_SCL"       unused   input  active-high 
+	line   2:      "GPIO2"       unused   input  active-high 
+	line   3:      "GPIO3"       unused   input  active-high 
+	line   4:      "GPIO4"       unused   input  active-high 
+	line   5:      "GPIO5"       unused   input  active-high 
+	line   6:      "GPIO6"       unused   input  active-high 
+	line   7:      "GPIO7"       unused   input  active-high 
+	line   8:      "GPIO8"       unused   input  active-high 
+	line   9:      "GPIO9"       unused   input  active-high 
+	line  10:     "GPIO10"       unused   input  active-high 
+	line  11:     "GPIO11"       unused   input  active-high 
+	line  12:     "GPIO12"       unused   input  active-high 
+	line  13:     "GPIO13"       unused   input  active-high 
+	line  14:     "GPIO14"       unused   input  active-high 
+	line  15:     "GPIO15"       unused   input  active-high 
+	line  16:     "GPIO16"       unused   input  active-high 
+	line  17:     "GPIO17"       unused   input  active-high 
+	line  18:     "GPIO18"       unused   input  active-high 
+	line  19:     "GPIO19"       unused   input  active-high 
+	line  20:     "GPIO20"       unused   input  active-high 
+	line  21:     "GPIO21"       unused   input  active-high 
+	line  22:     "GPIO22"       unused   input  active-high 
+	line  23:     "GPIO23"       unused   input  active-high 
+	line  24:     "GPIO24"       unused   input  active-high 
+	line  25:     "GPIO25"       unused   input  active-high 
+	line  26:     "GPIO26"       unused   input  active-high 
+	line  27:     "GPIO27"       unused   input  active-high 
+	line  28: "RGMII_MDIO"       unused   input  active-high 
+	line  29:  "RGMIO_MDC"       unused   input  active-high 
+	line  30:       "CTS0"       unused   input  active-high 
+	line  31:       "RTS0"       unused   input  active-high 
+	line  32:       "TXD0"       unused   input  active-high 
+	line  33:       "RXD0"       unused   input  active-high 
+	line  34:    "SD1_CLK"       unused   input  active-high 
+	line  35:    "SD1_CMD"       unused   input  active-high 
+	line  36:  "SD1_DATA0"       unused   input  active-high 
+	line  37:  "SD1_DATA1"       unused   input  active-high 
+	line  38:  "SD1_DATA2"       unused   input  active-high 
+	line  39:  "SD1_DATA3"       unused   input  active-high 
+	line  40:  "PWM0_MISO"       unused   input  active-high 
+	line  41:  "PWM1_MOSI"       unused   input  active-high 
+	line  42: "STATUS_LED_G_CLK" "ACT" output active-high [used]
+	line  43: "SPIFLASH_CE_N" unused input active-high 
+	line  44:       "SDA0"       unused   input  active-high 
+	line  45:       "SCL0"       unused   input  active-high 
+	line  46: "RGMII_RXCLK" unused input active-high 
+	line  47: "RGMII_RXCTL" unused input active-high 
+	line  48: "RGMII_RXD0"       unused   input  active-high 
+	line  49: "RGMII_RXD1"       unused   input  active-high 
+	line  50: "RGMII_RXD2"       unused   input  active-high 
+	line  51: "RGMII_RXD3"       unused   input  active-high 
+	line  52: "RGMII_TXCLK" unused input active-high 
+	line  53: "RGMII_TXCTL" unused input active-high 
+	line  54: "RGMII_TXD0"       unused   input  active-high 
+	line  55: "RGMII_TXD1"       unused   input  active-high 
+	line  56: "RGMII_TXD2"       unused   input  active-high 
+	line  57: "RGMII_TXD3"       unused   input  active-high 
+gpiochip1 - 8 lines:
+	line   0:      "BT_ON"   "shutdown"  output  active-high [used]
+	line   1:      "WL_ON"       unused  output  active-high 
+	line   2: "PWR_LED_OFF" "PWR" output active-low [used]
+	line   3: "GLOBAL_RESET" unused output active-high 
+	line   4: "VDD_SD_IO_SEL" "vdd-sd-io" output active-high [used]
+	line   5:   "CAM_GPIO" "regulator-cam1" output active-high [used]
+	line   6:  "SD_PWR_ON" "regulator-sd-vcc" output active-high [used]
+	line   7:    "SD_OC_N"       unused   input  active-high 
+gpiochip0 - 58 lines:
+	line   0:     "ID_SDA"       unused   input  active-high 
+	line   1:     "ID_SCL"       unused   input  active-high 
+	line   2:      "GPIO2"       unused   input  active-high 
+	line   3:      "GPIO3"       unused   input  active-high 
+	line   4:      "GPIO4"       unused   input  active-high 
+	line   5:      "GPIO5"       unused   input  active-high 
+	line   6:      "GPIO6"       unused   input  active-high 
+	line   7:      "GPIO7"       unused   input  active-high 
+	line   8:      "GPIO8"       unused   input  active-high 
+	line   9:      "GPIO9"       unused   input  active-high 
+	line  10:     "GPIO10"       unused   input  active-high 
+	line  11:     "GPIO11"       unused   input  active-high 
+	line  12:     "GPIO12"       unused   input  active-high 
+	line  13:     "GPIO13"       unused   input  active-high 
+	line  14:     "GPIO14"       unused   input  active-high 
+	line  15:     "GPIO15"       unused   input  active-high 
+	line  16:     "GPIO16"       unused   input  active-high 
+	line  17:     "GPIO17"       unused   input  active-high 
+	line  18:     "GPIO18"       unused   input  active-high 
+	line  19:     "GPIO19"       unused   input  active-high 
+	line  20:     "GPIO20"       unused   input  active-high 
+	line  21:     "GPIO21"       unused   input  active-high 
+	line  22:     "GPIO22"       unused   input  active-high 
+	line  23:     "GPIO23"       unused   input  active-high 
+	line  24:     "GPIO24"       unused   input  active-high 
+	line  25:     "GPIO25"       unused   input  active-high 
+	line  26:     "GPIO26"       unused   input  active-high 
+	line  27:     "GPIO27"       unused   input  active-high 
+	line  28: "RGMII_MDIO"       unused   input  active-high 
+	line  29:  "RGMIO_MDC"       unused   input  active-high 
+	line  30:       "CTS0"       unused   input  active-high 
+	line  31:       "RTS0"       unused   input  active-high 
+	line  32:       "TXD0"       unused   input  active-high 
+	line  33:       "RXD0"       unused   input  active-high 
+	line  34:    "SD1_CLK"       unused   input  active-high 
+	line  35:    "SD1_CMD"       unused   input  active-high 
+	line  36:  "SD1_DATA0"       unused   input  active-high 
+	line  37:  "SD1_DATA1"       unused   input  active-high 
+	line  38:  "SD1_DATA2"       unused   input  active-high 
+	line  39:  "SD1_DATA3"       unused   input  active-high 
+	line  40:  "PWM0_MISO"       unused   input  active-high 
+	line  41:  "PWM1_MOSI"       unused   input  active-high 
+	line  42: "STATUS_LED_G_CLK" "ACT" output active-high [used]
+	line  43: "SPIFLASH_CE_N" unused input active-high 
+	line  44:       "SDA0"       unused   input  active-high 
+	line  45:       "SCL0"       unused   input  active-high 
+	line  46: "RGMII_RXCLK" unused input active-high 
+	line  47: "RGMII_RXCTL" unused input active-high 
+	line  48: "RGMII_RXD0"       unused   input  active-high 
+	line  49: "RGMII_RXD1"       unused   input  active-high 
+	line  50: "RGMII_RXD2"       unused   input  active-high 
+	line  51: "RGMII_RXD3"       unused   input  active-high 
+	line  52: "RGMII_TXCLK" unused input active-high 
+	line  53: "RGMII_TXCTL" unused input active-high 
+	line  54: "RGMII_TXD0"       unused   input  active-high 
+	line  55: "RGMII_TXD1"       unused   input  active-high 
+	line  56: "RGMII_TXD2"       unused   input  active-high 
+	line  57: "RGMII_TXD3"       unused   input  active-high
+
+--- Network Interfaces ---
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN mode DEFAULT group default qlen 1000
+    link/ether d8:3a:dd:bb:5a:74 brd ff:ff:ff:ff:ff:ff
+3: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DORMANT group default qlen 1000
+    link/ether d8:3a:dd:bb:5a:75 brd ff:ff:ff:ff:ff:ff
+
+--- MCP Driver ---
+[ERROR] Command 'dmesg | grep -i mcp25*' failed: Command 'dmesg | grep -i mcp25*' returned non-zero exit status 1.
+
+--- I2C Devices ---
+i2c-20	i2c       	fef04500.i2c                    	I2C adapter
+i2c-21	i2c       	fef09500.i2c                    	I2C adapter
+
+--- SPI Devices ---
+[ERROR] Command 'ls /dev/spidev*' failed: Command 'ls /dev/spidev*' returned non-zero exit status 2.
+
+--- SPI / I2C ---
+[    2.511272] systemd[1]: Created slice system-modprobe.slice - Slice /system/modprobe.
+[    2.532065] systemd[1]: Starting modprobe@configfs.service - Load Kernel Module configfs...
+[    2.536360] systemd[1]: Starting modprobe@dm_mod.service - Load Kernel Module dm_mod...
+[    2.540095] systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...
+[    2.544187] systemd[1]: Starting modprobe@efi_pstore.service - Load Kernel Module efi_pstore...
+[    2.547462] systemd[1]: Starting modprobe@fuse.service - Load Kernel Module fuse...
+[    2.550581] systemd[1]: Starting modprobe@loop.service - Load Kernel Module loop...
+[    2.595125] systemd[1]: modprobe@configfs.service: Deactivated successfully.
+[    2.595585] systemd[1]: Finished modprobe@configfs.service - Load Kernel Module configfs.
+[    2.596407] systemd[1]: modprobe@dm_mod.service: Deactivated successfully.
+[    2.597027] systemd[1]: Finished modprobe@dm_mod.service - Load Kernel Module dm_mod.
+[    2.598181] systemd[1]: modprobe@drm.service: Deactivated successfully.
+[    2.598523] systemd[1]: Finished modprobe@drm.service - Load Kernel Module drm.
+[    2.599453] systemd[1]: modprobe@efi_pstore.service: Deactivated successfully.
+[    2.599817] systemd[1]: Finished modprobe@efi_pstore.service - Load Kernel Module efi_pstore.
+[    2.600596] systemd[1]: modprobe@fuse.service: Deactivated successfully.
+[    2.601676] systemd[1]: Finished modprobe@fuse.service - Load Kernel Module fuse.
+[    2.602479] systemd[1]: modprobe@loop.service: Deactivated successfully.
+[    2.602825] systemd[1]: Finished modprobe@loop.service - Load Kernel Module loop.
+[    2.643842] i2c_dev: i2c /dev entries driver
+[    3.317021] brcmstb-i2c fef04500.i2c:  @97500hz registered in polling mode
+[    3.328946] brcmstb-i2c fef09500.i2c:  @97500hz registered in polling mode
+[    3.353923] bcm2835_vc_sm_cma_probe: Videocore shared memory driver
+[    3.458177] usb 1-1.1: UVC non compliance - GET_DEF(PROBE) not supported. Enabling workaround.
+
+--- Systemd Boot Warnings/Errors ---
+sep 01 17:13:59 raspberrypi kernel: pci_bus 0000:01: supply vpcie3v3 not found, using dummy regulator
+sep 01 17:13:59 raspberrypi kernel: pci_bus 0000:01: supply vpcie3v3aux not found, using dummy regulator
+sep 01 17:13:59 raspberrypi kernel: pci_bus 0000:01: supply vpcie12v not found, using dummy regulator
+sep 01 17:13:59 raspberrypi systemd-sysctl[273]: Couldn't write '1' to 'kernel/unprivileged_userns_clone', ignoring: No such file or directory
+sep 01 17:13:59 raspberrypi kernel: snd_bcm2835: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: vc_sm_cma: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_mmal_vchiq: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_isp: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_v4l2: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_codec: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: hci_uart_bcm serial0-0: supply vbat not found, using dummy regulator
+sep 01 17:13:59 raspberrypi kernel: hci_uart_bcm serial0-0: supply vddio not found, using dummy regulator
+sep 01 17:14:00 raspberrypi (udev-worker)[295]: mouse0: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[292]: mouse1: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[287]: event3: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[290]: event5: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[291]: event2: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[293]: event0: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[285]: event4: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[297]: event6: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[288]: event1: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[293]: event7: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[288]: event10: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[284]: event9: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (udev-worker)[289]: event8: Process '/usr/sbin/th-cmd --socket /var/run/thd.socket --passfd --udev' failed with exit code 1.
+sep 01 17:14:00 raspberrypi (uetoothd)[518]: ConfigurationDirectory 'bluetooth' already exists but the mode is different. (File system: 755 ConfigurationDirectoryMode: 555)
+sep 01 17:14:01 raspberrypi bluetoothd[518]: profiles/audio/vcp.c:vcp_init() D-Bus experimental not enabled
+sep 01 17:14:01 raspberrypi bluetoothd[518]: src/plugin.c:plugin_init() Failed to init vcp plugin
+sep 01 17:14:01 raspberrypi bluetoothd[518]: profiles/audio/mcp.c:mcp_init() D-Bus experimental not enabled
+sep 01 17:14:01 raspberrypi bluetoothd[518]: src/plugin.c:plugin_init() Failed to init mcp plugin
+sep 01 17:14:01 raspberrypi bluetoothd[518]: profiles/audio/bap.c:bap_init() D-Bus experimental not enabled
+sep 01 17:14:01 raspberrypi bluetoothd[518]: src/plugin.c:plugin_init() Failed to init bap plugin
+sep 01 17:14:01 raspberrypi udisksd[501]: failed to load module mdraid: libbd_mdraid.so.2: cannot open shared object file: No such file or directory
+sep 01 17:14:01 raspberrypi bluetoothd[518]: profiles/sap/server.c:sap_server_register() Sap driver initialization failed.
+sep 01 17:14:01 raspberrypi bluetoothd[518]: sap-server: Operation not permitted (1)
+sep 01 17:14:01 raspberrypi udisksd[501]: Failed to load the 'mdraid' libblockdev plugin
+sep 01 17:14:02 raspberrypi wpa_supplicant[608]: nl80211: kernel reports: Registration to specific type not supported
+sep 01 17:14:03 raspberrypi wireplumber[749]: Failed to set scheduler settings: Operación no permitida
+sep 01 17:14:03 raspberrypi wireplumber[749]: Failed to get percentage from UPower: org.freedesktop.DBus.Error.NameHasNoOwner
+sep 01 17:14:05 raspberrypi wpa_supplicant[608]: bgscan simple: Failed to enable signal strength monitoring
+sep 01 17:14:08 raspberrypi gnome-keyring-daemon[1101]: discover_other_daemon: 1
+
+--- Recent Kernel Messages ---
+sep 01 17:13:59 raspberrypi kernel: brcmstb-i2c fef09500.i2c:  @97500hz registered in polling mode
+sep 01 17:13:59 raspberrypi kernel: input: vc4-hdmi-0 HDMI Jack as /devices/platform/soc/fef00700.hdmi/sound/card1/input9
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fef00700.hdmi (ops vc4_hdmi_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: Registered IR keymap rc-cec
+sep 01 17:13:59 raspberrypi kernel: rc rc1: vc4-hdmi-1 as /devices/platform/soc/fef05700.hdmi/rc/rc1
+sep 01 17:13:59 raspberrypi kernel: input: vc4-hdmi-1 as /devices/platform/soc/fef05700.hdmi/rc/rc1/input10
+sep 01 17:13:59 raspberrypi kernel: vc_sm_cma: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_vc_sm_cma_probe: Videocore shared memory driver
+sep 01 17:13:59 raspberrypi kernel: [vc_sm_connected_init]: start
+sep 01 17:13:59 raspberrypi kernel: [vc_sm_connected_init]: installed successfully
+sep 01 17:13:59 raspberrypi kernel: input: vc4-hdmi-1 HDMI Jack as /devices/platform/soc/fef05700.hdmi/sound/card2/input11
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fef05700.hdmi (ops vc4_hdmi_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fe004000.txp (ops vc4_txp_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fe206000.pixelvalve (ops vc4_crtc_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fe207000.pixelvalve (ops vc4_crtc_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fe20a000.pixelvalve (ops vc4_crtc_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fe216000.pixelvalve (ops vc4_crtc_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: bound fec12000.pixelvalve (ops vc4_crtc_ops [vc4])
+sep 01 17:13:59 raspberrypi kernel: [drm] Initialized vc4 0.0.0 for gpu on minor 1
+sep 01 17:13:59 raspberrypi kernel: bcm2835_mmal_vchiq: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: Core ver 2.22
+sep 01 17:13:59 raspberrypi kernel: NET: Registered PF_BLUETOOTH protocol family
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: HCI device and connection manager initialized
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: HCI socket layer initialized
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: L2CAP socket layer initialized
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: SCO socket layer initialized
+sep 01 17:13:59 raspberrypi kernel: bcm2835_isp: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_v4l2: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: bcm2835_codec: module is from the staging directory, the quality is unknown, you have been warned.
+sep 01 17:13:59 raspberrypi kernel: Console: switching to colour frame buffer device 240x67
+sep 01 17:13:59 raspberrypi kernel: rpi-hevc-dec feb00000.codec: Device registered as /dev/video19
+sep 01 17:13:59 raspberrypi kernel: usb 1-1.1: Found UVC 1.00 device AV TO USB2.0 (534d:0021)
+sep 01 17:13:59 raspberrypi kernel: usb 1-1.1: UVC non compliance - GET_DEF(PROBE) not supported. Enabling workaround.
+sep 01 17:13:59 raspberrypi kernel: usbcore: registered new interface driver uvcvideo
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node output[0] registered as /dev/video13
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node capture[0] registered as /dev/video14
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node capture[1] registered as /dev/video15
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Device registered as /dev/video10
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Loaded V4L2 decode
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node stats[2] registered as /dev/video16
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register output node 0 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register capture node 1 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register capture node 2 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register capture node 3 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Device registered as /dev/video11
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Loaded V4L2 encode
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node output[0] registered as /dev/video20
+sep 01 17:13:59 raspberrypi kernel: vc4-drm gpu: [drm] fb0: vc4drmfb frame buffer device
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node capture[0] registered as /dev/video21
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node capture[1] registered as /dev/video22
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Device node stats[2] registered as /dev/video23
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register output node 0 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register capture node 1 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register capture node 2 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Register capture node 3 with media controller
+sep 01 17:13:59 raspberrypi kernel: bcm2835-isp bcm2835-isp: Loaded V4L2 bcm2835-isp
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Device registered as /dev/video12
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Loaded V4L2 isp
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: HCI UART driver ver 2.3
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: HCI UART protocol H4 registered
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: HCI UART protocol Three-wire (H5) registered
+sep 01 17:13:59 raspberrypi kernel: Bluetooth: HCI UART protocol Broadcom registered
+sep 01 17:13:59 raspberrypi kernel: hci_uart_bcm serial0-0: supply vbat not found, using dummy regulator
+sep 01 17:13:59 raspberrypi kernel: hci_uart_bcm serial0-0: supply vddio not found, using dummy regulator
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Device registered as /dev/video18
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Loaded V4L2 image_fx
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Device registered as /dev/video31
+sep 01 17:13:59 raspberrypi kernel: bcm2835-codec bcm2835-codec: Loaded V4L2 encode_image
+sep 01 17:13:59 raspberrypi kernel: cfg80211: Loading compiled-in X.509 certificates for regulatory database
+sep 01 17:13:59 raspberrypi kernel: Loaded X.509 cert 'benh@debian.org: 577e021cb980e0e820821ba7b54b4961b8b4fadf'
+sep 01 17:13:59 raspberrypi kernel: Loaded X.509 cert 'romain.perier@gmail.com: 3abbc6ec146e09d1b6016ab9d6cf71dd233f0328'
+sep 01 17:13:59 raspberrypi kernel: Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+sep 01 17:13:59 raspberrypi kernel: Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+sep 01 17:14:00 raspberrypi kernel: brcmfmac: F1 signature read @0x18000000=0x15264345
+sep 01 17:14:00 raspberrypi kernel: brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43455-sdio for chip BCM4345/6
+sep 01 17:14:00 raspberrypi kernel: usbcore: registered new interface driver brcmfmac
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM: chip id 107
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM: features 0x2f
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM4345C0
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM4345C0 (003.001.025) build 0000
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM4345C0 'brcm/BCM4345C0.raspberrypi,4-model-b.hcd' Patch
+sep 01 17:14:00 raspberrypi kernel: brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+sep 01 17:14:00 raspberrypi kernel: brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM4345/6 wl0: Aug 29 2023 01:47:08 version 7.45.265 (28bca26 CY) FWID 01-b677b91b
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM: features 0x2f
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM43455 37.4MHz Raspberry Pi 3+-0190
+sep 01 17:14:00 raspberrypi kernel: Bluetooth: hci0: BCM4345C0 (003.001.025) build 0382
+sep 01 17:14:01 raspberrypi kernel: Adding 524284k swap on /var/swap.  Priority:-2 extents:4 across:5177344k SS
+sep 01 17:14:01 raspberrypi kernel: Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+sep 01 17:14:01 raspberrypi kernel: Bluetooth: BNEP filters: protocol multicast
+sep 01 17:14:01 raspberrypi kernel: Bluetooth: BNEP socket layer initialized
+sep 01 17:14:01 raspberrypi kernel: Bluetooth: MGMT ver 1.23
+sep 01 17:14:01 raspberrypi kernel: NET: Registered PF_ALG protocol family
+sep 01 17:14:02 raspberrypi kernel: bcmgenet fd580000.ethernet: configuring instance for external RGMII (RX delay)
+sep 01 17:14:02 raspberrypi kernel: bcmgenet fd580000.ethernet eth0: Link is Down
+sep 01 17:14:02 raspberrypi kernel: brcmfmac: brcmf_cfg80211_set_power_mgmt: power save enabled
+sep 01 17:14:05 raspberrypi kernel: Bluetooth: RFCOMM TTY layer initialized
+sep 01 17:14:05 raspberrypi kernel: Bluetooth: RFCOMM socket layer initialized
+sep 01 17:14:05 raspberrypi kernel: Bluetooth: RFCOMM ver 1.11
+sep 01 17:15:53 raspberrypi kernel: CAN device driver interface
+sep 01 17:15:53 raspberrypi kernel: vcan: Virtual CAN interface driver
