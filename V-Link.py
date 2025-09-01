@@ -61,6 +61,7 @@ from backend.can                 import CANThread
 from backend.lin                 import LINThread
 from backend.ign                 import IGNThread
 from backend.pimost              import PiMOSTThread
+from backend.reverse             import REVERSEThread
 
 from backend.logger import logger
 
@@ -83,6 +84,7 @@ class VLINK:
             'adc':      ADCThread,
             'rti':      RTIThread,
             'ign':      IGNThread,
+            'reverse':  REVERSEThread,
           
             'vcan':     VCANThread,
         }
@@ -203,6 +205,8 @@ class VLINK:
         time.sleep(.05)
         self.start_thread('can', logger)
         time.sleep(.05)
+        self.start_thread('reverse', logger)
+        time.sleep(.05)
         self.start_thread('rti', logger)
         time.sleep(.05)
         self.start_thread('lin', logger)
@@ -288,6 +292,10 @@ class VLINK:
         if shared_state.toggle_ign.is_set():
             self.toggle_thread('ign')
             shared_state.toggle_ign.clear()
+        
+        if shared_state.toggle_reverse.is_set():
+            self.toggle_thread('reverse')
+            shared_state.toggle_reverse.clear()
 
 
     def process_exit_event(self):
@@ -382,7 +390,7 @@ def display_thread_states():
     print("")
     print("Thread states:")
 
-    thread_names = ["Server", "App", "CAN", "LIN", "ADC", "RTI", "VCAN"]
+    thread_names = ["Server", "App", "CAN", "LIN", "ADC", "RTI", "VCAN", "REVERSE"]
     thread_states = [
         shared_state.THREADS.get(name.lower(), None).is_alive() if shared_state.THREADS.get(name.lower()) else False
         for name in thread_names

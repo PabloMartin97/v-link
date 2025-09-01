@@ -1,110 +1,140 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react'; 
 import { io } from 'socket.io-client';
 import { APP, MMI, CAN, LIN, ADC, RTI } from '../store/Store';
 
-// Define all modules for easy iteration and reference
+// ===== MÓDULOS QUE YA TENÍAS =====
 const modules = {
   app: APP,
-  // mmi: MMI, // Uncomment if needed
+  // mmi: MMI, // Uncomment si lo necesitas
   can: CAN,
   lin: LIN,
   adc: ADC,
-  rti: RTI
+  rti: RTI,
 };
 
-// Create socket connections for each module
-const socket = {};
-Object.keys(modules).forEach(module => {
+const socket: Record<string, ReturnType<typeof io>> = {};
+Object.keys(modules).forEach((module) => {
   socket[module] = io(`ws://localhost:4001/${module}`);
 });
 
-const sysChannel = io("ws://localhost:4001/sys")
+// System channel (ignition, reverse,  etc.)
+const sysChannel = io('ws://localhost:4001/sys');
+// LOG de sanity: ver TODO lo que llega por /sys
+sysChannel.onAny((event, ...args) => console.log('[SYS]', event, ...args));
+
+// (opcional) log específico del evento reverse
+sysChannel.on('reverse', (v: boolean) => console.log('[SYS reverse]', v));
+
+// Specific channel to handle rearcam power (energía GPIO + estado)
+const rearcamChannel = io('ws://localhost:4001/rearcam');
+
+// Helpers for Rearcam
+export const rearcam = {
+  mount: () => rearcamChannel.emit('mount'),
+  unmount: () => rearcamChannel.emit('unmount'),
+  status: () => rearcamChannel.emit('status'),
+};
 
 export const Socket = () => {
-
-  // Initialize all Zustand stores and map them to module names
   const store = Object.fromEntries(
     Object.entries(modules).map(([key, useStore]) => [key, useStore()])
-  );
+  ) as Record<string, ReturnType<typeof APP>>;
 
-  // Track the total number of modules
   const totalModules = Object.keys(modules).length;
 
-  // State to track how many modules have fully loaded
+ 
   const [loadedModules, setLoadedModules] = useState(0);
+  const loadedModuleSet = useRef(new Set<string>());
 
-  // Ref to store a Set of loaded modules, preventing duplicate entries and helping to manage loading state
-  const loadedModuleSet = useRef(new Set());
-
-  /* Initialize App */
+  
   useEffect(() => {
-    // When loadedModules matches totalModules, all modules have been initialized
     if (loadedModules === totalModules) {
-      console.log('App ready.')
-      store['app'].update((state) => {
+      console.log('App ready.');
+      store['app'].update((state: any) => {
         state.modules = modules;
         state.system.startedUp = true;
-        state.system.view = state.settings.general.startPage.value;
+        state.system.view = state.settings?.general?.startPage?.value ?? state.system.view ?? '/';
       });
     }
   }, [loadedModules]);
 
-  /* Wait for Settings */
+  /* Registro de listeners y peticiones iniciales */
   useEffect(() => {
-    // Handles settings update for each module, ensuring each module loads once
-    const handleSettings = (module) => (data) => {
-      // Add the module to the loaded set
+    // --- handlers existentes por módulo ---
+    const handleSettings = (module: string) => (data: any) => {
       loadedModuleSet.current.add(module);
-
-      // Update the loadedModules state based on the set size, ensuring accurate count
       setLoadedModules(loadedModuleSet.current.size);
-
-      // Update the store with the new settings data
-      store[module].update((state) => {
+      store[module].update((state: any) => {
         state.settings = data;
       });
     };
 
-    const handleIgnition = () => (ignStatus) => {
-      console.log('Ignition: ', ignStatus)
-      store['app'].update((state) => {
-        state.system.ignition = ignStatus
-      });
-    } 
-
-    // Handles state updates for each module
-    const handleState = (module) => (data) => {
-      store['app'].update((state) => {
+    const handleState = (module: string) => (data: any) => {
+      store['app'].update((state: any) => {
         state.system[`${module}State`] = data;
       });
-      //console.log("handling state, ", module, data);
     };
 
-    // Register state and settings listeners for each module
-    Object.keys(modules).forEach(module => {
+    const handleIgnition = () => (ignStatus: boolean) => {
+      console.log('Ignition: ', ignStatus);
+      store['app'].update((state: any) => {
+        state.system.ignition = ignStatus;
+      });
+    };
+    
+   const handleReverse = () => (reverseStatus: boolean) => {
+      console.log('Reverse: ', reverseStatus);
+      store['app'].update((state: any) => {
+        state.system.reverse = reverseStatus;
+      });
+    };
+    
+    const handleRearcamCameraStatus = (payload: { on: boolean; error?: string }) => {
+      store['app'].update((state: any) => {
+        state.system.rearcam = !!payload.on;
+        state.system.rearcamError = payload.error || null;
+      });
+    };
+
+    const handleRearcamState = (on: boolean) => {
+      store['app'].update((state: any) => {
+        state.system.rearcam = !!on;
+      });
+    };
+
+    // --- Suscripción por módulo (estado + settings) ---
+    Object.keys(modules).forEach((module) => {
       if (module !== 'mmi') {
         socket[module].on('state', handleState(module));
         socket[module].emit('ping');
       }
     });
 
-    // Load settings for each module
-    Object.keys(modules).forEach(module => {
+    Object.keys(modules).forEach((module) => {
       socket[module].on('settings', handleSettings(module));
       socket[module].emit('load');
     });
 
-    sysChannel.on('ign', handleIgnition())
-    sysChannel.emit('systemTask', 'ign')
+    // --- Sistema (ignición) ---
+    sysChannel.on('ign', handleIgnition());
+    sysChannel.emit('systemTask', 'ign');
 
-    // Clean up listeners on component unmount
+    // --- Rearcam (GPIO + estado) ---
+    rearcamChannel.on('camera/status', handleRearcamCameraStatus);
+    rearcamChannel.on('state', handleRearcamState);
+    rearcam.status(); // sincroniza estado inicial
+
+    // Limpieza
     return () => {
-      Object.keys(modules).forEach(module => {
-        socket[module].off('settings', handleSettings(module));
+      Object.keys(modules).forEach((module) => {
         socket[module].off('state', handleState(module));
-        sysChannel.off('ign', handleIgnition())
-
+        socket[module].off('settings', handleSettings(module));
       });
+
+      sysChannel.off('ign', handleIgnition());
+      
+      rearcamChannel.off('camera/status', handleRearcamCameraStatus);
+      rearcamChannel.off('state', handleRearcamState);
     };
   }, []);
 

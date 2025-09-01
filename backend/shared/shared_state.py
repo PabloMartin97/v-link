@@ -32,6 +32,7 @@ class SharedState:
         self.toggle_adc = threading.Event()
         self.toggle_rti = threading.Event()
         self.toggle_ign = threading.Event()
+        self.toggle_reverse = threading.Event()
 
         self.exit_event = threading.Event()
         self.restart_event = threading.Event()
@@ -39,7 +40,7 @@ class SharedState:
         self.hdmi_event = threading.Event() 
 
         self.ignStatus = threading.Event()
-
+        self.reverseStatus = threading.Event()
 
         self.shutdown_pi = threading.Event()
 
@@ -54,6 +55,7 @@ class SharedState:
             "rti":      None,
             "ign":      None,
             "vcan":     None,
+            "reverse":  None,
             "pimost":   None,
         }
 
