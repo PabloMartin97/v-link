@@ -39,8 +39,8 @@
             "label": "Boost",
             "unit": "Bar",
             "min_value": 0,
-            "max_value": 2.5,
-            "limit_start": 2
+            "max_value": 1.5,
+            "limit_start": 1
         },
         "intake": {
             "interface": "can2",
@@ -57,7 +57,7 @@
             "target": "0x11",
             "is_16bit": true,
             "priority": 3,
-            "scale": "(value * 1)",
+            "scale": "(value * 0.01)",
             "label": "Intake",
             "unit": "°C",
             "min_value": 0,
@@ -79,7 +79,7 @@
             "target": "0x11",
             "is_16bit": true,
             "priority": 2,
-            "scale": "(value * 10)",
+            "scale": "(value * 0.01)",
             "label": "Coolant",
             "unit": "°C",
             "min_value": 0,
