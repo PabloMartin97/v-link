@@ -67,8 +67,8 @@ class SharedState:
             "adc":      None,
             "rti":      None,
             "ign":      None,
+            "cam":      None,
             "vcan":     None,
-            "reverse":  None,
             "pimost":   None,
         }
 

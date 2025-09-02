@@ -10,6 +10,7 @@ from .threads.adc         import ADCThread
 from .threads.rti         import RTIThread
 from .threads.ign         import IGNThread
 from .threads.mst         import MOSTThread
+from .threads.cam         import CAMThread
 
 from .dev.vcan            import VCANThread
 from .shared.shared_state import shared_state

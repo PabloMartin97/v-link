@@ -63,9 +63,7 @@ from backend.threads.rti         import RTIThread
 from backend.threads.can         import CANThread
 from backend.threads.ign         import IGNThread
 from backend.threads.swc         import SWCThread
-
-
-from backend.reverse             import REVERSEThread
+from backend.threads.cam         import CAMThread
 
 from backend.logger import logger
 
@@ -81,14 +79,14 @@ class VLINK:
         self.rpiProtocol =''
         self.threads = {
             'server':   ServerThread,
-
             'app':      APPThread,
+
             'can':      CANThread,
             'adc':      ADCThread,
             'rti':      RTIThread,
             'ign':      IGNThread,
             'swc':      SWCThread,
-            'reverse':  REVERSEThread,
+            'cam':      CAMThread,
           
             'vcan':     VCANThread,
         }
@@ -137,7 +135,7 @@ class VLINK:
             self.start_thread('vcan', logger)
             time.sleep(.05)
 
-        self.start_thread('reverse', logger)
+        self.start_thread('cam', logger)
         time.sleep(.05)
 
         if shared_state.pimost:
@@ -235,7 +233,7 @@ class VLINK:
             shared_state.toggle_ign.clear()
         
         if shared_state.toggle_reverse.is_set():
-            self.toggle_thread('reverse')
+            self.toggle_thread('cam')
             shared_state.toggle_reverse.clear()
 
         if shared_state.toggle_swc.is_set():
@@ -342,7 +340,7 @@ def display_thread_states():
     print('')
     print('Thread states:')
 
-    thread_names = ['Server', 'App', 'CAN', 'SWC', 'ADC', 'RTI', 'VCAN', 'REVERSE']
+    thread_names = ['Server', 'App', 'CAN', 'SWC', 'ADC', 'RTI', 'VCAN', 'CAM']
     
     thread_states = [
         shared_state.THREADS.get(name.lower(), None).is_alive() if shared_state.THREADS.get(name.lower()) else False

@@ -13,6 +13,9 @@ from flask_cors             import CORS
 from .                      import settings
 from .shared.shared_state   import shared_state
 
+from .threads.cam         import CAMThread
+
+
 import logging
 logger = logging.getLogger('vlink')
 
@@ -183,7 +186,6 @@ class ServerThread(threading.Thread):
             if module == "rearcam":
                 try:
                     if rearcam["drv"] is None:
-                        from .campower import CameraGPIO  # lazy import para no romper arranque
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
                     on = rearcam["drv"].toggle()
                     socketio.emit('state', on, namespace=namespace)
@@ -218,7 +220,6 @@ class ServerThread(threading.Thread):
             def rearcam_mount(_payload=None):
                 try:
                     if rearcam["drv"] is None:
-                        from .campower import CameraGPIO
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
                     rearcam["drv"].set(True)
                     on = rearcam["drv"].get()
@@ -232,7 +233,6 @@ class ServerThread(threading.Thread):
             def rearcam_unmount(_payload=None):
                 try:
                     if rearcam["drv"] is None:
-                        from .campower import CameraGPIO
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
                     rearcam["drv"].set(False)
                     on = rearcam["drv"].get()
@@ -246,7 +246,6 @@ class ServerThread(threading.Thread):
             def rearcam_status(_payload=None):
                 try:
                     if rearcam["drv"] is None:
-                        from .campower import CameraGPIO
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
                     on = bool(rearcam["drv"].get())
                     socketio.emit('camera/status', {'on': on}, namespace=namespace)
