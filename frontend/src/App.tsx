@@ -36,6 +36,10 @@ function App() {
   const setKeyStroke = APP((state) => state.setKeyStroke);
   const dongleBindings = APP((state) => state.settings.dongle_bindings);
 
+  const keyStroke = APP((state) => state.keyStroke);
+  const switchPage = APP((state) => state.switchPage);
+  const pauseKeyBinds = APP((state) => state.pauseKeyBinds);
+
   const socket = useNamespaces();
 
 
@@ -47,15 +51,14 @@ function App() {
     return () => {
       document.removeEventListener('keydown', mmiKeyDown);
     };
-  }, [systemSettings.view, systemSettings.switch]);
+  }, [systemSettings.view, systemSettings.switch, pauseKeyBinds]);
 
 const mmiKeyDown = (event: KeyboardEvent) => {
   // Store last Keystroke in store to broadcast it
   setKeyStroke(event.code);
 
   // If keybinds are paused, do not process further
-  const pauseKeyBinds = APP.getState().system.pauseKeyBinds;
-  socket.log.emit('info', `Keybinds paused: ${pauseKeyBinds}`);
+  
   if(pauseKeyBinds) return;
 
   // Only process Carplay key commands when in Carplay view

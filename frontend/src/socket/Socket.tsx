@@ -17,7 +17,7 @@ const socket = useNamespaces
 const rearcamChannel = socket.can;
 
 // Helpers for Rearcam
-export const rearcam = {
+export const rearcam = {  
   mount: () => socket.cam.emit('mount'),
   unmount: () => socket.cam.emit('unmount'),
   status: () => socket.cam.emit('status'),

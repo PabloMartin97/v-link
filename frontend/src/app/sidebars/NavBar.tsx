@@ -71,6 +71,8 @@ const NavBar = ({ isHovering }) => {
   const navBarHeight  = APP((state) => state.settings.side_bars.navBarHeight.value);
   const themeColor    = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
 
+  const enabled       = APP((state) => state.settings.reverseCam.enabled.value);
+
   
   const handleClick = () => {
     appUpdate((state) => { state.system.interface.navBar = true })
@@ -84,7 +86,7 @@ const NavBar = ({ isHovering }) => {
         </GlowLarge>
       </Indicator>
       <Navbar navBarHeight={navBarHeight} theme={theme} isActive={isActive}>
-        {['Dashboard', 'Carplay', 'Rearcam', 'Settings'].map((view) => (
+        {['Dashboard', 'Carplay', enabled && 'Rearcam', 'Settings'].map((view) => (
           <div className="column" key={view} style={{ position: 'relative', width: '100%'}}>
             <NavButton onClick={() => {
               //console.log('click, ', view)

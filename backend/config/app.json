@@ -93,6 +93,18 @@
       "label": "Open Screen on Start"
     }
   },
+  "reverseCam": {
+    "title": "Reverse Camera Settings",
+    "type": "system",
+    "enabled": {
+      "value": true,
+      "label": "Enabled"
+    },
+    "delay": {
+      "value": 7,
+      "label": "Off Delay (sec)"
+    }
+  },
   "side_bars": {
     "title": "Sidebar Settings",
     "type": "system",

@@ -16,12 +16,11 @@ class REVERSEThread(threading.Thread):
         self.active_high = active_high
         self.dt = poll_ms / 1000.0
 
-        # devounce
+        # Debounce
         self._debounce_s = debounce_ms / 1000.0
         self._last_change_ts = 0.0
         self._candidate_state = None   
 
-        # previous state
         self._prev = None
 
         # Setup GPIO
@@ -45,14 +44,14 @@ class REVERSEThread(threading.Thread):
     def run(self):
         self.logger.info("Reverse thread: started (chip=%s, line=%s)", self.chip_id, self.line)
 
-        # reading initial state
+        # Reading initial state
         try:
             current = self._read_active()
         except Exception as e:
             self.logger.error("Reverse first read error: %s", e)
             current = False
 
-        # initial state
+        # Set initial state
         if current:
             shared_state.reverseStatus.set()
             self.logger.debug("Reverse ON (initial)")
@@ -68,7 +67,7 @@ class REVERSEThread(threading.Thread):
             try:
                 on = self._read_active()
 
-                # debounce logic
+                # Debounce
                 now = time.monotonic()
                 if on != self._candidate_state:
                     self._candidate_state = on
@@ -77,10 +76,12 @@ class REVERSEThread(threading.Thread):
                     if (now - self._last_change_ts) >= self._debounce_s:
                         if on != self._prev:
                             if on:
-                                shared_state.reverseStatus.set()     # SIEMPRE set en ON
+                                # Reverse ON
+                                shared_state.reverseStatus.set()
                                 self.logger.debug("Reverse ON")
                             else:
-                                shared_state.reverseStatus.clear()   # SIEMPRE clear en OFF (sin condicionar por dev)
+                                # Reverse OFF
+                                shared_state.reverseStatus.clear()
                                 self.logger.debug("Reverse OFF")
                             self._prev = on
 
@@ -93,7 +94,7 @@ class REVERSEThread(threading.Thread):
                 self.logger.warning("Reverse loop error: %s", e)
                 time.sleep(0.2)
 
-        # cleanup
+        # Cleanup
         try:
             lgpio.gpiochip_close(self._chip)
         except Exception:

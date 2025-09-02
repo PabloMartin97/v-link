@@ -104,6 +104,7 @@ const Content = () => {
   const keyStroke         = APP((state) => state.keyStroke);
   const switchPage        = APP((state) => state.switchPage);
   const pauseKeyBinds     = APP((state) => state.pauseKeyBinds);
+
   const startedUp         = APP((state) => state.system.startedUp);
   const sidebarSettings   = APP((state) => state.settings.side_bars);
   const interfaceSettings = APP((state) => state.system.interface);
@@ -111,7 +112,10 @@ const Content = () => {
   const appBindings       = APP((state) => state.settings.app_bindings);
   const contentPadding    = APP((state) => state.settings.general.contentPadding.value);
   const view              = APP((state) => state.system.view);
+
+
   const reverse           = APP((state) => state.system.reverse);
+  const reverseDelay      = APP((state) => state.settings.reverseCam.delay.value);
 
   const theme = useTheme();
 
@@ -180,7 +184,7 @@ const Content = () => {
         reverseNavigated.current = false;
         previousView.current = null;
         exitTimerRef.current = null;
-      }, 7000); // REAR TIMER!!! IN ms
+      }, (reverseDelay * 1000)); // REAR TIMER
     }
 
     return () => {
@@ -332,8 +336,10 @@ const Content = () => {
 
   // Listen for key strokes to switch views
   useEffect(() => {
-    if ( !pauseKeyBinds && keyStroke === switchPage )
+    if ( !pauseKeyBinds && keyStroke === switchPage ) {
+      console.log(pauseKeyBinds, keyStroke, switchPage)
       cycleView();
+    }
   }, [keyStroke, pauseKeyBinds, switchPage]);
 
   return (

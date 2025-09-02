@@ -94,6 +94,11 @@ const Settings = () => {
   const [reset, setReset] = useState(false)
   const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
 
+  const setKeyStroke = APP((state) => state.setKeyStroke);
+  const setSwitchPage = APP((state) => state.setSwitchPage);
+  const setPauseKeyBinds = APP((state) => state.setPauseKeyBinds);
+
+
   /* Ping modules to get thread state */
   useEffect(() => {
 
@@ -184,9 +189,12 @@ const Settings = () => {
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
     setSave(false)
 
+    console.log(currentSettings)
     const newSettings = structuredClone(currentSettings);
     let convertedValue
     if (selectStore != 'app') {
+      console.log(selectStore)
+      console.log(dataStores[selectStore])
       convertedValue = Object.keys(dataStores[selectStore]).find(
         (messageKey) => dataStores[selectStore][messageKey].label === targetSetting
       );
@@ -195,6 +203,7 @@ const Settings = () => {
     } else {
       newSettings[key][name].value = targetSetting
     }
+    console.log(newSettings)
 
     setCurrentSettings(newSettings);
   };
@@ -206,7 +215,6 @@ const Settings = () => {
       state.settings = currentSettings;
     });
     socket.app.emit("save", currentSettings);
-    socket.app.emit("load");
   }
 
   // System Tasks
@@ -347,11 +355,13 @@ const Settings = () => {
 
         //const newStore = dataOptions[newValue]                                    // Define store for selected setting. E.g. "Boost" -> "Oil Pressure" requires a change from "can" to "adc" store.
         let selectStore
-        if (Object.keys(dataOptions).length > 1) {
-          selectStore = dataOptions[newValue]
-        } else {
-          selectStore = "app"
-        }
+
+        selectStore = (Object.keys(dataOptions).length > 1 && dataOptions[newValue])
+          ? dataOptions[newValue]
+          : "app";
+
+
+        console.log("HANDLECHANGE:", type)
 
         const targetSetting = isBoolean ? checked : newValue                      // Handle targetSetting based on type
         handleSettingChange(selectStore, key, name, targetSetting, settingsObj);     // Execute change of settings
@@ -373,18 +383,14 @@ const Settings = () => {
             handleSettingChange("app", key, setting, event.code, settingsObj);
           }
 
-          // Resume key bindings after assignment
-          appUpdate((state) => {
-            state.system.pauseKeyBinds = false;
-          });
-
           document.removeEventListener('keydown', handleKeyPress); // Clean up listener
+
+          // Resume key bindings after assignment
+          setPauseKeyBinds(false);
         };
 
         // Set up pause key bindings before showing modal
-        appUpdate((state) => {
-          state.system.pauseKeyBinds = true; // Pause key bindings to prevent conflicts
-        });
+        setPauseKeyBinds(true);
 
         // Add event listener for key press
         document.addEventListener('keydown', handleKeyPress);
@@ -492,6 +498,7 @@ const Settings = () => {
             {renderSetting("screen", currentSettings)}
             {renderSetting("shutdown", currentSettings)}
             {renderSetting("side_bars", currentSettings)}
+            {renderSetting("reverseCam", currentSettings)}
 
             <Element>
               <Title>Toggle Modules</Title>
