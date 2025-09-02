@@ -86,7 +86,7 @@ const NavBar = ({ isHovering }) => {
         </GlowLarge>
       </Indicator>
       <Navbar navBarHeight={navBarHeight} theme={theme} isActive={isActive}>
-        {['Dashboard', 'Carplay', enabled && 'Rearcam', 'Settings'].map((view) => (
+        {['Dashboard', 'Carplay', 'Rearcam', 'Settings'].map((view) => (
           <div className="column" key={view} style={{ position: 'relative', width: '100%'}}>
             <NavButton onClick={() => {
               //console.log('click, ', view)

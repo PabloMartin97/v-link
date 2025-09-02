@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import styled from "styled-components";
+import styled, { useTheme } from 'styled-components';
 import { useNamespaces } from "../../../socket/Namespaces";
+import { Typography } from "../../../theme/styles/Typography";
 
 const Container = styled.div`
   position: relative;
@@ -19,12 +20,9 @@ const Video = styled.video`
 `;
 const OverlayImg = styled.img`
   position: absolute;
-  top: -200px;   /* mueve de arriba a abajo la linea guia para ajustar con la posición del vehículo */
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 100%;   /* mantiene proporciones */
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
   object-fit: contain;
   pointer-events: none;
   z-index: 5;
@@ -56,6 +54,9 @@ export default function Rearcam() {
   const streamRef = useRef<MediaStream | null>(null);
   const socket = useNamespaces();
 
+  const Caption = Typography.Subtitle;
+  const theme = useTheme();
+
   const [status, setStatus] =
     useState<"idle" | "opening" | "playing" | "error" | "denied">("idle");
   const [err, setErr] = useState("");
@@ -69,8 +70,7 @@ export default function Rearcam() {
   }, []);
 
   // Texto inferior configurable
-  const overlayText =
-    localStorage.getItem("rearcam.overlayText") || "PLEASE CHECK SURROUNDINGS";
+  const overlayText = "CHECK SURROUNDINGS";
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -123,12 +123,12 @@ export default function Rearcam() {
 
       {/* Overlay PNG transparente */}
       <OverlayImg
-        src="/assets/images/guideline.png"
+        src="/assets/svg/graphics/guidelines.svg"
         alt="Rear camera guidelines"
       />
 
       {/* Texto inferior */}
-      <BottomText>{overlayText}</BottomText>
+      <Caption style= {{position:'absolute', bottom:'0', left:'0', right:'0', textAlign:'center', zIndex: 5}}>{overlayText}</Caption>
 
       {/* Mensajes de error */}
       {status === "error" && <CenterMsg>Error: {err}</CenterMsg>}

@@ -60,7 +60,7 @@ stroke-linecap: round;
     fill: none;
     width: ${({ theme }) => theme.icons.large};
     height: ${({ theme }) => theme.icons.large};
-    stroke-width: 3px;
+    stroke-width: 2.5px;
     stroke: ${({ isActive, theme, activeColor, defaultColor }) =>
         isActive ? activeColor : defaultColor};
     transition: fill 0.3s ease-in-out;
