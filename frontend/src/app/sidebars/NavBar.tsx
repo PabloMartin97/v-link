@@ -15,11 +15,11 @@ const Navbar = styled.div`
   justify-content: space-evenly;
   align-items: center;
   width: 100%;
-  height: ${({ app }) => `${app.settings.side_bars.navBarHeight.value}px`};
-  animation: ${({ app, theme, isActive }) => css`
+  height: ${({ navBarHeight }) => `${navBarHeight}px`};
+  animation: ${({ navBarHeight, theme, isActive }) => css`
     ${isActive
-      ? theme.animations.getSlideDown(app.settings.side_bars.navBarHeight.value)
-      : theme.animations.getSlideUp(app.settings.side_bars.navBarHeight.value)} 0.3s ease-in-out forwards
+      ? theme.animations.getSlideDown(navBarHeight)
+      : theme.animations.getSlideUp(navBarHeight)} 0.3s ease-in-out forwards
   `};
 `;
 
@@ -62,31 +62,39 @@ const Blob = styled.div`
 
 
 const NavBar = ({ isHovering }) => {
-  const app = APP((state) => state);
   const theme = useTheme();
-  const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
 
+  const appUpdate     = APP((state) => state.update);
+  const isActive      = APP((state) => state.system.interface.navBar);
+  const content       = APP((state) => state.system.interface.content);
+  const currentView   = APP((state) => state.system.view);
+  const navBarHeight  = APP((state) => state.settings.side_bars.navBarHeight.value);
+  const themeColor    = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+
+  const enabled       = APP((state) => state.settings.reverseCam.enabled.value);
+
+  
   const handleClick = () => {
-    app.update((state) => { state.system.interface.navBar = true })
+    appUpdate((state) => { state.system.interface.navBar = true })
   }
 
   return (
     <>
-      <Indicator isActive={app.system.interface.navBar}>
+      <Indicator isActive={isActive}>
         <GlowLarge color={theme.colors.theme[themeColor].active} opacity={isHovering ? 0.75 : 0}>
-          {app.system.interface.content && <Blob theme={theme} isActive={app.system.interface.navBar} isHovering={isHovering} themeColor={themeColor} onClick={handleClick}/> }
+          {content && <Blob theme={theme} isActive={isActive} isHovering={isHovering} themeColor={themeColor} onClick={handleClick}/> }
         </GlowLarge>
       </Indicator>
-      <Navbar app={app} theme={theme} isActive={app.system.interface.navBar}>
-        {['Dashboard', 'Carplay', 'Settings'].map((view) => (
+      <Navbar navBarHeight={navBarHeight} theme={theme} isActive={isActive}>
+        {['Dashboard', 'Carplay', 'Rearcam', 'Settings'].map((view) => (
           <div className="column" key={view} style={{ position: 'relative', width: '100%'}}>
             <NavButton onClick={() => {
               //console.log('click, ', view)
-              app.update((state) => { state.system.view = view })
+              appUpdate((state) => { state.system.view = view })
             }}>
               <IconNav
                 theme={theme}
-                isActive={app.system.view === view}
+                isActive={currentView === view}
                 activeColor={theme.colors.theme[themeColor].active}
                 defaultColor={theme.colors.medium}
                 inactiveColor={theme.colors.medium}

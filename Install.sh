@@ -373,7 +373,7 @@ if confirm_action "Do you want to create an autostart file for V-Link?"; then
         sudo bash -c "cat > $AUTOSTART_FILE <<EOL
 [Desktop Entry]
 Name=V-Link
-Exec=sh -c 'python $output_path/V-Link.py'
+Exec=sh -c 'python ~/v-link/V-Link.py'
 Type=Application
 EOL"
         echo "Autostart file created or overwritten."

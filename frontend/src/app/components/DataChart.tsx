@@ -53,61 +53,64 @@ const DataChart = ({
 }) => {
     const theme = useTheme();
     const steps = parseInt(length / resolution);
-    const app = APP((state) => state);
+
+    const appUpdate = APP((state) => state.update);
     const modules = APP((state) => state.modules);
-    const system = APP((state) => state.system);
-    const settings = APP((state) => state.settings);
+    const isRecording = APP((state) => state.system.isRecording);
+    const dashChartsSettings = APP((state) => state.settings.dash_charts);
+    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+
     const data = DATA((state) => state.data);
-
-    const themeColor = (settings.general.colorTheme.value).toLowerCase()
-
 
     const containerRef = useRef(null);  // Create a reference for the container
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const { width, height } = dimensions;
-  
+
     useEffect(() => {
-      // Function to handle size changes
-      const handleResize = () => {
+        // Function to handle size changes
+        const handleResize = () => {
+            if (containerRef.current) {
+                setDimensions({
+                    width: containerRef.current.offsetWidth,
+                    height: containerRef.current.offsetHeight,
+                });
+            }
+        };
+
+        // Use ResizeObserver to listen for size changes (including animations)
+        const resizeObserver = new ResizeObserver(handleResize);
         if (containerRef.current) {
-          setDimensions({
-            width: containerRef.current.offsetWidth,
-            height: containerRef.current.offsetHeight,
-          });
+            resizeObserver.observe(containerRef.current);
         }
-      };
-  
-      // Use ResizeObserver to listen for size changes (including animations)
-      const resizeObserver = new ResizeObserver(handleResize);
-      if (containerRef.current) {
-        resizeObserver.observe(containerRef.current);
-      }
-  
-      return () => {
-        if (containerRef.current) {
-          resizeObserver.unobserve(containerRef.current);
-        }
-      };
+
+        return () => {
+            resizeObserver.disconnect(); // Fixed: use disconnect instead of unobserve
+        };
     }, []);  // Empty dependency array ensures this runs once on mount
-  
+
 
     const datasets = Array.from({ length: setCount }, (_, i) => {
         const key = `value_${i + 1}`;
-        const sensor = settings.dash_charts[key].value;
+        const sensor = dashChartsSettings[key].value;
+        const type = dashChartsSettings[key].type;
+
+        const config =
+            type && sensor
+                ? modules[type]((state) => state.settings.sensors[sensor]) || {}
+                : {};
+
         const value = data[sensor];
-        const type = settings.dash_charts[key].type;
-        const config = modules[type]((state) => state.settings.sensors[sensor]);
 
         return {
-            label: config.label,
+            label: config.label ?? "N/A",
             color: 'var(--themeDefault)',
-            yMin: config.min_value,
-            yMax: config.max_value,
-            data: value,
+            yMin: config.min_value ?? 0,
+            yMax: config.max_value ?? 100,
+            data: value ?? 0,
         };
     });
 
-    
+
     // Initialize dataStreams and recordedData with empty arrays for each dataset
     const [dataStreams, setDataStreams] = useState(datasets.map(() => Array(steps).fill(0)));
 
@@ -207,7 +210,7 @@ const DataChart = ({
             pathData += `L${width + rightOffset},${points[points.length - 1].y}`;
             return (
                 <React.Fragment key={`path-${i}`}>
-                     <defs key={`defs-${i}`}>
+                    <defs key={`defs-${i}`}>
                         {/* Horizontal Gradient */}
                         <linearGradient id={`gradient-${i}`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2={width} y2="0">
                             <stop offset="0%" stopColor="#DBDBDB" />
@@ -221,13 +224,13 @@ const DataChart = ({
                             {/* Transparent to red as it approaches yMax */}
                             <stop offset="0%" stopColor="transparent" />
                             <stop
-                            offset={(() => {
-                                const offsetValue = (height - (dataset.yMax - dataset.yMin) * yScale) / height;
-                                return isNaN(offsetValue) || offsetValue < 0 || offsetValue > 1
-                                ? 0 // Default to 0 if invalid
-                                : offsetValue;
-                            })()}
-                            stopColor="rgba(255, 0, 0, 1)"
+                                offset={(() => {
+                                    const offsetValue = (height - (dataset.yMax - dataset.yMin) * yScale) / height;
+                                    return isNaN(offsetValue) || offsetValue < 0 || offsetValue > 1
+                                        ? 0 // Default to 0 if invalid
+                                        : offsetValue;
+                                })()}
+                                stopColor="rgba(255, 0, 0, 1)"
                             />
                             <stop offset="100%" stopColor="transparent" />
                         </linearGradient>
@@ -258,8 +261,16 @@ const DataChart = ({
         return <>{paths}</>;
     };
 
+    // Keep your original approach but use useRef to prevent timer accumulation
+    const timerRef = useRef(null);
+    
     useEffect(() => {
-        const timer = setInterval(() => {
+        // Clear any existing timer first
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+        }
+        
+        timerRef.current = setInterval(() => {
             const newDataStreams = datasets.map((dataset, index) => {
                 let value = Math.abs(dataset.data);
                 if (isNaN(value)) value = 0;
@@ -271,12 +282,16 @@ const DataChart = ({
             setDataStreams(newDataStreams);
         }, resolution);
 
-        return () => clearInterval(timer);
-    }, [dataStreams]);
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [dataStreams]); // Keep your original dependency
 
     const handleToggleRecording = () => {
-        app.update((state) => {
-            state.system.recording = !state.system.recording;
+        appUpdate((state) => {
+            state.system.isRecording = !isRecording;
         });
     };
 
@@ -284,13 +299,13 @@ const DataChart = ({
         <Container ref={containerRef} theme={theme}>
             <svg width={width} height={height}>
                 {renderGrid()}
-                { renderCurve()}
+                {renderCurve()}
             </svg>
 
             <History>
                 {datasets.map((dataset, i) => (
                     <div
-                        key={dataset.label}
+                        key={`${dataset.label}-${i}`}
                         style={{
                             color: colors[i],
                             borderRadius: '5px',
@@ -310,7 +325,7 @@ const DataChart = ({
                     viewBox="0 0 50 50"
                     xmlns="http://www.w3.org/2000/svg"
                     style={{
-                        fill: system.recording ? 'red' : color_xGrid, // Change color based on recording state
+                        fill: isRecording ? 'red' : color_xGrid, // Change color based on recording state
                         borderRadius: '50%',
                         stroke: "#141414",  // Black outline for the button
                         strokeWidth: 4,   // Set outline thickness
@@ -319,7 +334,7 @@ const DataChart = ({
                     {/* Outer circle (the button's background) */}
                     <circle cx="25" cy="25" r="16" />
                     {/* Inner circle (the gap in the middle) */}
-                    <circle cx="25" cy="25" r="8" fill={system.recording ? 'red' : color_xGrid} />
+                    <circle cx="25" cy="25" r="8" fill={isRecording ? 'red' : color_xGrid} />
                 </svg>
             </RecordButton>
         </Container>

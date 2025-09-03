@@ -15,14 +15,13 @@ const Dots = styled.div`
 const Pagination = ({ pages, colorActive, colorInactive, currentPage, dotSize = 20 }) => {
     const theme = useTheme()
 
-    const app = APP((state) => state.settings)
-    const themeColor = (app.general.colorTheme.value).toLowerCase()
+    const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
 
     const circles = [];
 
     for (let i = 0; i < pages; i++) {
         const isActive = i === currentPage;
-        const circleColor = isActive ? theme.colors.theme[themeColor].active : theme.colors.medium;
+        const circleColor = isActive ? theme.colors.theme[colorTheme].active : theme.colors.medium;
 
         circles.push(
             <circle

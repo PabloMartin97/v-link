@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { findDevice, requestDevice, CommandMapping, } from 'node-carplay/web'
 import { eventEmitter } from '../app/helper/EventEmitter';
+import { useNamespaces } from '../socket/Namespaces';
 
 import styled, { css, useTheme } from 'styled-components';
 
@@ -11,7 +12,7 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 
-import { APP, MMI } from '../store/Store';
+import { APP } from '../store/Store';
 import hexToRGBA from '../app/helper/HexToRGBA'
 
 import "./../themes.scss"
@@ -46,6 +47,8 @@ const Overlay = styled.div`
   left: 0;
   height: 100%;
   width: 100%;
+
+  zIndex: 2;
   
   display: flex;
   justify-content: center;
@@ -70,23 +73,44 @@ interface CarplayProps {
 
 function Carplay({ command, commandCounter }: CarplayProps) {
 
-  const app = APP((state) => state);
-  const mmi = MMI((state) => state);
+  const socket = useNamespaces();
 
-  const theme = useTheme();
+  const appUpdate       = APP((state) => state.update);
+  const carplaySettings = APP((state) => state.system.carplay)
+  const width           = APP((state) => state.system.carplaySize.width);
+  const height          = APP((state) => state.system.carplaySize.height);
+  const content         = APP((state) => state.system.interface.content)
+  const navBar          = APP((state) => state.system.interface.navBar)
+
+  const dongleConfig    = APP((state) => state.settings.dongle_config);
+  const exitToDash      = APP((state) => state.settings.general.exitToDash);
 
   const [phoneState, setPhoneState] = useState<Boolean | null>(false);
 
 
-  const width = app.system.carplaySize.width
-  const height = app.system.carplaySize.height
+  const flattenConfig = (config: Record<string, any>) => {
 
-  const config = {
-    fps: mmi.config.fps,
-    width: width,
-    height: height,
-    mediaDelay: mmi.config.delay
-  }
+    const result: Record<string, any> = {};
+    Object.entries(config).forEach(([key, value]) => {
+      if (typeof value === "object" && value !== null && "value" in value) {
+        result[key] = value.value;
+      }
+    });
+    return result;
+  };
+
+  const config = useMemo(() => {
+    const carplayConfig = {
+      ...flattenConfig(dongleConfig),
+      width: width,
+      height: height,
+    };
+    
+    socket.log.emit('info', `(CarPlay) Config: ${JSON.stringify(carplayConfig)}`);
+
+    return carplayConfig;
+  }, [dongleConfig, width, height]);
+
 
   const mainElem = useRef<HTMLDivElement>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -149,8 +173,9 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       const { type } = ev.data;
       switch (type) {
         case 'streamStarted':
+          socket.log.emit('info', '(CarPlay) Stream started')
           // This useEffect will notify when the phone is connected and the stream started
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.carplay.connected = true;
           });
 
@@ -166,7 +191,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
   useEffect(() => {
     const handleEvent = () => {
-      console.log('pairing')
+      socket.log.emit('info', '(CarPlay) Pair Dongle')
       pairDongle();
     };
 
@@ -184,17 +209,19 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       const { type } = ev.data
       switch (type) {
         case 'plugged':
-          console.log('Worker connected')
+          console.log('(CarPlay) Worker connected')
+          socket.log.emit('debug', '(CarPlay) Worker Connected')
 
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.carplay.worker = true;
           });
 
           break
         case 'unplugged':
-          console.log('Worker disconnected')
+          console.log('(CarPlay) Worker disconnected')
+          socket.log.emit('debug', '(CarPlay) Worker Disconnected')
 
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.carplay.worker = false;
             state.system.carplay.phone = false;
             state.system.carplay.user = false;
@@ -203,7 +230,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           });
 
           if (phoneState)
-            console.log('phone still connected... streaming error?')
+            console.log('(CarPlay) Phone still connected... Streaming error?')
+            socket.log.emit('debug', '(CarPlay) Phone still connected... Streaming error?')
 
           break
         case 'requestBuffer':
@@ -229,16 +257,22 @@ function Carplay({ command, commandCounter }: CarplayProps) {
               stopRecording()
               break
             case CommandMapping.requestHostUI:
-              app.update((state) => {
-                state.system.interface.navBar = true;
-              });
+              if (exitToDash) {
+                appUpdate((state) => {
+                  state.system.view = "Dashboard";
+                });
+              } 
+              /* else {
+                appUpdate((state) => {
+                  state.system.interface.navBar = true;
+                });
+              } */
           }
           break
         case 'failure':
           if (retryTimeoutRef.current == null) {
-            console.error(
-              `Carplay initialization failed -- Reloading page in ${RETRY_DELAY_MS}ms`,
-            )
+            console.error(`Carplay initialization failed -- Reloading page in ${RETRY_DELAY_MS}ms`,)
+            socket.log.emit('info', `Carplay initialization failed -- Trying to reload page.`,)
             retryTimeoutRef.current = setTimeout(() => {
               window.location.reload()
             }, RETRY_DELAY_MS)
@@ -252,7 +286,6 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     const element = mainElem?.current
     if (!element) return;
     const observer = new ResizeObserver(() => {
-      //console.log("size change")
       carplayWorker.postMessage({ type: 'frame' })
     })
     observer.observe(element)
@@ -272,15 +305,18 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         carplayWorker.postMessage({ type: 'start', payload: { config } })
 
         console.log('Phone connected')
+        socket.log.emit('info', '(CarPlay) Phone connected')
         setPhoneState(true)
 
-        app.update((state) => {
+        appUpdate((state) => {
           state.system.carplay.phone = true;
         });
       } else {
         console.log('Phone disconnected')
+        socket.log.emit('info', '(CarPlay) Phone disconnected')
+
         setPhoneState(false)
-        app.update((state) => {
+        appUpdate((state) => {
           state.system.carplay.phone = false;
         });
       }
@@ -292,8 +328,9 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   useEffect(() => {
     navigator.usb.onconnect = async () => {
       console.log('Dongle connected')
+      socket.log.emit('info', '(CarPlay) Dongle connected')
 
-      app.update((state) => {
+      appUpdate((state) => {
         state.system.carplay.dongle = true;
         state.system.carplay.pair = true;
       });
@@ -305,9 +342,11 @@ function Carplay({ command, commandCounter }: CarplayProps) {
       if (!device) {
         carplayWorker.postMessage({ type: 'stop' })
         console.log('Dongle disconnected')
+        socket.log.emit('info', '(CarPlay) Dongle disconnected')
+
         setPhoneState(false)
 
-        app.update((state) => {
+        appUpdate((state) => {
           state.system.carplay.dongle = false;
           state.system.carplay.phone = false;
           state.system.carplay.stream = false;
@@ -336,20 +375,20 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         onPointerCancel={sendTouchEvent}
         onPointerOut={sendTouchEvent}
 
-        style={{ height: app.system.carplaySize.height, width: app.system.carplaySize.width }}>
+        style={{ height: height, width: width }}>
 
         <canvas
           ref={canvasRef}
           id="video"
           style={
 
-            app.system.carplay.paired && app.system.carplay.dongle
+            carplaySettings.paired && carplaySettings.dongle
               ? { height: '100%', overflow: 'hidden' }
               : { display: 'none' }
           }
         />
       </Stream>
-      <Overlay isVisible={app.system.interface.content} navVisible={app.system.interface.navBar} />
+      <Overlay isVisible={content} navVisible={navBar} />
     </Container>
   )
 }

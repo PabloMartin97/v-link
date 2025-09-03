@@ -4,7 +4,7 @@ import json
 import os
 import numpy as np
 import socketio
-from .shared.shared_state import shared_state
+from ..shared.shared_state import shared_state
 
 import board
 import busio
@@ -37,7 +37,6 @@ class ADCThread(threading.Thread):
 
         if self.ads:
             self.read_settings()
-            self.connect_to_socketio()
             self.start_adc()
 
     def stop_thread(self):
@@ -50,7 +49,7 @@ class ADCThread(threading.Thread):
             self.ads = ADS.ADS1115(self.i2c)
             self.ads.gain = 1
         except Exception as e:
-            self.logger.error(f"I2C initialization failed: {e}")
+            self.logger.error(f'[ADC] I2C initialization failed: {e}')
             self.ads = None
 
 
@@ -58,34 +57,37 @@ class ADCThread(threading.Thread):
         while not self._stop_event.is_set():
             self.read_sensor()
             time.sleep(.1)
-        #self.disconnect_from_socketio()
 
 
     def read_settings(self):
         self.sensor_data = self.read_sensor_data_from_json()
 
-        for i, (sensor_name, sensor_details) in enumerate(self.sensor_data["sensors"].items()):
-            channel = sensor_details["channel"]
+        for i, (sensor_name, sensor_details) in enumerate(self.sensor_data['sensors'].items()):
+            channel = sensor_details['channel']
             analog_in_instance = AnalogIn(self.ads, getattr(ADS, channel))
             self.channels.append(analog_in_instance)
 
 
     def read_sensor(self):    
-        for i, (key, sensor) in enumerate(self.sensor_data["sensors"].items()):
+        for i, (key, sensor) in enumerate(self.sensor_data['sensors'].items()):
             voltage = self.channels[i].voltage
             resistance = None
 
-            if sensor["ntc"]:
+            if sensor['ntc']:
                 resistance = PULL_UP * voltage / (5 - voltage)
 
-            characteristics = sensor["characteristic"]
+            characteristics = sensor['characteristic']
             interpolated_value = self.interpolate_value(voltage, resistance, characteristics)
             
-            
-            converted_value = eval(sensor["scale"], {"value": interpolated_value})
+            converted_value = eval(sensor['scale'], {'value': interpolated_value})
 
-            data = (f"{sensor['app_id']}:{float(converted_value)}")
-            self.emit_data_to_frontend(data)
+            shared_state.update_car_data(key , float(converted_value))
+
+            #with shared_state.car_data_lock:
+            #    snapshot = shared_state.car_data.copy() 
+            #print(snapshot)
+
+            #self.emit_data_to_frontend(data)
 
     def interpolate_value(self, voltage, resistance, characteristics):
         interpolated_value = None
@@ -113,29 +115,14 @@ class ADCThread(threading.Thread):
         
         return interpolated_value
 
-    def read_sensor_data_from_json(self, filename="adc.json"):
-        config_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
+    def read_sensor_data_from_json(self, filename='adc.json', app_name='v-link'):
+        # Expand ~ to the user's home directory
+        config_home = os.path.expanduser('~/.config')
+        config_folder = os.path.join(config_home, app_name)
         file_path = os.path.join(config_folder, filename)
-        with open(file_path, "r") as file:
-            data = json.load(file)
-            return data
 
-    def connect_to_socketio(self):
-        max_retries = 5
-        current_retry = 0
-        while not self.client.connected and current_retry < max_retries:
-            try:
-                self.client.connect('http://localhost:4001', namespaces=['/adc'])
-                if(shared_state.verbose):
-                    if self.client.connected:
-                        self.logger.info("ADC connected to Socket.IO")
-                    else:
-                        self.logger.error("ADC failed to connect to Socket.IO.")
-            except Exception as e:
-                self.logger.error(f"ADCThread: Socket.IO connection failed. Retry {current_retry}/{max_retries}. Error: {e}")
-                time.sleep(2)
-                current_retry += 1
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f'[ADC] Config file not found: {file_path}')
 
-    def emit_data_to_frontend(self, data):
-        if self.client and self.client.connected:
-            self.client.emit('data', data, namespace='/adc')
+        with open(file_path, 'r') as file:
+            return json.load(file)

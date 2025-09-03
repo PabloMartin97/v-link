@@ -1,18 +1,18 @@
 import { useEffect } from 'react';
-import { Socket } from 'socket.io-client';
+import { useNamespaces } from '../../socket/Namespaces';
+const socket = useNamespaces();
 
 interface DisplayProps {
-    autoOpen: boolean; // dynamic sensor data
-    io: Socket; // update interval in ms
+    autoOpen: boolean;
 }
 
-const Display: React.FC<DisplayProps> = ({ autoOpen, io }) => {
+const Display: React.FC<DisplayProps> = ({ autoOpen }) => {
 
     // Auto-open Display Unit
     useEffect(() => {
         if (autoOpen) {
-            console.log('Opening RTI')
-            io.emit("systemTask", "rti")
+            socket.log.emit('info', 'Opening RTI')
+            socket.sys.emit("systemTask", "rti")
         }
     }, [])
 

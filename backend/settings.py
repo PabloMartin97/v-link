@@ -1,81 +1,163 @@
-import os
 import json
 import shutil
 import logging
+from pathlib import Path
 
 from backend.shared.shared_state import shared_state
 
-logger = logging.getLogger("vlink")
+logger = logging.getLogger('vlink')
+
+# Constants
+APP_ROOT = Path(__file__).resolve().parent.parent
+USER_CONFIG_DIR = Path.home() / '.config' / 'v-link'
+
+DEFAULT_PROFILES_DIR = APP_ROOT / 'backend' / 'config' / 'profiles'
+DEFAULT_CONFIG_DIR = APP_ROOT / 'backend' / 'config'
 
 def load_directory():
-    # Specify the directory path
-    config_directory = os.path.expanduser("~/.config/v-link")
-
-    # Check if the directory exists, if not, create it
-    if not os.path.exists(config_directory):
-        try:
-            os.makedirs(config_directory)
-            logger.info(f"Created directory at: '{config_directory}'")
-        except Exception as e:
-            logger.error(f"Error creating directory: {e}")
-            return None
-
-    return config_directory
-
-def load_settings(setting):
-    # Call load_directory to ensure the directory exists
-    config_directory = load_directory()
-
-    # Specify the file path
-    default_settings_file = setting + ".json"
-    destination_path = os.path.join(config_directory, default_settings_file)
-
-    # Load or create the settings file
-    if not os.path.exists(destination_path):
-        try:
-            shutil.copyfile(os.path.join(os.path.dirname(__file__), "config", default_settings_file), destination_path)
-            logger.info(f"Created settings file at: '{destination_path}'")
-        except Exception as e:
-            logger.error(f"Error copying default settings file: {e}")
-            return None
-        
-    # Load the JSON settings into Python
+    # Ensure user config directory exists.
     try:
-        with open(destination_path, 'r') as file:
-            data = json.load(file)
-            logger.info(setting + "-settings loaded.")
-            return data
+        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        return USER_CONFIG_DIR
     except Exception as e:
-        logger.error(f"Error loading settings from '{destination_path}': {e}")
+        logger.error(f'Error creating directory: {e}')
         return None
     
-def save_settings(setting, data):
-    # Call load_directory to ensure the directory exists
-    config_directory = load_directory()
 
+def check_settings():
+    # Print directory paths for debugging
+    logger.info(f'[Settings] (Dir) App Root: {APP_ROOT}')
+    logger.info(f'[Settings] (Dir) Default profiles: {DEFAULT_PROFILES_DIR}')
+    logger.info(f'[Settings] (Dir) Default configs: {DEFAULT_CONFIG_DIR}')
+    logger.info(f'[Settings] (Dir) User configs: {USER_CONFIG_DIR}')
+
+    # If user config already exists and contains files, return True
+    if USER_CONFIG_DIR.exists() and any(USER_CONFIG_DIR.iterdir()):
+        load_modules()
+        return True
+    else:
+        # Scan profile directories and return available platforms + engines.
+        try:
+            result = {}
+            for d in DEFAULT_PROFILES_DIR.iterdir():
+                if d.is_dir():
+                    subdirs = [sub.name for sub in d.iterdir() if sub.is_dir() and sub.name != "Default"]
+                    if subdirs:
+                        result[d.name] = subdirs
+            return result
+        except Exception as e:
+            logger.error(f'Error reading directories: {e}')
+            return None
+
+
+def load_settings(setting):
+    # Load settings file from user config.
+    if not USER_CONFIG_DIR:
+        return None
+
+    settings_file = USER_CONFIG_DIR / f'{setting}.json'
+    try:
+        with settings_file.open('r', encoding='utf-8') as f:
+            data = json.load(f)
+            logger.info(f'[Settings] {setting}-settings loaded.')
+            return data
+    except Exception as e:
+        logger.error(f'[Settings] Error loading settings from "{settings_file}": {e}')
+        return None
+    
+    
+def save_settings(setting, data):
     # Specify the file path
-    default_settings_file = setting + ".json"
-    destination_path = os.path.join(config_directory, default_settings_file)
+    logger.info(f'[Settings] Saving settings to "{setting}.json"...')
+    json_path = USER_CONFIG_DIR / f'{setting}.json'
 
     # Save the settings to the JSON file
     try:
-        with open(destination_path, 'w') as file:
+        with open(json_path, 'w') as file:
             json.dump(data, file, indent=4)
     except Exception as e:
-        logger.error(f"Error saving settings to '{destination_path}': {e}")
+        logger.error(f'[Settings] Error saving settings to "{json_path}": {e}')
 
 
-def reset_settings(setting):
-    # Call load_directory to ensure the directory exists
-    config_directory = load_directory()
+def reset_settings():
+    # Reset configs by re-applying the last saved profile from app.json.
+    logger.info(f'[Settings] Resetting settings...')
+    app_json_path = USER_CONFIG_DIR / 'app.json'
+    if not app_json_path.exists():
+        logger.error(f'[Settings] Undefined profile, please delete .config/v-link/ and restart the app.')
+        shared_state.exit_event.set()
 
-    # Specify the file paths
-    default_settings_file = setting + ".json"
-    destination_path = os.path.join(config_directory, default_settings_file)
+    with app_json_path.open('r', encoding='utf-8') as f:
+        config = json.load(f)
 
-    # Reset the settings to the original state
+    profile_data = config.get('constants', {}).get('profile')
+    if not profile_data:
+        logger.error(f'[Settings] Undefined profile, please delete .config/v-link/ and restart the app.')
+        shared_state.exit_event.set()
+
+    copy_files(profile_data)
+
+
+def copy_files(data):
     try:
-        shutil.copyfile(os.path.join(os.path.dirname(__file__), "config", default_settings_file), destination_path)
-        #logger.debug(f"Reset {setting}-settings to the original state.")
+        logger.info(f'[Settings] Copying files to user config directory...')
+        # Copy base + profile-specific config files into user config directory.
+
+        if data == "default":
+            profile_config = DEFAULT_CONFIG_DIR / 'profiles' / 'Default'
+
+        else:
+            platform = data.get('platform')
+            engine = data.get('engine')
+
+            profile_config = DEFAULT_CONFIG_DIR / 'profiles' / platform / engine
+
+
+        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+        def copy_json_files(src: Path, dst: Path):
+            if src.is_dir():
+                for file in src.glob('*.json'):
+                    shutil.copy(file, dst)
+
+        # Copy base + profile-specific configs
+        copy_json_files(DEFAULT_CONFIG_DIR, USER_CONFIG_DIR)
+        if data != "default":
+            copy_json_files(profile_config, USER_CONFIG_DIR)
+
+
+        # Set modules states in app based on available config files
+        try:
+            app_settings = load_settings('app')
+            modules = app_settings.get('constants', {}).get('modules', {})
+            profile = app_settings.get('constants', {}).get('profile', {})
+
+            for module_file in USER_CONFIG_DIR.glob("*.json"):
+                name = module_file.stem  # e.g. "can" from "can.json"
+                if name != "app":  # don’t toggle app.json itself
+                    modules[name] = True
+            
+            app_settings['constants']['profile'] = data
+            
+            save_settings('app', app_settings)
+        except Exception as e:
+            logger.error(f'[Settings] Error loading app settings: {e}')
+            shared_state.exit_event.set()
+            return False
+        
+        load_modules()
+        return True
+    
     except Exception as e:
-        logger.error(f"Error resetting settings: {e}")
+        logger.error(f'[Settings] Error copying files: {e}')
+        return False
+    
+# Setting a shared_state based on app.json
+def load_modules():
+    settings = load_settings('app')
+    constants = settings.get('constants', {})
+
+    shared_state.canModule = constants['modules']['can']
+    shared_state.swcModule = constants['modules']['swc']
+    shared_state.rtiModule = constants['modules']['rti']
+    shared_state.adcModule = constants['modules']['adc']

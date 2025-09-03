@@ -65,25 +65,24 @@ export const RadialGauge = ({
 
     // Load Settings
     const modules = APP((state) => state.modules);
-    const data = DATA((state) => state.data)
     const theme = useTheme()
-
-    let value = data[sensor]
-
+    const data = DATA((state) => state.data)
     // Load interface config based on type
     const store = modules[type];
-    const settings = store ? store((state) => state.settings.sensors[sensor]) : {};
-    const label = settings.label
+    // Use safe lookup for sensor settings
+    const settings = store
+        ? store((state) => state.settings.sensors[sensor]) || {}
+        : {};
 
-    const maxValue = settings.max_value
-    const minValue = settings.min_value
-    const limitStart = settings.limit_start
+    const label = settings.label ?? "N/A";
+    const maxValue = settings.max_value ?? 100;  // default max
+    const minValue = settings.min_value ?? 0;    // default min
+    const limitStart = settings.limit_start ?? 80;
+    const unit = settings.unit ?? "";
 
-    const app = APP((state) => state.settings)
-    const themeColor = (app.general.colorTheme.value).toLowerCase()
+    let value = data[sensor] ?? minValue;
 
-
-    /* Update scale factors whenever the dimensions or viewBox changes. */
+    const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
     // State variables for SVG content and rendering
 
 
@@ -96,6 +95,7 @@ export const RadialGauge = ({
 
     /* Observe container resizing and update dimensions. */
     useEffect(() => {
+        let resizeObserver = null;
         const handleResize = () => {
             if (containerRef.current) {
                 setDimensions({
@@ -106,14 +106,18 @@ export const RadialGauge = ({
             }
         };
 
-        const resizeObserver = new ResizeObserver(handleResize);
-        if (containerRef.current) resizeObserver.observe(containerRef.current);
-        return () => resizeObserver.disconnect();
+        if (containerRef.current) {
+            resizeObserver = new ResizeObserver(handleResize);
+            resizeObserver.observe(containerRef.current);
+            handleResize();
+        }
+        return () =>  {
+            if(resizeObserver) {
+                resizeObserver.disconnect();
+                resizeObserver = null;
+            }
+        }
     }, []);
-
-
-
-
 
     // Center of Gauge
     const cx = dimensions.height / 2;
@@ -199,7 +203,7 @@ export const RadialGauge = ({
         // Now, create a color scale where the lightest color corresponds to the progressArc position
         const colorScale = d3.scaleLinear()
             .domain([0, lightestPosition, totalMarkers - 1])  // Domain from start, progress arc, to end
-            .range([theme.colors.theme[themeColor].default, (data[sensor] > limitStart ? theme.colors.theme[themeColor].highlightLight : theme.colors.theme[themeColor].active)]);  // Dark to active to light
+            .range([theme.colors.theme[colorTheme].default, (value > limitStart ? theme.colors.theme[colorTheme].highlightLight : theme.colors.theme[colorTheme].active)]);  // Dark to active to light
 
         const color = colorScale(index);  // Get color based on the index
 
@@ -256,179 +260,173 @@ export const RadialGauge = ({
 
 
     useEffect(() => {
-        if (containerRef.current) {
-            const svg = d3.select(containerRef.current).select("svg");
+        if (!containerRef.current) return;
 
-            // Reset the SVG elements that need updating only (arc paths)
-            svg.selectAll(".valueLabel").remove()
-            svg.selectAll(".outlineArc").remove();
-            svg.selectAll(".backgroundArc").remove();
-            svg.selectAll(".progressArc").remove();
-            svg.selectAll(".limitArc").remove();
-            svg.selectAll(".marker").remove();
-            svg.selectAll(".label").remove(); // Remove previous labels
+        const svg = d3.select(containerRef.current).select("svg");
 
-            svg.append("defs")
-                .append("linearGradient")
-                .attr("id", "progressGradient")
-                .attr("x1", "0%")
-                .attr("y1", "100%")
-                .attr("x2", "100%")
-                .attr("y2", "0%")
-                .append("stop")
-                .attr("offset", "0%")
-                .attr("stop-color", theme.colors.theme[themeColor].default)  // Starting color
-                .append("stop")
-                .attr("offset", "100%")
-                .attr("stop-color", theme.colors.theme[themeColor].light); // Ending color
+        // Reset the SVG elements that need updating only (arc paths)
+        svg.selectAll("*").remove()
 
-            // Add the main arc as background
-            svg
-                .append("path")
-                .attr("class", "backgroundArc")
-                .attr("d", generateArc(mainArc, 0, mainRadius, 0, mainArc, π))
-                .attr("fill", "none")
-                .attr("stroke", theme.colors.dark)
-                .attr("stroke-width", 5);
+        svg.append("defs")
+            .append("linearGradient")
+            .attr("id", "progressGradient")
+            .attr("x1", "0%")
+            .attr("y1", "100%")
+            .attr("x2", "100%")
+            .attr("y2", "0%")
+            .append("stop")
+            .attr("offset", "0%")
+            .attr("stop-color", theme.colors.theme[colorTheme].default)  // Starting color
+            .append("stop")
+            .attr("offset", "100%")
+            .attr("stop-color", theme.colors.theme[colorTheme].light); // Ending color
 
-            // Add outline arc path
-            svg
-                .append("path")
-                .attr("class", "outlineArc")
-                .attr("d", generateArc(progressArc, 0, outlineRadius, 0, progressArc, π))
-                .attr("fill", "none")
-                .attr("stroke", theme.colors.light)
-                .attr("stroke-width", 2);
+        // Add the main arc as background
+        svg
+            .append("path")
+            .attr("class", "backgroundArc")
+            .attr("d", generateArc(mainArc, 0, mainRadius, 0, mainArc, π))
+            .attr("fill", "none")
+            .attr("stroke", theme.colors.dark)
+            .attr("stroke-width", 5);
 
-            // Add limit arc path
-            svg
-                .append("path")
-                .attr("class", "limitArc")
-                .attr("d", generateArc(mainArc, limitArc, outlineRadius, 0, limitArc, mainArc))
-                .attr("fill", "none")
-                .attr("stroke", theme.colors.theme[themeColor].highlightDark)
-                .attr("stroke-width", 3);
+        // Add outline arc path
+        svg
+            .append("path")
+            .attr("class", "outlineArc")
+            .attr("d", generateArc(progressArc, 0, outlineRadius, 0, progressArc, π))
+            .attr("fill", "none")
+            .attr("stroke", theme.colors.light)
+            .attr("stroke-width", 2);
 
-            const progressCount = 140 // Total number of markers
-            const progressStart = -2 // Distance from the center for marker start
-            const progressEnd = 2   // Distance from the center for marker end
-            const progressWidth = 3 // Width of the markers
-            const progress = svg.selectAll(".marker").data(generateMarkers(progressStart, progressEnd, progressWidth, progressCount)); //markerStart, markerEnd, markerWidth, markerCount
-            progress.exit().remove(); // Remove old markers
+        // Add limit arc path
+        svg
+            .append("path")
+            .attr("class", "limitArc")
+            .attr("d", generateArc(mainArc, limitArc, outlineRadius, 0, limitArc, mainArc))
+            .attr("fill", "none")
+            .attr("stroke", theme.colors.theme[colorTheme].highlightDark)
+            .attr("stroke-width", 3);
+
+        const progressCount = 140 // Total number of markers
+        const progressStart = -2 // Distance from the center for marker start
+        const progressEnd = 2   // Distance from the center for marker end
+        const progressWidth = 3 // Width of the markers
+        const progress = svg.selectAll(".marker").data(generateMarkers(progressStart, progressEnd, progressWidth, progressCount)); //markerStart, markerEnd, markerWidth, markerCount
+        progress.exit().remove(); // Remove old markers
 
 
-            progress
+        progress
+            .enter()
+            .append("line")
+            .attr("class", "progressArc")
+            .attr("x1", (d) => d.x1)
+            .attr("y1", (d) => d.y1)
+            .attr("x2", (d) => d.x2)
+            .attr("y2", (d) => d.y2)
+            .attr("stroke", (d, i) => generateMarkerGradient(i, 130, progressArc))  // Apply gradient // 
+            .attr("stroke-width", progressWidth)
+            .attr("opacity", 1); // Fade-in effect
+
+        progress
+            .transition()
+            .duration(1000)
+            .attr("x1", (d) => d.x1)
+            .attr("y1", (d) => d.y1)
+            .attr("x2", (d) => d.x2)
+            .attr("y2", (d) => d.y2)
+            .attr("stroke", (d, i) => generateMarkerGradient(i, 130, progressArc));  // Apply gradient in transition
+
+        // Add markers with gradient color effect
+        if (bars) {
+            const markerCount = 60 // Total number of markers
+            const markerStart = 7 // Distance from the center for marker start
+            const markerEnd = 20   // Distance from the center for marker end
+            const markerWidth = 3 // Width of the markers
+            const markers = svg.selectAll(".marker").data(generateMarkers(markerStart, markerEnd, markerWidth, markerCount)); //markerStart, markerEnd, markerWidth, markerCount
+            markers.exit().remove(); // Remove old markers
+
+            markers
                 .enter()
                 .append("line")
-                .attr("class", "progressArc")
+                .attr("class", "marker")
                 .attr("x1", (d) => d.x1)
                 .attr("y1", (d) => d.y1)
                 .attr("x2", (d) => d.x2)
                 .attr("y2", (d) => d.y2)
-                .attr("stroke", (d, i) => generateMarkerGradient(i, 130, progressArc))  // Apply gradient // 
-                .attr("stroke-width", progressWidth)
+                .attr("stroke", (d) => theme.colors.medium)  // Apply gradient // 
+                .attr("stroke-width", markerWidth)
                 .attr("opacity", 1); // Fade-in effect
 
-            progress
+            markers
                 .transition()
                 .duration(1000)
                 .attr("x1", (d) => d.x1)
                 .attr("y1", (d) => d.y1)
                 .attr("x2", (d) => d.x2)
                 .attr("y2", (d) => d.y2)
-                .attr("stroke", (d, i) => generateMarkerGradient(i, 130, progressArc));  // Apply gradient in transition
-
-            // Add markers with gradient color effect
-            if (bars) {
-                const markerCount = 60 // Total number of markers
-                const markerStart = 7 // Distance from the center for marker start
-                const markerEnd = 20   // Distance from the center for marker end
-                const markerWidth = 3 // Width of the markers
-                const markers = svg.selectAll(".marker").data(generateMarkers(markerStart, markerEnd, markerWidth, markerCount)); //markerStart, markerEnd, markerWidth, markerCount
-                markers.exit().remove(); // Remove old markers
-
-                markers
-                    .enter()
-                    .append("line")
-                    .attr("class", "marker")
-                    .attr("x1", (d) => d.x1)
-                    .attr("y1", (d) => d.y1)
-                    .attr("x2", (d) => d.x2)
-                    .attr("y2", (d) => d.y2)
-                    .attr("stroke", (d) => theme.colors.medium)  // Apply gradient // 
-                    .attr("stroke-width", markerWidth)
-                    .attr("opacity", 1); // Fade-in effect
-
-                markers
-                    .transition()
-                    .duration(1000)
-                    .attr("x1", (d) => d.x1)
-                    .attr("y1", (d) => d.y1)
-                    .attr("x2", (d) => d.x2)
-                    .attr("y2", (d) => d.y2)
-                    .attr("stroke", (d, i) => generateMarkerGradient(i, markerCount, progressArc));  // Apply gradient in transition
-            }
-
-            // Add text labels
-            const labels = svg.selectAll(".label").data(generateTextLabels());
-
-
-            if (showLabels) {
-                // Remove old labels
-                labels.exit().remove();
-
-                // Add new labels
-                const labelEnter = labels
-                    .enter()
-                    .append("text")
-                    .attr("class", "label")
-                    .attr("fill", theme.colors.light)
-                    .attr("font-size", (0.5 / 10) * dimensions.height) // Increased font size for visibility
-                    .attr("text-anchor", "middle")
-                    .attr("dominant-baseline", "middle")
-                    .attr("opacity", 1) // Ensure visibility
-                    .text((d) => {
-                        // Check if labelValue is above 4 digits
-                        const value = d.labelValue;
-                        if (value.toString().length > 3) {
-                            return value.toString()[0]; // Take only the first digit
-                        }
-                        return value; // Otherwise, keep the original value
-                    });
-
-                // Animate the position of the labels
-                labelEnter
-                    .attr("x", (d) => d.x)
-                    .attr("y", (d) => d.y)
-                    .transition()
-                    .duration(1000) // Transition duration for smooth update
-                    .attr("x", (d) => d.x)
-                    .attr("y", (d) => d.y);
-            }
-
-            // Add unit label
-            svg.append("text")
-                .attr("class", "valueLabel")
-                .attr("fill", theme.colors.light)
-                .attr("font-size", (0.75 / 10) * dimensions.height)
-                .attr("x", "50%")
-                .attr("y", "52%")
-                .attr("dy", "20px")
-                .attr("text-anchor", "middle")
-                .text(settings.unit);
-
-            // Add value label
-            svg.append("text")
-                .attr("class", "valueLabel")
-                .attr("fill", theme.colors.light)
-                .attr("font-size", (1.2 / 10) * dimensions.height)
-                .attr("x", "50%")
-                .attr("y", "42%")
-                .attr("dy", "20px")
-                .attr("text-anchor", "middle")
-                .text(data[sensor]);
-
+                .attr("stroke", (d, i) => generateMarkerGradient(i, markerCount, progressArc));  // Apply gradient in transition
         }
+
+        // Add text labels
+        const labels = svg.selectAll(".label").data(generateTextLabels());
+
+
+        if (showLabels) {
+            // Remove old labels
+            labels.exit().remove();
+
+            // Add new labels
+            const labelEnter = labels
+                .enter()
+                .append("text")
+                .attr("class", "label")
+                .attr("fill", theme.colors.light)
+                .attr("font-size", (0.5 / 10) * dimensions.height) // Increased font size for visibility
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("opacity", 1) // Ensure visibility
+                .text((d) => {
+                    // Check if labelValue is above 4 digits
+                    const value = d.labelValue;
+                    if (value.toString().length > 3) {
+                        return value.toString()[0]; // Take only the first digit
+                    }
+                    return value; // Otherwise, keep the original value
+                });
+
+            // Animate the position of the labels
+            labelEnter
+                .attr("x", (d) => d.x)
+                .attr("y", (d) => d.y)
+                .transition()
+                .duration(1000) // Transition duration for smooth update
+                .attr("x", (d) => d.x)
+                .attr("y", (d) => d.y);
+        }
+
+        // Add unit label
+        svg.append("text")
+            .attr("class", "valueLabel")
+            .attr("fill", theme.colors.light)
+            .attr("font-size", (0.75 / 10) * dimensions.height)
+            .attr("x", "50%")
+            .attr("y", "52%")
+            .attr("dy", "20px")
+            .attr("text-anchor", "middle")
+            .text(settings.unit);
+
+        // Add value label
+        svg.append("text")
+            .attr("class", "valueLabel")
+            .attr("fill", theme.colors.light)
+            .attr("font-size", (1.2 / 10) * dimensions.height)
+            .attr("x", "50%")
+            .attr("y", "42%")
+            .attr("dy", "20px")
+            .attr("text-anchor", "middle")
+            .text(value);
+
     }, [dimensions, progressArc, bars]); // Re-run whenever progressArc, dimensions, or bars change
 
 

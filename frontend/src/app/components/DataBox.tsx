@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import styled, { useTheme } from 'styled-components';
 
 import { DATA, APP } from '../../store/Store';
-import { Typography } from '../../theme/styles/Typography';
 import { CustomIcon } from '../../theme/styles/Icons';
 
 const Container = styled.div`
@@ -32,19 +31,16 @@ const Databox = styled.div`
 `;
 const Icons = styled.div`
   flex 1;
-
   display: flex;
   gap: 200px;
-
   justify-content: center;
   align-items: center;
   width: 100%;
   height: 20px;
-
   padding-left: 20px;
   padding-right: 20px;
   box-sizing: border-box;
-  `;
+`;
 
 const Svg = styled.svg`
   display: flex;
@@ -56,124 +52,176 @@ const Svg = styled.svg`
 
 const DataBox = () => {
     const theme = useTheme();
-
-    const app = APP((state) => state)
     const data = DATA((state) => state.data);
     const modules = APP((state) => state.modules);
-    const settings = APP((state) => state.settings.dash_classic);
 
-    const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
 
-    const padding = 20; // Padding for the rect size
-    const containerRef = useRef(null);
+    const dash_classic = APP((state) => state.settings.dash_classic);
+    const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
 
+
+    // Extract settings
+    const leftName = dash_classic.value_1.value;
+    const leftType = dash_classic.value_1.type;
+    const rightName = dash_classic.value_2.value;
+    const rightType = dash_classic.value_2.type;
+    const centerName = dash_classic.message_data.value;
+    const centerType = dash_classic.message_data.type;
+
+
+    const padding = 20;
+    const containerRef = useRef<HTMLDivElement>(null);
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const { width, height } = dimensions;
 
-    /* Observe container resizing and update dimensions. */
-    useEffect(() => {
-        const handleResize = () => {
-            if (containerRef.current) {
-                setDimensions({
-                    width: containerRef.current.offsetWidth,
-                    height: containerRef.current.offsetHeight,
-                });
-            }
-        };
+    const getSensorConfig = (modules, type, name) => {
+        if (!type) return {}; // empty type → return empty object
+        const selector = modules[type];
+        if (!selector) return {};
+        const sensor = selector((state) => state.settings.sensors[name]);
+        return sensor && typeof sensor === "object" ? sensor : {};
+    };
 
-        const resizeObserver = new ResizeObserver(handleResize);
-        if (containerRef.current) resizeObserver.observe(containerRef.current);
-        return () => resizeObserver.disconnect();
+    const leftSensorConfig = getSensorConfig(modules, leftType, leftName);
+    const rightSensorConfig = getSensorConfig(modules, rightType, rightName);
+    const centerSensorConfig = getSensorConfig(modules, centerType, centerName);
+
+    // Memoize dashboard data
+    const dashData = useMemo(() => {
+        return {
+            left: {
+                name: leftName,
+                data: data[leftName] ?? "N/A",
+                id: leftSensorConfig.app_id ?? null,
+                limit: leftSensorConfig.limit_start ?? Infinity,
+            },
+            right: {
+                name: rightName,
+                data: data[rightName] ?? "N/A",
+                id: rightSensorConfig.app_id ?? null,
+                limit: rightSensorConfig.limit_start ?? Infinity,
+            },
+            center: {
+                name: centerName,
+                data: data[centerName] ?? "N/A",
+                id: centerSensorConfig.app_id ?? null,
+                limit: dash_classic.message_threshold.value ?? Infinity,
+                msg: dash_classic.message_text.value ?? "No Message",
+                operator: dash_classic.message_option.value ?? "=",
+            },
+        };
+    }, [
+        leftName,
+        leftSensorConfig,
+        rightName,
+        rightSensorConfig,
+        centerName,
+        centerSensorConfig,
+        data,
+        dash_classic.message_threshold.value,
+        dash_classic.message_text.value,
+        dash_classic.message_option.value,
+    ]);
+
+    const { customMsg, toggle } = useMemo(() => {
+        const { data: centerData, limit, msg, operator } = dashData.center;
+        let message = 'No Messages';
+        let active = false;
+
+        if (operator === '>' && centerData > limit) {
+            message = msg;
+            active = true;
+        } else if (operator === '<' && centerData < limit) {
+            message = msg;
+            active = true;
+        } else if (operator === '=' && centerData === limit) {
+            message = msg;
+            active = true;
+        }
+
+        return { customMsg: message, toggle: active };
+    }, [
+        dashData.center.data,
+        dashData.center.limit,
+        dashData.center.msg,
+        dashData.center.operator,
+    ]);
+
+    // Handle resize
+    const handleResize = useCallback(() => {
+        if (containerRef.current) {
+            setDimensions({
+                width: containerRef.current.offsetWidth,
+                height: containerRef.current.offsetHeight,
+            });
+        }
     }, []);
 
-    const leftName = settings.value_1.value
-    const leftType = settings.value_1.type
-    const leftID = modules[leftType]((state) => state.settings.sensors[leftName].app_id)
-    const leftData = data[leftName]
-    const leftLimit = modules[leftType]((state) => state.settings.sensors[leftName].limit_start)
-
-    const rightName = settings.value_2.value
-    const rightType = settings.value_2.type
-    const rightID = modules[rightType]((state) => state.settings.sensors[rightName].app_id)
-    const rightData = data[rightName]
-    const rightLimit = modules[rightType]((state) => state.settings.sensors[rightName].limit_start)
-
-
-    const [customMsg, setCustomMsg] = useState('No Messages')
-    const [toggle, setToggle] = useState(false)
-
-    const centerName = settings.message_data.value
-    const centerType = settings.message_data.type
-    const centerID = modules[centerType]((state) => state.settings.sensors[centerName].app_id)
-    const centerMsg = settings.message_text.value
-    const centerLimit = settings.message_threshold.value
-    const centerData = data[centerName]
-    const centerOperator = settings.message_option.value
-
-    /* Update center values. */
     useEffect(() => {
-        const defaultText = 'No Messages'
-
-        if (centerOperator === '>') {
-            if (centerData > centerLimit) {
-                setCustomMsg(centerMsg)
-                setToggle(true)
-            }
-            else {
-                setCustomMsg(defaultText)
-                setToggle(false)
-            }
-        } else if (centerOperator === '<') {
-            if (centerData < centerLimit) {
-                setCustomMsg(centerMsg)
-                setToggle(true)
-            }
-            else {
-                setCustomMsg(defaultText)
-                setToggle(false)
-            }
-        } else if (centerOperator === '=') {
-            if (centerData === centerLimit) {
-                setCustomMsg(centerMsg)
-                setToggle(true)
-            }
-            else {
-                setCustomMsg(defaultText)
-                setToggle(false)
-            }
+        const resizeObserver = new ResizeObserver(handleResize);
+        if (containerRef.current) {
+            resizeObserver.observe(containerRef.current);
+            handleResize();
         }
-    }, [centerData]);
+        return () => resizeObserver.disconnect();
+    }, [handleResize]);
 
+    // Theme colors
+    const themeColors = useMemo(
+        () => ({
+            activeColor: theme.colors.theme[themeColor].highlightDark,
+            defaultColor: theme.colors.light,
+            inactiveColor: theme.colors.medium,
+            glowColor: theme.colors.theme[themeColor].default,
+            blueHighlight: theme.colors.theme.blue.highlightDark,
+        }),
+        [theme.colors, themeColor]
+    );
 
-
-    // Return the layout
     return (
         <Container>
             <Icons>
                 <CustomIcon
                     stroke={2}
                     size={'25px'}
-                    isActive={leftData > leftLimit}
-                    activeColor={theme.colors.theme[themeColor].highlightDark}
-                    defaultColor={theme.colors.light}
-                    inactiveColor={theme.colors.medium}
-                    glowColor={theme.colors.theme[themeColor].default}>
-                    <use xlinkHref={`/assets/svg/icons/data/${leftID}.svg#${leftID}`}></use>
+                    isActive={dashData.left.data > dashData.left.limit}
+                    activeColor={themeColors.activeColor}
+                    defaultColor={themeColors.defaultColor}
+                    inactiveColor={themeColors.inactiveColor}
+                    glowColor={themeColors.glowColor}
+                >
+                    {dashData.left.id != null &&
+                        <use
+                            xlinkHref={`/assets/svg/icons/data/${dashData.left.id}.svg#${dashData.left.id}`}
+                        />
+                    }
                 </CustomIcon>
-                <CustomIcon color={toggle ? theme.colors.theme.blue.highlightDark : theme.colors.medium} stroke={2} size={'40px'}>
-                    <use xlinkHref={`/assets/svg/icons/data/${'err'}.svg#${'err'}`}></use>
+
+                <CustomIcon
+                    color={toggle ? themeColors.blueHighlight : themeColors.inactiveColor}
+                    stroke={2}
+                    size={'40px'}
+                >
+                    <use xlinkHref={`/assets/svg/icons/data/${'err'}.svg#${'err'}`} />
                 </CustomIcon>
+
                 <CustomIcon
                     stroke={2}
                     size={'25px'}
-                    isActive={rightData > rightLimit}
-                    activeColor={theme.colors.theme[themeColor].highlightDark}
-                    defaultColor={theme.colors.light}
-                    inactiveColor={theme.colors.medium}
-                    glowColor={theme.colors.theme[themeColor].default}>
-                    <use xlinkHref={`/assets/svg/icons/data/${rightID}.svg#${rightID}`}></use>
+                    isActive={dashData.right.data > dashData.right.limit}
+                    activeColor={themeColors.activeColor}
+                    defaultColor={themeColors.defaultColor}
+                    inactiveColor={themeColors.inactiveColor}
+                    glowColor={themeColors.glowColor}
+                >
+                    {dashData.right.id != null &&
+                        <use
+                            xlinkHref={`/assets/svg/icons/data/${dashData.right.id}.svg#${dashData.right.id}`}
+                        />
+                    }
                 </CustomIcon>
             </Icons>
+
             <Databox ref={containerRef}>
                 {width > 0 && height > 0 && (
                     <Svg viewBox={`0 0 ${width} ${height}`}>
@@ -183,62 +231,59 @@ const DataBox = () => {
                                 <stop offset="80%" stopColor="rgba(255, 255, 255, 0)" />
                             </linearGradient>
                         </defs>
+
                         <rect
-                            x={padding} // Center the box by applying half the padding as an offset
+                            x={padding}
                             y={padding}
-                            width={width - (padding * 2)} // Subtract padding from width
-                            height={Math.max(0, height - (padding * 2))} // Prevent negative height
-                            ry="12"  // Rounded corners
+                            width={width - padding * 2}
+                            height={Math.max(0, height - padding * 2)}
+                            ry="12"
                             fill="rgba(0, 0, 0, 0.2)"
                             stroke="url(#fadeDatabox)"
                             strokeWidth="1"
                         />
 
-                        {/* Calculate the total width and gap */}
                         <text
-                            x={width / 2 - 1.5 * 155} // Shift the first text left for the total group to be centered
-                            y={height / 2} // Center text vertically
+                            x={width / 2 - 1.5 * 155}
+                            y={height / 2}
                             textAnchor="middle"
                             alignmentBaseline="middle"
                             fontSize={theme.typography.display1.fontSize}
                             fontFamily={theme.typography.display1.fontFamily}
                             fontWeight={theme.typography.caption2.fontWeight}
-                            fill={theme.colors.light}
+                            fill={themeColors.defaultColor}
                         >
-                            {data[leftName]}
+                            {dashData.left.data}
                         </text>
 
                         <text
-                            x={width / 2} // Center the second text horizontally
-                            y={height / 2} // Center text vertically
+                            x={width / 2}
+                            y={height / 2}
                             textAnchor="middle"
                             alignmentBaseline="middle"
                             fontSize={theme.typography.display1.fontSize}
                             fontFamily={theme.typography.display1.fontFamily}
                             fontWeight={theme.typography.caption2.fontWeight}
-                            fill={toggle ? theme.colors.theme.blue.highlightDark : theme.colors.medium}
-
+                            fill={toggle ? themeColors.blueHighlight : themeColors.inactiveColor}
                         >
                             {customMsg}
                         </text>
 
                         <text
-                            x={width / 2 + 1.5 * 155} // Shift the third text right for the total group to be centered
-                            y={height / 2} // Center text vertically
+                            x={width / 2 + 1.5 * 155}
+                            y={height / 2}
                             textAnchor="middle"
                             alignmentBaseline="middle"
                             fontSize={theme.typography.display1.fontSize}
                             fontFamily={theme.typography.display1.fontFamily}
                             fontWeight={theme.typography.caption2.fontWeight}
-                            fill={theme.colors.light}
+                            fill={themeColors.defaultColor}
                         >
-                            {data[rightName]}
+                            {dashData.right.data}
                         </text>
-
                     </Svg>
                 )}
             </Databox>
-
         </Container>
     );
 };

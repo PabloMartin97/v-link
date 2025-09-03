@@ -4,12 +4,15 @@ import { theme } from './theme/Theme';
 import styled, { ThemeProvider, StyleSheetManager } from 'styled-components';
 import isPropValid from '@emotion/is-prop-valid'; // Import isPropValid
 
-import { APP, MMI, KEY } from './store/Store';
+import { APP } from './store/Store';
+
+import { useNamespaces } from './socket/Namespaces';
 import { Socket } from './socket/Socket';
 
+import Init from './app/Init';
 import Splash from './app/Splash';
 import Content from './app/Content';
-import Modal from './app/components/Modal';
+import { Modal } from './app/components/Modal';
 
 
 import Carplay from './carplay/Carplay';
@@ -27,11 +30,18 @@ const AppContainer = styled.div`
 `;
 
 function App() {
-  const mmi = MMI((state) => state);
-  const key = KEY((state) => state);
-  const app = APP((state) => state);
+  // Subscribe to store slices
+  const systemSettings = APP((state) => state.system);
+  const appUpdate = APP((state) => state.update);
+  const setKeyStroke = APP((state) => state.setKeyStroke);
+  const dongleBindings = APP((state) => state.settings.dongle_bindings);
 
-  const system = app.system;
+  const keyStroke = APP((state) => state.keyStroke);
+  const switchPage = APP((state) => state.switchPage);
+  const pauseKeyBinds = APP((state) => state.pauseKeyBinds);
+
+  const socket = useNamespaces();
+
 
   const [commandCounter, setCommandCounter] = useState(0);
   const [keyCommand, setKeyCommand] = useState('');
@@ -41,35 +51,43 @@ function App() {
     return () => {
       document.removeEventListener('keydown', mmiKeyDown);
     };
-  }, [system.view, system.switch]);
+  }, [systemSettings.view, systemSettings.switch, pauseKeyBinds]);
 
-  const mmiKeyDown = (event: KeyboardEvent) => {
-    // Store last Keystroke in store to broadcast it
-    key.setKeyStroke(event.code);
+const mmiKeyDown = (event: KeyboardEvent) => {
+  // Store last Keystroke in store to broadcast it
+  setKeyStroke(event.code);
 
-    // Only process Carplay key commands when in Carplay view
-    if (system.view !== 'Carplay') return;
+  // If keybinds are paused, do not process further
+  
+  if(pauseKeyBinds) return;
 
-    // If user is not switching the page, send control to CarPlay
-    if (system.switch && event.code !== system.switch) {
-      if (Object.values(mmi!.bindings).includes(event.code)) {
-        const action = Object.keys(mmi!.bindings).find(key =>
-          mmi!.bindings[key] === event.code
-        );
-        //console.log(action)
-        if (action !== undefined) {
+  // Only process Carplay key commands when in Carplay view
+  if (systemSettings.view !== 'Carplay') return;
+
+  // If user is not switching the page, send control to CarPlay
+  if (systemSettings.switch && event.code !== systemSettings.switch) {
+    if (dongleBindings) {
+      // Find the action whose .value matches the key event
+      const action = Object.keys(dongleBindings).find(
+        (key) => dongleBindings[key].value === event.code
+      );
+      socket.log.emit('debug', 'Emitting carplay key-command: ', action);
+
+      if (action !== undefined) {
           setKeyCommand(action);
-          setCommandCounter(prev => prev + 1);
-          if (action === 'selectDown') {
-            setTimeout(() => {
-              setKeyCommand('selectUp');
-              setCommandCounter(prev => prev + 1);
-            }, 200);
-          }
+          setCommandCounter((c) => c + 1);
+
+        if (action === "selectDown") {
+          setTimeout(() => {
+            setKeyCommand("selectUp");
+            setCommandCounter((c) => c + 1);
+          }, 200);
         }
       }
     }
-  };
+  }
+};
+
 
   // Dimensions of the container
   const containerRef = useRef(null);
@@ -78,21 +96,19 @@ function App() {
   useEffect(() => {
     const handleResize = () => {
       if (containerRef.current)
-        if (containerRef.current && system.startedUp) {
-
+        if (containerRef.current && systemSettings.startedUp) {
+          const topBarHeight = APP.getState().settings.side_bars.topBarHeight.value;
           const carplayFullscreen = containerRef.current.offsetHeight;
-          const carplayWindowed = containerRef.current.offsetHeight - app.settings.side_bars.topBarHeight.value;
+          const carplayWindowed = containerRef.current.offsetHeight - topBarHeight;
 
-          console.log("Fullscreen Height: ", carplayFullscreen);
-          console.log("Windowed Height: ", carplayWindowed);
-          console.log("Topbar Height: ", app.settings.side_bars.topBarHeight.value);
+          socket.log.emit('info', `Window size changed: {Fullscreen: ${containerRef.current.offsetWidth}x${carplayFullscreen}, Without Topbar: ${containerRef.current.offsetWidth}x${carplayWindowed}}`)
 
-          app.update((state) => {
+          appUpdate((state) => {
             state.system.windowSize.width = containerRef.current.offsetWidth;
             state.system.windowSize.height = containerRef.current.offsetHeight;
 
             state.system.carplaySize.width = containerRef.current.offsetWidth;
-            state.system.carplaySize.height = (app.settings.side_bars.topBarHeight.value ? carplayFullscreen : carplayWindowed);
+            state.system.carplaySize.height = (topBarHeight ? carplayFullscreen : carplayWindowed);
           });
 
           setReady(true);
@@ -102,39 +118,34 @@ function App() {
     const resizeObserver = new ResizeObserver(handleResize);
     if (containerRef.current) resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
-  }, [system.startedUp, containerRef.current]);
+  }, [systemSettings.startedUp, containerRef.current]);
 
   return (
     <StyleSheetManager shouldForwardProp={isPropValid}>
       <AppContainer ref={containerRef}>
         <Socket />
-        <Splash />
 
+        <ThemeProvider theme={theme}>
 
-        {system.startedUp && ready ? (
-          <ThemeProvider theme={theme}>
-            <Carplay
-              commandCounter={commandCounter}
-              command={keyCommand}
-            />
-            <Modal
-              isOpen={system.modal.visible}
-              title={system.modal.title}
-              body={system.modal.body}
-              button={system.modal.button}
-              action={system.modal.action}
-              onClose={() =>
-                app.update((state) => {
-                  state.system.modal.visible = false;
-                })
-              }
-            />
-            <Cardata />
-            <Content />
-          </ThemeProvider>
-        ) : (
-          <></>
-        )}
+          <Splash />
+          <Init />
+          <Modal />
+
+          {systemSettings.startedUp && ready ? (
+            <>
+              {<Carplay
+                commandCounter={commandCounter}
+                command={keyCommand}
+              />}
+
+              < Cardata />
+              <Content />
+            </>
+          ) : (
+            <></>
+          )}
+        </ThemeProvider>
+
       </AppContainer>
     </StyleSheetManager>
   );

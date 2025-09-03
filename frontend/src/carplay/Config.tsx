@@ -17,16 +17,20 @@ export type ExtraConfig = DongleConfig & {
 }
 
 export interface KeyBindings {
+  'selectDown': string,
+  'selectUp': string,
+  'back': string,
+  'up': string,
+  'down': string,
   'left': string,
   'right': string,
-  'selectDown': string,
-  'back': string,
-  'down': string,
   'home': string,
   'play': string,
   'pause': string,
   'next': string,
   'prev': string
+  'acceptPhone': string,
+  'rejectPhone': string
 }
 
 export interface CanMessage {

@@ -7,14 +7,16 @@
             "bustype": "socketcan",
             "channel": "can1",
             "is_extended": true,
-            "bitrate": 125000
+            "bitrate": 125000,
+            "wait_for_ecu": false
         },
         {
             "enabled": true,
             "bustype": "socketcan",
             "channel": "can2",
             "is_extended": true,
-            "bitrate": 500000
+            "bitrate": 500000,
+            "wait_for_ecu": true
         }
     ],
     "sensors": {
@@ -23,39 +25,39 @@
             "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x12",
-                "0x9D"
+                "0x0F",
+                "0x62"
             ],
             "app_id": "map",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
+            "rep_id": "0x01200021",
             "action": "0xA6",
-            "target": "0x7A",
-            "is_16bit": false,
-            "refresh_rate": 0.02,
-            "scale": "((value - 101.0) * 0.01)",
+            "target": "0x11",
+            "is_16bit": true,
+            "priority": 1,
+            "scale": "((value * 0.001)-0.98)",
             "label": "Boost",
             "unit": "Bar",
             "min_value": 0,
-            "max_value": 2,
-            "limit_start": 1.5
+            "max_value": 1.5,
+            "limit_start": 1
         },
         "intake": {
             "interface": "can2",
             "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x10",
-                "0xCE"
+                "0x00",
+                "0x0F"
             ],
             "app_id": "iat",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
+            "rep_id": "0x01200021",
             "action": "0xA6",
-            "target": "0x7A",
-            "is_16bit": false,
-            "refresh_rate": 5,
-            "scale": "((value * 0.75) - 47.0)",
+            "target": "0x11",
+            "is_16bit": true,
+            "priority": 3,
+            "scale": "(value * 0.01)",
             "label": "Intake",
             "unit": "°C",
             "min_value": 0,
@@ -67,17 +69,17 @@
             "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x10",
-                "0xD8"
+                "0x00",
+                "0x05"
             ],
             "app_id": "col",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
+            "rep_id": "0x01200021",
             "action": "0xA6",
-            "target": "0x7A",
-            "is_16bit": false,
-            "refresh_rate": 5,
-            "scale": "((value * 0.75) - 47.0)",
+            "target": "0x11",
+            "is_16bit": true,
+            "priority": 2,
+            "scale": "(value * 0.01)",
             "label": "Coolant",
             "unit": "°C",
             "min_value": 0,
@@ -89,17 +91,17 @@
             "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x10",
-                "0x0A"
+                "0x0F",
+                "0x65"
             ],
             "app_id": "vol",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
+            "rep_id": "0x01200021",
             "action": "0xA6",
-            "target": "0x7A",
-            "is_16bit": false,
-            "refresh_rate": 5,
-            "scale": "((value * 1) / 10.611399)",
+            "target": "0x11",
+            "is_16bit": true,
+            "priority": 3,
+            "scale": "(value * 0.0236)",
             "label": "Voltage",
             "unit": "V",
             "min_value": 0,
@@ -120,7 +122,7 @@
             "action": "0xA6",
             "target": "0x7A",
             "is_16bit": true,
-            "refresh_rate": 0.5,
+            "priority": 2,
             "scale": "((value * 16.0) / 65536.0)",
             "label": "Lambda 1",
             "unit": "λ",
@@ -142,7 +144,7 @@
             "action": "0xA6",
             "target": "0x7A",
             "is_16bit": false,
-            "refresh_rate": 5,
+            "priority": 3,
             "scale": "(value * (1.33 / 255.0))",
             "label": "Lambda 2",
             "unit": "V",
@@ -155,58 +157,44 @@
             "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x10",
-                "0x1D"
+                "0x0F",
+                "0x12"
             ],
             "app_id": "rpm",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
+            "rep_id": "0x01200021",
             "action": "0xA6",
-            "target": "0x7A",
-            "is_16bit": false,
-            "refresh_rate": 0.02,
-            "scale": "(value * 40)",
+            "target": "0x11",
+            "is_16bit": true,
+            "priority": 1,
+            "scale": "(value * 1)",
             "label": "RPM",
             "unit": "rpm",
             "min_value": 0,
-            "max_value": 8000,
-            "limit_start":7000
+            "max_value": 5000,
+            "limit_start":4500
         },
         "speed": {
             "interface": "can2",
-            "enabled": false,
+            "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x10",
-                "0xA5"
+                "0x00",
+                "0x0D"
             ],
             "app_id": "spd",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
+            "rep_id": "0x01200021",
             "action": "0xA6",
-            "target": "0x7A",
+            "target": "0x11",
             "is_16bit": true,
-            "refresh_rate": 0.02,
-            "scale": "(value * 512) / 65536.0",
+            "priority": 2,
+            "scale": "(value * 0.01)",
             "label": "Speed",
             "unit": "km/h",
             "min_value": 0,
             "max_value": 260,
             "limit_start": 240
         }
-    },
-    "controls": {
-        "enabled": false,
-        "interface": "",
-        "rep_id": "0x00000000",
-        "zero_message": [],
-        "control_byte_count": 2,
-        "button": {
-        },
-        "joystick": {
-        },
-        "long_press_duration": 1500,
-        "click_timeout": 300,
-        "mouse_speed": 6
     }
 }

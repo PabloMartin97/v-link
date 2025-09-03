@@ -1,120 +1,23 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
 
-/*
-import { Stream } from "socketmost/dist/modules/Messages";
-import { DongleConfig } from 'node-carplay/node'
-
-export enum HandDriveType {
-  LHD = 0,
-  RHD = 1,
-}
-
-export type PhoneTypeConfig = {
-  frameInterval: number | null
-}
-
-const DEFAULT_CONFIG = {
-  width: 800,
-  height: 640,
-  fps: 20,
-  dpi: 160,
-  format: 5,
-  iBoxVersion: 2,
-  phoneWorkMode: 2,
-  packetMax: 49152,
-  boxName: 'nodePlay',
-  nightMode: false,
-  hand: HandDriveType.LHD,
-  mediaDelay: 300,
-  audioTransferMode: false,
-  wifiType: '5ghz',
-  micType: 'os',
-  phoneConfig: {
-    [PhoneType.CarPlay]: {
-      frameInterval: 5000,
-    },
-    [PhoneType.AndroidAuto]: {
-      frameInterval: null,
-    },
-  },
-}
-*/
-
-
-const DEFAULT_BINDINGS = {
-  left: 'ArrowLeft',
-  right: 'ArrowRight',
-  selectDown: 'Space',
-  back: 'Backspace',
-  down: 'ArrowDown',
-  home: 'KeyH',
-  play: 'KeyP',
-  pause: 'KeyS',
-  next: 'KeyN',
-  prev: 'KeyV'
-}
-
-const EXTRA_CONFIG = {
-  //...DEFAULT_CONFIG,
-  kiosk: true,
-  delay: 300,
-  fps: 60,
-  camera: '',
-  microphone: '',
-  piMost: false,
-  canbus: false,
-  bindings: DEFAULT_BINDINGS,
-  most: {},
-  canConfig: {}
-}
-
-
-const MMI = create(
-  immer((set) => ({
-    bindings: DEFAULT_BINDINGS,
-    config: EXTRA_CONFIG,
-    saveSettings: (settings) => {
-      set((state) => {
-        const mergedSettings = {
-          ...state.config,
-          ...settings,
-          bindings: settings.mmi_bindings || DEFAULT_BINDINGS,
-        };
-        state.config = mergedSettings;
-      });
-    },
-    getSettings: () => {
-      // Add logic as needed
-    },
-    stream: (stream) => {
-      // Add logic as needed
-    },
-    update: (updater) => set(updater),
-  }))
-);
-
-const DATA = create((set) => ({
-  data: {}, // Object to store live vehicle data
-  update: (newData) =>
-    set((state) => ({ data: { ...state.data, ...newData } })),
-}));
-
 const APP = create(
   immer((set) => ({
+    modules: {},
+    settings: {},
     system: {
-      version: 'v3.0.2',
+      version: 'v3.1.0',
       view: '',
       switch: 'ArrowUp',
-      lastKey: '',
+      lastUpdate: 0,
 
+      firstStart: true,
       settingPage: 1,
 
+      configLoaded: false,
       initialized: false,
       startedUp: false,
-
-      ignition: true,
-      recording: false,
+      isRecording: false,
 
       windowSize: {
         width: 800,
@@ -153,25 +56,51 @@ const APP = create(
       modal: {
         visible: false,
         title: null,
-        body: null,
-        button: null,
-        action: null,
+        content: null,
       },
 
       wifiState: false,
       btState: false,
 
       canState: false,
-      linState: false,
       adcState: false,
+      swcState: false,
       rtiState: false,
-
+      ignState: true,
     },
-    settings: {},
-    modules: {},
-
 
     update: (updater) => set(updater),
+
+    // Handle keystrokes for MMI remote control
+    keyStroke: '',
+    setKeyStroke: (key) => {
+      set((state) => {
+        state.keyStroke = key
+      })
+      setTimeout(
+        () =>
+          set((state) => {
+            state.keyStroke = ''
+          }),
+        0
+      )
+    },
+
+    // Keybind for switching pages
+    switchPage: 'ArrowUp',
+    setSwitchPage: (key) => {
+      set((state) => {
+        state.switchPage = key
+      })
+    },
+
+    // Pause keybind processing
+    pauseKeyBinds: false,
+    setPauseKeyBinds: (paused) => {
+      set((state) => {
+        state.pauseKeyBinds = paused
+      })
+    },
   }))
 );
 
@@ -185,7 +114,7 @@ const CAN = create(
   }))
 );
 
-const LIN = create(
+const SWC = create(
   immer((set) => ({
     system: {
       state: false,
@@ -215,18 +144,22 @@ const RTI = create(
   }))
 );
 
-const KEY = create(
+const DATA = create(
   immer((set) => ({
-    keyStroke: '',
-    setKeyStroke: (key) => {
+    data: {},
+    update: (newData) =>
       set((state) => {
-        state.keyStroke = key;
-      });
-      setTimeout(() => set((state) => { state.keyStroke = ''; }), 0);
-    },
-    update: (updater) => set(updater),
+        Object.assign(state.data, newData);
+      }),
   }))
 );
 
+const modules = {
+  app: APP,
+  can: CAN,
+  swc: SWC,
+  adc: ADC,
+  rti: RTI,
+}
 
-export { DATA, APP, MMI, CAN, LIN, ADC, RTI, KEY };
+export { APP, CAN, SWC, ADC, RTI, DATA, modules };

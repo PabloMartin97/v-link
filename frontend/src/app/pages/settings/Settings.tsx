@@ -7,19 +7,11 @@ import { ToggleSwitch, Select, Input, Button } from '../../../theme/styles/Input
 import { Typography } from '../../../theme/styles/Typography';
 
 import { APP } from '../../../store/Store';
+import { openModal } from '../../components/Modal';
 
-import { io } from "socket.io-client";
-import Modal from '../../components/Modal';
-
-
-const appChannel = io("ws://localhost:4001/app")
-const sysChannel = io("ws://localhost:4001/sys")
-
-const canChannel = io("ws://localhost:4001/can")
-const linChannel = io("ws://localhost:4001/lin")
-const adcChannel = io("ws://localhost:4001/adc")
-const rtiChannel = io("ws://localhost:4001/rti")
-const mostChannel = io("ws://localhost:4001/most")
+import { useNamespaces } from '../../../socket/Namespaces';
+import { current } from 'immer';
+const socket = useNamespaces();
 
 const Container = styled.div`
     flex: 1;
@@ -83,34 +75,61 @@ const Settings = () => {
   const Caption2 = Typography.Caption2
 
   /* Load Stores */
-  const app = APP((state) => state)
   const modules = APP((state) => state.modules)
+  const settings = APP((state) => state.settings)
+  const appUpdate = APP((state) => state.update)
+  const themeColor = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+  const versionNumber = APP((state) => state.system.version);
+  const settingPage = APP((state) => state.system.settingPage);
 
-  const settings = app.settings;
-  const system = app.system;
+  const rtiState = APP((state) => state.system.rtiState);
+  const canState = APP((state) => state.system.canState);
+  const adcState = APP((state) => state.system.adcState);
+  const swcState = APP((state) => state.system.swcState);
 
   const theme = useTheme();
-  const themeColor = (app.settings.general.colorTheme.value).toLowerCase()
+
+
+  const [save, setSave] = useState(true)
+  const [reset, setReset] = useState(false)
+  const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
+
+  const setKeyStroke = APP((state) => state.setKeyStroke);
+  const setSwitchPage = APP((state) => state.setSwitchPage);
+  const setPauseKeyBinds = APP((state) => state.setPauseKeyBinds);
+
+
+  /* Ping modules to get thread state */
+  useEffect(() => {
+
+    Object.keys(modules).forEach(module => {
+      if (socket[module]) {
+        socket[module].emit('ping');
+      }
+    });
+  }, [modules]);
+
+  /* Reset container to top when settings are reset */
+  useEffect(() => {
+    if (reset) {
+      setCurrentSettings(settings);
+      setReset(false);
+
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0;
+      }
+    }
+  }, [reset, settings]);
 
 
   /* Create combined data store for dropdown */
   const dataStores = {}
   Object.entries(modules).map(([key, module]) => {
     const currentModule = module((state) => state);
-    if (currentModule.settings.type === 'data')
-      //console.log(key)
+    if (currentModule.settings.type && currentModule.settings.type === 'data') {
       Object.assign(dataStores, { [key]: currentModule.settings.sensors })
+    }
   });
-
-  const openModal = (title, body, button, action) => {
-    app.update((state) => {
-      state.system.modal.visible = true;
-      state.system.modal.title = title
-      state.system.modal.body = body
-      state.system.modal.button = button
-      state.system.modal.action = action
-    })
-  };
 
   /* Add Settings */
   const handleAddSetting = (key, currentSettings) => {
@@ -164,15 +183,12 @@ const Settings = () => {
   };
 
 
-  /* Handle Settings */
-  const [save, setSave] = useState(true)
-  const [reset, setReset] = useState(false)
-  const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
+
 
   // Change Settings
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
     setSave(false)
-    //console.log(selectStore, key, name, targetSetting, currentSettings)
+
     const newSettings = structuredClone(currentSettings);
     let convertedValue
     if (selectStore != 'app') {
@@ -182,7 +198,6 @@ const Settings = () => {
       newSettings[key][name].value = convertedValue || targetSetting;
       newSettings[key][name].type = selectStore;
     } else {
-      //console.log(key, name, targetSetting)
       newSettings[key][name].value = targetSetting
     }
 
@@ -192,11 +207,10 @@ const Settings = () => {
   // Save Settings
   function saveSettings() {
     setSave(true)
-    app.update((state) => {
+    appUpdate((state) => {
       state.settings = currentSettings;
     });
-    appChannel.emit("save", currentSettings);
-    appChannel.emit("load");
+    socket.app.emit("save", currentSettings);
   }
 
   // System Tasks
@@ -205,20 +219,19 @@ const Settings = () => {
     if (['quit', 'reboot', 'restart'].includes(request)) {
       openModal("Exiting...", "Please wait while the app is closing.", null, null)
       setTimeout(() => {
-        console.log('exiting')
-        sysChannel.emit("systemTask", request);
+        socket.sys.emit("systemTask", request);
       }, 1000)
     } else if (request === 'reset') {
       openModal("Reset", "All Settings have been resetted.", null, null)
     } else {
-      sysChannel.emit("systemTask", request);
+      socket.sys.emit("systemTask", request);
     }
 
     setReset(true)
   }
 
-  function sendForceSwitchMostMessage () {
-    mostChannel.emit("force_switch");
+  function sendForceSwitchMostMessage() {
+    socket.most.emit("force_switch");
   }
 
   const checkUpdate = async () => {
@@ -237,10 +250,10 @@ const Settings = () => {
       const latestVersion = data.tag_name; // This is the version (e.g., "v1.2.0")
 
 
-      if (latestVersion === app.system.version)
+      if (latestVersion === versionNumber)
         openModal("No Updates available.", "Check back again later :)", null, null)
       else {
-        openModal("New update available!", `Current: ${app.system.version} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
+        openModal("New update available!", `Current: ${versionNumber} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
       }
     } catch (error) {
       openModal("Error checking for updates:", error, null, null)
@@ -251,10 +264,10 @@ const Settings = () => {
   // Toggle Threads
   useEffect(() => {
     if (reset) {
-      setCurrentSettings(app.settings)
+      setCurrentSettings(settings)
       setReset(false)
     }
-  }, [app.settings])
+  }, [reset])
 
   /* Toggle Threads */
   function handleIO(module, channel) {
@@ -266,7 +279,7 @@ const Settings = () => {
     // NOTES: Settings are grouped into types
     // "System" Settings control the appearance and behaviour of the app. This is the main settings file.
     // "Data" Settings provide parameters for the app and certain system settings
-    // "Interface" Settings provide parameter for the behaviour of the interface modules like LIN and RTI
+    // "Interface" Settings provide parameter for the behaviour of the interface modules
 
     // System Settings is grouped into different objects. e.g.:
     /*  {
@@ -296,32 +309,35 @@ const Settings = () => {
       const dataOptions = {}
 
       // Get current value
-      if (type === "data" && content.type != null && content.type != 'text') {             // Is the setting responsible for handling data and is a data type assigned?               
-        label = content.label
-        value = dataStores[content.type][content.value].label    // Read content from combined data store
-        Object.keys(dataStores).forEach((storeType) => {         // Dataoptions is mapping the sensor, e.g. "Boost" to the corresponding settingsfile, in this case "can"
-          Object.keys(dataStores[storeType]).forEach((key) => {
-            const label = dataStores[storeType][key].label       // YES? Grab label from combined data store
-            dataOptions[label] = storeType                       // YES? Grab data type from combined data store
-          });
-        });
+      if (content.value != "") {
+        if (type === "data" && content.type != null && content.type != 'text') {    // Is the setting responsible for handling data and is a data type assigned?               
+          label = content.label
+          value = dataStores[content.type][content.value].label                     // Read content from combined data store
+        } else {
+          label = content.label                                                     // NO?  Grab label from "system"-store
+          value = content.value                                                     // NO?  Grab value from "system"-store
+        }
       } else {
-        label = content.label                                    // NO?  Grab label from "system"-store
-        value = content.value                                    // NO?  Grab value from "system"-store
+        label = content.label
+        value = content.value
       }
+
+      Object.keys(dataStores).forEach((storeType) => {                          // Dataoptions is mapping the sensor, e.g. "Boost" to the corresponding settingsfile, in this case "can"
+        Object.keys(dataStores[storeType]).forEach((key) => {
+          const label = dataStores[storeType][key].label                        // YES? Grab label from combined data store
+          dataOptions[label] = storeType                                        // YES? Grab data type from combined data store
+        });
+      });
 
       // Get options
       //Check if value is a number or boolean
       const isText = (content.type === 'text')
-      //console.log(content)
 
       const dropdown = (isText || typeof value === 'number' || typeof value === 'boolean' || key.includes('bindings'))
         ? null                                                                    //Yes? Return null
         : (content.options || Object.keys(dataOptions).map((key) =>               //No?  Create dropdown from options
           key
         ))
-      //console.log(content.options, dataOptions)
-      //console.log(dropdown)
 
       // Check for boolean setting
       const isBoolean = typeof value === 'boolean';                               // Checks if the setting is a boolean.
@@ -329,48 +345,61 @@ const Settings = () => {
 
 
       const handleChange = (event) => {
-        //console.log(event)
         const { name, value, checked, type } = event.target;                      // Grab info from the handler
         const newValue = type === 'checkbox' ? checked :                          // Check if type is a boolean
           type === 'number' ? Number(value) : value;               // Check if type is a number
 
         //const newStore = dataOptions[newValue]                                    // Define store for selected setting. E.g. "Boost" -> "Oil Pressure" requires a change from "can" to "adc" store.
         let selectStore
-        if (Object.keys(dataOptions).length > 1) {
-          selectStore = dataOptions[newValue]
-        } else {
-          selectStore = "app"
-        }
+
+        selectStore = (Object.keys(dataOptions).length > 1 && dataOptions[newValue])
+          ? dataOptions[newValue]
+          : "app";
 
         const targetSetting = isBoolean ? checked : newValue                      // Handle targetSetting based on type
-        //console.log(name)
-
         handleSettingChange(selectStore, key, name, targetSetting, settingsObj);     // Execute change of settings
       };
 
 
       const handleBinding = (key, setting) => {
-        //console.log(key, setting)
-        openModal(`${app.settings[key][setting].label}`, "Press a key to assign or ESC to abort.", null, null)
-
         // Define the key press handler
         const handleKeyPress = (event) => {
+          // Close the modal first
+          appUpdate((state) => {
+            state.system.modal.visible = false;
+          });
+
           if (event.code === 'Escape') {
-            handleSettingChange("app", key, setting, "Unassigned", settingsObj);
+            socket.log.emit("info", "Key binding cancelled.");
           } else {
+            socket.log.emit("info", `${settings[key][setting].label} bound to: ${event.code}`);
             handleSettingChange("app", key, setting, event.code, settingsObj);
           }
 
           document.removeEventListener('keydown', handleKeyPress); // Clean up listener
+
+          // Resume key bindings after assignment
+          setPauseKeyBinds(false);
         };
+
+        // Set up pause key bindings before showing modal
+        setPauseKeyBinds(true);
 
         // Add event listener for key press
         document.addEventListener('keydown', handleKeyPress);
+
+        // Use the openModal function instead of direct state manipulation
+        openModal(
+          settings[key][setting].label,
+          'Press a key to assign or ESC to abort.',
+          null,
+          null
+        );
       };
 
 
       return (
-        <Element>
+        <Element key={setting}>
           <Caption2>{label}</Caption2>
           <Divider />
           <Spacer>
@@ -382,6 +411,9 @@ const Settings = () => {
                 onChange={handleChange}
                 value={value}
               >
+                <option value="" disabled>
+                  Select Sensor
+                </option>
                 {dropdown.map((option) => (
                   <option key={option.value || option} value={option.value || option}>
                     {option.label || option}
@@ -432,15 +464,15 @@ const Settings = () => {
 
     const container = scrollRef.current;
     if (container) {
-      container.addEventListener("wheel", handleWheel);
+      container.addEventListener("wheel", handleWheel, { passive: true });
     }
 
     return () => {
       if (container) {
-        container.removeEventListener("wheel", handleWheel);
+        container.removeEventListener("wheel", handleWheel, { passive: true });
       }
     };
-  }, [system.settingPage]); // Make sure useEffect runs again on reset
+  }, [settingPage]); // Make sure useEffect runs again on reset
 
 
   return (
@@ -451,72 +483,84 @@ const Settings = () => {
         horizontal={false}
         hideScrollbars={true}
         ignoreElements='input, select'
-        key={`${system.settingPage}-${reset}`} // This will force a complete re-render when page changes
         innerRef={scrollRef}
       >
-        {system.settingPage === 1 &&
+        {settingPage === 1 &&
           <>
             {renderSetting("general", currentSettings)}
             {renderSetting("screen", currentSettings)}
             {renderSetting("shutdown", currentSettings)}
             {renderSetting("side_bars", currentSettings)}
+            {renderSetting("reverseCam", currentSettings)}
 
             <Element>
-              <Caption2>{`CAN ${system.canState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.canState} onChange={() => { handleIO("can", canChannel) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
+              <Title>Toggle Modules</Title>
             </Element>
 
-            <Element>
-              <Caption2>{`LIN ${system.linState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.linState} onChange={() => { handleIO("lin", linChannel) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
+            {settings.constants.modules.can &&
+              <Element>
+                <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={canState} onChange={() => { handleIO("can", socket.can) }} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
 
-            <Element>
-              <Caption2>{`ADC ${system.adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.adcState} onChange={() => { handleIO("adc", adcChannel) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
+            {settings.constants.modules.adc &&
+              <Element>
+                <Caption2>{`ADC ${adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={adcState} onChange={() => { handleIO("adc", socket.adc) }} disabled={!settings.constants.modules.adc} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
 
-            <Element>
-              <Caption2>{`RTI ${system.rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
-              <Divider />
-              <ToggleSwitch
-                theme={theme}
-                backgroundColor={theme.colors.medium}
-                defaultColor={theme.colors.theme[themeColor].default}
-                activeColor={theme.colors.theme[themeColor].active}>
-                <input type="checkbox" checked={system.rtiState} onChange={() => { handleIO("rti", rtiChannel) }} />
-                <span className="slider"></span>
-              </ToggleSwitch>
-            </Element>
+            {settings.constants.modules.swc &&
+              <Element>
+                <Caption2>{`SWC ${swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} disabled={!settings.constants.modules.swc} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
+
+            {settings.constants.modules.rti &&
+              <Element>
+                <Caption2>{`RTI ${rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={rtiState} onChange={() => { handleIO("rti", socket.rti) }} disabled={!settings.constants.modules.rti} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
             <p />
           </>
         }
 
-        {system.settingPage === 2 &&
+        {settingPage === 2 &&
           <>
             {renderSetting("dash_topbar", currentSettings)}
             {renderSetting("dash_classic", currentSettings)}
@@ -535,20 +579,26 @@ const Settings = () => {
           </>
         }
 
-        {system.settingPage === 3 &&
+        {settingPage === 3 &&
           <>
             {renderSetting("app_bindings", currentSettings)}
-            {renderSetting("mmi_bindings", currentSettings)}
+            {renderSetting("dongle_bindings", currentSettings)}
           </>
         }
 
-        {system.settingPage === 4 &&
+        {settingPage === 4 &&
+          <>
+            {renderSetting("dongle_config", currentSettings)}
+          </>
+        }
+
+        {settingPage === 5 &&
           <>
             <div style={{ display: 'flex', width: '100%', height: '90%', gap: '10px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>
                 <Button onClick={() => { systemTask('quit') }} style={{ height: '100%' }}> Quit </Button>
                 <Button onClick={() => { systemTask('restart') }} style={{ height: '100%' }}> Restart </Button>
-                <Button onClick={() => { systemTask("rti") }} style={{ height: '100%' }}> {system.rtiState ? "Close RTI" : "Open RTI"} </Button>
+                <Button onClick={() => { systemTask("rti") }} style={{ height: '100%' }}> {rtiState ? "Close RTI" : "Open RTI"} </Button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>

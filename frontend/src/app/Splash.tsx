@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import { APP } from '../store/Store';
-import { Title } from '../theme/styles/Typography';
-
 
 // Keyframes for fade-out animation
 const fadeOut = keyframes`
@@ -71,7 +69,7 @@ const SplashScreen = () => {
   const [showLogo, setShowLogo] = useState(true); // Triggers fade-out animation
   const [showSplash, setShowSplash] = useState(true); // Determines if the splash screen is displayed
   const [fadeOutAnimation, setFadeOutAnimation] = useState(false); // Triggers fade-out animation
-  const app = APP((state) => state);
+  const systemVersion = APP((state) => state.system.version);
 
   const displayTime = 2000; // Time before fade-out starts (in ms)
   const logoTime = 1750; // Time before fade-out starts (in ms)
@@ -111,7 +109,7 @@ const SplashScreen = () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="40vh" height="10vh" style={{ fill: 'white' }}>
               <use xlinkHref="/assets/svg/logos/vlink.svg#vlink"></use>
             </svg>
-            <p> {app.system.version }</p>
+            <p> { systemVersion }</p>
           </Splash>
         }
 

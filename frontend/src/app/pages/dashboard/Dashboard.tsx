@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
-import { APP, KEY } from '../../../store/Store';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense, useCallback } from 'react';
+import { APP } from '../../../store/Store';
 import styled, { useTheme } from 'styled-components';
+import { Oval } from 'react-loader-spinner';
 
 import { Fade } from '../../../theme/styles/Effects';
-import Classic from './classic/Classic';
-import Race from './race/Race';
-import Charts from './charts/Charts';
 import Pagination from '../../components/Pagination';
+
+// Lazy load components
+const Classic = lazy(() => import('./classic/Classic'));
+const Race = lazy(() => import('./race/Race'));
+const Charts = lazy(() => import('./charts/Charts'));
 
 const DashBoard = styled.div`
   height: 100%;
@@ -25,168 +28,443 @@ const Wrapper = styled.div`
   overflow: hidden;
 `;
 
-const PageWrapper = styled.div`
+const PageWrapper = styled.div.attrs(props => ({
+  style: {
+    transform: `translate3d(${props.translateX}, 0, 0)`,
+    opacity: props.opacity,
+    transition: props.isTransitioning 
+      ? 'transform 0.4s ease-out, opacity 0.4s ease-out'
+      : props.isDragging 
+        ? 'none' 
+        : 'transform 0.3s ease-out, opacity 0.3s ease-out'
+  }
+}))`
   position: absolute;
   top: 0;
-  left: ${({ direction }) => (direction === 'left' ? '-100%' : direction === 'right' ? '100%' : '0')};
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  transform: scale(${({ isActive }) => (isActive ? 1 : 0.8)});
-  opacity: ${({ isActive }) => (isActive ? 1 : 0)};
-  transition: transform 0.75s ease-in-out, opacity 0.75s ease-in-out, left 0.75s ease-in-out;
+  will-change: transform, opacity;
 `;
 
-const DRAG_THRESHOLD = 50;
+const LoadingWrapper = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+`;
+
+const DRAG_THRESHOLD = 30;
+const TRANSITION_DURATION = 400;
+const MIN_DRAG_DISTANCE = 10;
 
 function Dashboard() {
-  const app = APP((state) => state);
-  const key = KEY((state) => state);
   const theme = useTheme();
   const dashBoardRef = useRef(null);
+  const resizeDebounceTimeout = useRef(null);
 
-  const components = [
+  
+  // Refs for drag state to avoid unnecessary re-renders
+  const dragStateRef = useRef({
+    startX: 0,
+    currentX: 0,
+    offset: 0,
+    isDragging: false,
+    isPointerDown: false
+  });
+  
+  const animationFrameRef = useRef(null);
+  const containerWidthRef = useRef(window.innerWidth);
+
+  const defaultDash = APP((state) => state.settings.general.defaultDash.value);
+  const colorTheme = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+  const app_bindings = APP((state) => state.settings.app_bindings);
+  const appUpdate = APP((state) => state.update);
+  const keyStroke = APP((state) => state.keyStroke);
+
+  const components = useMemo(() => [
     { name: "Classic", component: Classic },
     { name: "Race", component: Race },
     { name: "Charts", component: Charts },
-  ];
+  ], []);
 
-  const defaultComponentIndex = components.findIndex(
-    (item) => item.name === app.settings.general.defaultDash.value
+  const defaultComponentIndex = useMemo(() => 
+    components.findIndex(
+      (item) => item.name === defaultDash
+    ), [components, defaultDash]
   );
+
+  // Reduced state - only what needs to trigger re-renders
   const [currentPageIndex, setCurrentPageIndex] = useState(defaultComponentIndex);
-
-  const [transitioning, setTransitioning] = useState(false);
-  const [dragStart, setDragStart] = useState(0);
-  const [dragEnd, setDragEnd] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionState, setTransitionState] = useState({
+    oldIndex: null,
+    newIndex: null,
+    direction: null
+  });
+  
+  // Single state for drag rendering updates
+  const [dragRenderOffset, setDragRenderOffset] = useState(0);
+  const [isDragRendering, setIsDragRendering] = useState(false);
 
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
   });
 
-  const resizeDebounceTimeout = useRef(null);
+  // Utility functions
+  const getAdjacentIndices = useCallback((index) => {
+    const prevIndex = index === 0 ? components.length - 1 : index - 1;
+    const nextIndex = index === components.length - 1 ? 0 : index + 1;
+    return { prevIndex, nextIndex };
+  }, [components.length]);
 
-  // Efficiently handle window resize
+  // Optimized drag percentage calculation using ref
+  const calculateDragPercentage = useCallback((dragDistance) => {
+    return Math.max(-100, Math.min(100, (dragDistance / containerWidthRef.current) * 100));
+  }, []);
+
+  // Throttled render update function
+  const updateDragRender = useCallback(() => {
+    const dragState = dragStateRef.current;
+    const dragDistance = dragState.currentX - dragState.startX;
+    const dragPercentage = calculateDragPercentage(dragDistance);
+    
+    setDragRenderOffset(dragPercentage);
+    
+    // Only set isDragRendering if we're actually dragging significantly
+    const shouldRender = Math.abs(dragPercentage) > 2; // Small threshold to avoid micro-movements
+    if (shouldRender !== isDragRendering) {
+      setIsDragRendering(shouldRender);
+    }
+  }, [calculateDragPercentage, isDragRendering]);
+
+  // Window resize handler with container width caching
   useEffect(() => {
     const handleResize = () => {
       if (resizeDebounceTimeout.current) {
         clearTimeout(resizeDebounceTimeout.current);
       }
       resizeDebounceTimeout.current = setTimeout(() => {
+        const newWidth = window.innerWidth;
+        const newHeight = window.innerHeight;
+        
         setWindowSize({
-          width: window.innerWidth,
-          height: window.innerHeight,
+          width: newWidth,
+          height: newHeight,
         });
+        
+        // Update cached container width
+        if (dashBoardRef.current) {
+          containerWidthRef.current = dashBoardRef.current.offsetWidth || newWidth;
+        } else {
+          containerWidthRef.current = newWidth;
+        }
       }, 100);
     };
 
     window.addEventListener('resize', handleResize);
+    
+    // Initial container width setup
+    if (dashBoardRef.current) {
+      containerWidthRef.current = dashBoardRef.current.offsetWidth || window.innerWidth;
+    }
+    
     return () => {
       clearTimeout(resizeDebounceTimeout.current);
       window.removeEventListener('resize', handleResize);
     };
   }, []);
 
+  // Update content size (throttled)
   useEffect(() => {
     if (dashBoardRef.current) {
       const rect = dashBoardRef.current.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        app.update((state) => {
+        containerWidthRef.current = rect.width;
+        
+        appUpdate((state) => {
           if (state.system.interface) {
             state.system.contentSize.width = rect.width;
             state.system.contentSize.height = rect.height;
-
           }
         });
       }
     }
-  }, [windowSize]);
+  }, [windowSize, appUpdate]);
 
-  const swipeLeft = () => {
-    if (!transitioning) {
-      setTransitioning(true);
-      setCurrentPageIndex((prev) => (prev === components.length - 1 ? 0 : prev + 1));
-      setTimeout(() => setTransitioning(false), 1000);
+  // Transition logic
+  const performTransition = useCallback((direction) => {
+    if (isTransitioning) return;
+
+    const newIndex = direction === 'left' 
+      ? (currentPageIndex === components.length - 1 ? 0 : currentPageIndex + 1)
+      : (currentPageIndex === 0 ? components.length - 1 : currentPageIndex - 1);
+
+    setIsTransitioning(true);
+    setDragRenderOffset(0);
+    setIsDragRendering(false);
+    
+    // Reset drag state
+    dragStateRef.current = {
+      startX: 0,
+      currentX: 0,
+      offset: 0,
+      isDragging: false,
+      isPointerDown: false
+    };
+    
+    setTransitionState({
+      oldIndex: currentPageIndex,
+      newIndex: newIndex,
+      direction: direction
+    });
+
+    setTimeout(() => {
+      setCurrentPageIndex(newIndex);
+      setIsTransitioning(false);
+      setTransitionState({
+        oldIndex: null,
+        newIndex: null,
+        direction: null
+      });
+    }, TRANSITION_DURATION);
+  }, [isTransitioning, currentPageIndex, components.length]);
+
+  const swipeLeft = useCallback(() => performTransition('left'), [performTransition]);
+  const swipeRight = useCallback(() => performTransition('right'), [performTransition]);
+
+  // Optimized pointer handlers using refs
+  const handlePointerStart = useCallback((position) => {
+    if (isTransitioning) return;
+    
+    dragStateRef.current = {
+      startX: position,
+      currentX: position,
+      offset: 0,
+      isDragging: false,
+      isPointerDown: true
+    };
+  }, [isTransitioning]);
+
+  // Optimized pointer move with RAF throttling
+  const updateDragRenderRef = useRef(updateDragRender);
+  updateDragRenderRef.current = updateDragRender;
+
+  const handlePointerMove = useCallback((position) => {
+    const dragState = dragStateRef.current;
+    
+    if (isTransitioning || !dragState.isPointerDown) return;
+    
+    // Cancel previous animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
     }
-  };
-
-  const swipeRight = () => {
-    if (!transitioning) {
-      setTransitioning(true);
-      setCurrentPageIndex((prev) => (prev === 0 ? components.length - 1 : prev - 1));
-      setTimeout(() => setTransitioning(false), 1000);
+    
+    // Update current position immediately
+    dragState.currentX = position;
+    
+    // Check if we should start dragging
+    const dragDistance = position - dragState.startX;
+    if (!dragState.isDragging && Math.abs(dragDistance) > MIN_DRAG_DISTANCE) {
+      dragState.isDragging = true;
     }
-  };
+    
+    // Only update render if we're dragging
+    if (dragState.isDragging) {
+      animationFrameRef.current = requestAnimationFrame(() => {
+        updateDragRenderRef.current();
+      });
+    }
+  }, [isTransitioning,]);
 
-  const handleDragStart = (startPos) => {
-    setDragStart(startPos);
-    setIsDragging(false);
-  };
-
-  const handleDragMove = (currentPos) => {
-    if (!isDragging && Math.abs(currentPos - dragStart) > DRAG_THRESHOLD) {
-      setIsDragging(true);
+  const handlePointerEnd = useCallback(() => {
+    const dragState = dragStateRef.current;
+    
+    if (isTransitioning || !dragState.isPointerDown) return;
+    
+    // Cancel any pending animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    const dragDistance = dragState.currentX - dragState.startX;
+    const dragPercentage = calculateDragPercentage(dragDistance);
+    
+    if (Math.abs(dragPercentage) > DRAG_THRESHOLD) {
+      if (dragPercentage > 0) {
+        swipeRight();
+      } else {
+        swipeLeft();
+      }
+    } else {
+      // Reset to original position
+      setDragRenderOffset(0);
+      setIsDragRendering(false);
     }
 
-    if (isDragging) {
-      setDragEnd(currentPos);
-    }
-  };
+    // Reset drag state
+    dragStateRef.current = {
+      startX: 0,
+      currentX: 0,
+      offset: 0,
+      isDragging: false,
+      isPointerDown: false
+    };
+  }, [isTransitioning, calculateDragPercentage, swipeRight, swipeLeft]);
 
-  const handleDragEnd = () => {
-    if (isDragging && Math.abs(dragEnd - dragStart) > DRAG_THRESHOLD) {
-      dragEnd > dragStart ? swipeRight() : swipeLeft();
-    }
-
-    setIsDragging(false);
-    setDragStart(0);
-    setDragEnd(0);
-  };
-
-  const handleDoubleClick = (event) => {
+  // Event handlers
+  const handleDoubleClick = useCallback((event) => {
     const clickX = event.clientX;
     const halfWindowWidth = window.innerWidth / 2;
     clickX < halfWindowWidth ? swipeRight() : swipeLeft();
-  };
+  }, [swipeRight, swipeLeft]);
 
+  // Global pointer up listener
   useEffect(() => {
-    if (key.keyStroke === app.settings.app_bindings.left.value) swipeRight();
-    if (key.keyStroke === app.settings.app_bindings.right.value) swipeLeft();
-  }, [key.keyStroke]);
+    const handleGlobalPointerUp = () => {
+      if (dragStateRef.current.isPointerDown) {
+        handlePointerEnd();
+      }
+    };
+
+    document.addEventListener('mouseup', handleGlobalPointerUp);
+    document.addEventListener('touchend', handleGlobalPointerUp);
+    
+    return () => {
+      document.removeEventListener('mouseup', handleGlobalPointerUp);
+      document.removeEventListener('touchend', handleGlobalPointerUp);
+      // Clean up animation frame on unmount
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [handlePointerEnd]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (keyStroke === app_bindings.left.value) swipeRight();
+    if (keyStroke === app_bindings.right.value) swipeLeft();
+  }, [keyStroke, app_bindings.left.value, app_bindings.right.value, swipeRight, swipeLeft]);
+
+  // Get transform and opacity for each component (memoized with fewer dependencies)
+  const getComponentTransform = useCallback((index) => {
+    const { prevIndex, nextIndex } = getAdjacentIndices(currentPageIndex);
+
+    if (isDragRendering) {
+      if (index === currentPageIndex) {
+        return { 
+          translateX: `${dragRenderOffset}%`, 
+          opacity: 1 - Math.abs(dragRenderOffset) * 0.003 
+        };
+      }
+      
+      if (index === prevIndex && dragRenderOffset > 0) {
+        return { 
+          translateX: `${dragRenderOffset - 100}%`, 
+          opacity: Math.max(0, dragRenderOffset * 0.01) 
+        };
+      } else if (index === nextIndex && dragRenderOffset < 0) {
+        return { 
+          translateX: `${dragRenderOffset + 100}%`, 
+          opacity: Math.max(0, Math.abs(dragRenderOffset) * 0.01) 
+        };
+      }
+      
+      return { translateX: dragRenderOffset > 0 ? '-100%' : '100%', opacity: 0 };
+    }
+    
+    if (!isTransitioning) {
+      if (index === currentPageIndex) {
+        return { translateX: '0%', opacity: 1 };
+      }
+      return { translateX: '100%', opacity: 0 };
+    }
+
+    const { oldIndex, newIndex, direction } = transitionState;
+    
+    if (index === oldIndex) {
+      return { 
+        translateX: direction === 'left' ? '-100%' : '100%', 
+        opacity: 0 
+      };
+    } else if (index === newIndex) {
+      return { translateX: '0%', opacity: 1 };
+    }
+    
+    return { translateX: '100%', opacity: 0 };
+  }, [currentPageIndex, isDragRendering, dragRenderOffset, isTransitioning, transitionState, getAdjacentIndices]);
+
+  // Determine which components to render (optimized)
+  const shouldRender = useCallback((index) => {
+    const { prevIndex, nextIndex } = getAdjacentIndices(currentPageIndex);
+
+    if (isDragRendering) {
+      return index === currentPageIndex || 
+             (index === prevIndex && dragRenderOffset > 0) || 
+             (index === nextIndex && dragRenderOffset < 0);
+    }
+    
+    if (!isTransitioning) {
+      return index === currentPageIndex;
+    }
+    
+    const { oldIndex, newIndex } = transitionState;
+    return index === oldIndex || index === newIndex;
+  }, [currentPageIndex, isDragRendering, dragRenderOffset, isTransitioning, transitionState, getAdjacentIndices]);
 
   return (
     <DashBoard
       ref={dashBoardRef}
-      className={app.settings.general.colorTheme.value}
-      onMouseDown={(e) => handleDragStart(e.clientX)}
-      onMouseMove={(e) => handleDragMove(e.clientX)}
-      onMouseUp={handleDragEnd}
-      onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
-      onTouchMove={(e) => handleDragMove(e.touches[0].clientX)}
-      onTouchEnd={handleDragEnd}
+      className={colorTheme}
+      onMouseDown={(e) => handlePointerStart(e.clientX)}
+      onMouseMove={(e) => handlePointerMove(e.clientX)}
+      onMouseUp={handlePointerEnd}
+      onTouchStart={(e) => handlePointerStart(e.touches[0].clientX)}
+      onTouchMove={(e) => handlePointerMove(e.touches[0].clientX)}
+      onTouchEnd={handlePointerEnd}
       onDoubleClick={handleDoubleClick}
     >
       <Wrapper>
         {components.map(({ component: Component }, index) => {
-          const isActive = index === currentPageIndex;
-          const direction = index < currentPageIndex ? 'left' : index > currentPageIndex ? 'right' : 'current';
+          if (!shouldRender(index)) return null;
+
+          const { translateX, opacity } = getComponentTransform(index);
+
           return (
-            <PageWrapper key={index} isActive={isActive} direction={direction}>
-              <Fade className={isActive ? 'fade-in' : 'fade-out'} fadeLength={0.75}>
+            <PageWrapper 
+              key={`page-${index}`}
+              translateX={translateX}
+              opacity={opacity}
+              isTransitioning={isTransitioning}
+              isDragging={isDragRendering}
+            >
+              <Suspense fallback={
+                <LoadingWrapper>
+                  <Oval
+                    visible={true}
+                    height="80"
+                    width="80"
+                    color={theme.colors.theme[colorTheme].active}
+                    ariaLabel="oval-loading"
+                    wrapperStyle={{}}
+                    wrapperClass=""
+                    />
+                </LoadingWrapper>
+              }>
                 <Component />
-              </Fade>
+              </Suspense>
             </PageWrapper>
           );
         })}
       </Wrapper>
       <Pagination
         pages={components.length}
-        colorActive={theme.colors.theme.blue.active}
+        colorActive={theme.colors.theme[colorTheme].active}
         colorInactive={theme.colors.medium}
         currentPage={currentPageIndex}
         dotSize={7.5}

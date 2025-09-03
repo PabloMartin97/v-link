@@ -1,8 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-} from 'react'
-import { CANWorker, ADCWorker } from './worker/types'
+import { useEffect, useMemo, useRef } from 'react'
+import { CARWorker } from './worker/types'
 import { DATA } from './../store/Store';
 import { APP } from './../store/Store';
 
@@ -10,80 +7,87 @@ import Display from './helper/Display';
 import Ignition from './helper/Ignition';
 import Recorder from './helper/Recorder';
 
-import { io } from "socket.io-client";
-const sysChannel = io("ws://localhost:4001/sys")
-
-
-
-
 function Cardata() {
+  const settings       = APP((state) => state.settings)
+  const modules        = APP((state) => state.modules)
+  const autoOpen       = APP((state) => state.settings.screen.autoOpen.value)
+  const ignState       = APP((state) => state.system.ignState)
+  const autoShutdown   = APP((state) => state.settings.shutdown.autoShutdown.value)
+  const shutdownDelay  = APP((state) => state.settings.shutdown.shutdownDelay.value)
+  const messageTimeout = APP((state) => state.settings.shutdown.messageTimeout.value)
+  const isRecording    = APP((state) => state.system.isRecording)
+  const resolution     = APP((state) => state.settings.dash_charts.resolution.value)
 
-  const app = APP((state) => state)
+
+
   const updateApp = APP((state) => state.update)
 
   const data = DATA((state) => state)
   const updateData = DATA((state) => state.update);
 
-  const canWorker = useMemo(() => {
+  const carWorker = useMemo(() => {
     const worker = new Worker(
-      new URL('./worker/CAN.worker.ts', import.meta.url), {
-      type: 'module'
-    }
-    ) as CANWorker
+      new URL('./worker/CarData.worker.ts', import.meta.url),
+      { type: 'module' }
+    ) as CARWorker
     return worker
   }, [])
 
-  const adcWorker = useMemo(() => {
-    const worker = new Worker(
-      new URL('./worker/ADC.worker.ts', import.meta.url), {
-      type: 'module'
-    }
-    ) as ADCWorker
-    return worker
-  }, [])
+  const latestRef = useRef<any>(null)
 
   useEffect(() => {
-    canWorker.onmessage = (event) => {
-      const { type, message } = event.data;
-      const newData = { [type]: message };
-      updateData(newData.message)
-    };
+    // Worker responds with data *only when requested*
+    carWorker.onmessage = (event) => {
+      latestRef.current = event.data.values
+    }
 
-    adcWorker.onmessage = (event) => {
-      const { type, message } = event.data;
-      const newData = { [type]: message };
-      updateData(newData.message)
-    };
+    let rafId: number
+    let lastUpdate = 0
+
+    const renderLoop = (time: number) => {
+      if (time - lastUpdate > 1000/24) {
+        // request new data from worker
+        carWorker.postMessage({ type: 'request' })
+
+        // if worker responded in time, consume it
+        if (latestRef.current) {
+          updateData(latestRef.current)
+          latestRef.current = null
+        }
+
+        lastUpdate = time
+      }
+
+      rafId = requestAnimationFrame(renderLoop)
+    }
+
+    rafId = requestAnimationFrame(renderLoop)
 
     return () => {
-      // Clean up the worker when the component is unmounted
-      adcWorker.terminate();
-      canWorker.terminate();
-    };
-  }, []);
+      cancelAnimationFrame(rafId)
+      carWorker.terminate()
+    }
+  }, [carWorker, updateData])
 
   return (
     <>
-      <Display 
-        autoOpen={app.settings.screen.autoOpen.value}
-        io={sysChannel}
+      <Display
+        autoOpen={autoOpen}
       />
       <Ignition
-        ignition={app.system.ignition}
-        autoShutdown={app.settings.shutdown.autoShutdown.value}
-        shutdownDelay={app.settings.shutdown.shutdownDelay.value}
-        messageTimeout={app.settings.shutdown.messageTimeout.value}
+        ignition={ignState}
+        autoShutdown={autoShutdown}
+        shutdownDelay={shutdownDelay}
+        messageTimeout={messageTimeout}
         updateApp={updateApp}
-        io={sysChannel}
       />
-      <Recorder 
+      <Recorder
         data={data.data}
-        resolution={app.settings.dash_charts.resolution.value}
-        setCount={app.settings.constants.chart_input_current}
-        recording={app.system.recording}
-        settings={app.settings}
-        modules={app.modules}
-        />
+        resolution={resolution}
+        recording={isRecording}
+        settings={settings}
+        modules={modules}
+      />
     </>
   );
 }

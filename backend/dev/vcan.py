@@ -5,52 +5,64 @@ import struct
 import threading
 import subprocess
 import os
+import shutil
 
 from ..shared.shared_state import shared_state
 
 
 class VCANThread(threading.Thread):
-    def __init__(self):
+    def __init__(self, logger):
         super(VCANThread, self).__init__()
         self._stop_event = threading.Event()
         self.daemon = True
         self.can_bus = None
-
-        # Initial values
-        INTAKE = 20.0
-        BOOST = 1.0
-        COOLANT = 90.0
-        LAMBDA1 = 0.01
-        LAMBDA2 = 0.85
-        VOLTAGE = 14.0
-
-        self.VALUES = [INTAKE, BOOST, COOLANT, LAMBDA1, LAMBDA2, VOLTAGE]
-        self.TEMPLATE = [0xcd, 0x7a, 0xa6, 0x00, 0x00, 0x40, 0x0, 0x0]
+        self.logger = logger
+        self.channel = "vcan0"
 
         script_directory = os.path.dirname(os.path.abspath(__file__))
         setup_script_path = os.path.join(script_directory, 'setup.sh')
         subprocess.run([setup_script_path], shell=True)
 
+        self.state = {
+            "rpm": 1000,
+            "boost": 1.0,
+            "coolant": 70.0,
+            "intake": 25.0,
+            "lambda1": 0.9,
+            "lambda2": 0.8,
+            "voltage": 13.5,
+            "speed": 0.0,
+        }
+
+        # NEW: store smooth targets for each parameter
+        self.targets = dict(self.state)
+
+        self.param_map = {
+            (0x10, 0x1D): "rpm",
+            (0x12, 0x9D): "boost",
+            (0x10, 0xD8): "coolant",
+            (0x10, 0xCE): "intake",
+            (0x10, 0x34): "lambda1",
+            (0x10, 0x2C): "lambda2",
+            (0x10, 0x0A): "voltage",
+            (0x10, 0xA5): "speed",
+        }
+
     def run(self):
         try:
-            self.can_bus = can.interface.Bus(channel='vcan0', bustype='socketcan', bitrate=500000)
-            # Use a timeout for recv to allow periodic checks of _stop_event
+            self.can_bus = can.interface.Bus(channel=self.channel, bustype='socketcan', bitrate=500000)
             while not self._stop_event.is_set():
-                try:
-                    # Timeout set to 1 second for responsiveness
-                    message = self.can_bus.recv(timeout=1.0)
-                    if message:
-                        self.check_message(message)
-                except can.CanError as e:
-                    print(f"CAN error: {e}")
+                self.update_state()
+                message = self.can_bus.recv(timeout=0.5)
+                if message:
+                    self.check_message(message)
         except Exception as e:
-            print(e)
+            self.logger.error(f"VCAN thread error: {e}")
         finally:
             self.stop_canbus()
 
     def stop_thread(self):
-        print("Stopping VCAN thread.")
-        time.sleep(.5)
+        time.sleep(0.5)
         self._stop_event.set()
 
     def stop_canbus(self):
@@ -58,28 +70,67 @@ class VCANThread(threading.Thread):
             self.can_bus.shutdown()
 
     def check_message(self, message):
-        # Define the request array
-        request = [
-            [0x12, 0x9D],
-            [0x10, 0x34],
-            [0x10, 0xCE],
-            [0x10, 0xD8],
-            [0x10, 0x0A],
-            [0x10, 0x2C],
-        ]
+        param = tuple(message.data[3:5])
+        if param in self.param_map:
+            key = self.param_map[param]
+            self.send_response(param, key)
 
-        # Check if the 4th and 5th bytes match any entry in the request array
-        for index, req in enumerate(request):
-            if list(message.data[3:5]) == req:
-                self.send_message(req)
+    def update_state(self):
+        # Pick new targets less often (~every 100 loops on average)
+        if random.random() < 0.01:
+            self.targets["rpm"] = random.randint(800, 7500)
+            self.targets["boost"] = random.uniform(0.0, 2.0)
+            self.targets["coolant"] = random.uniform(70, 105)
+            self.targets["intake"] = random.uniform(15, 50)
+            self.targets["lambda1"] = random.uniform(0.85, 1.05)
+            self.targets["lambda2"] = random.uniform(0.75, 0.95)
+            self.targets["voltage"] = random.uniform(13.2, 14.0)
+            self.targets["speed"] = random.uniform(0, 260)
 
-    def send_message(self, id):
-        self.TEMPLATE[3:5] = list(id)
+        # Move current values very slowly toward targets
+        smooth_factor = 0.01  # smaller = slower change, smoother
+        for key in self.state:
+            current = self.state[key]
+            target = self.targets[key]
+            self.state[key] += (target - current) * smooth_factor
 
-        # Generate a random offset in the range [-0x10, 0x10]
-        random_offset = random.randint(-0x01, 0x01)
-        self.TEMPLATE[5:6] = struct.pack('>B', (self.TEMPLATE[5] + random_offset) & 0xFF)
-        response_message = can.Message(arbitration_id=0x00400021, data=self.TEMPLATE, is_extended_id=True)
 
-        # Send the response
-        self.can_bus.send(response_message)
+    def send_response(self, param_bytes, key):
+        value = self.state[key]
+        encoded = self.encode_value(key, value)
+        if encoded is None:
+            return
+
+        response = [0xCD, 0x7A, 0xA6] + list(param_bytes) + encoded
+        response += [0x00] * (8 - len(response))
+
+        msg = can.Message(arbitration_id=0x00400021,
+                          data=bytearray(response),
+                          is_extended_id=True)
+        self.can_bus.send(msg)
+        # Uncomment for debugging:
+        # self.logger.debug(f"Sent {key} = {value:.2f} -> {msg.data.hex()}")
+
+    def encode_value(self, key, value):
+        if key == "boost":
+            raw = int((value / 0.01) + 101)
+            return [raw & 0xFF]
+        elif key in ["intake", "coolant"]:
+            raw = int((value + 47.0) / 0.75)
+            return [raw & 0xFF]
+        elif key == "voltage":
+            raw = int(value * 10.611399)
+            return [raw & 0xFF]
+        elif key == "lambda1":
+            raw = int(value * 65536.0 / 16.0)
+            return list(struct.pack(">H", raw))
+        elif key == "lambda2":
+            raw = int(value * 255.0 / 1.33)
+            return [raw & 0xFF]
+        elif key == "rpm":
+            raw = int(value / 40)
+            return [raw & 0xFF]
+        elif key == "speed":
+            raw = int(value * 128)  # scale: value * 65536 / 512 = value * 128
+            return list(struct.pack(">H", raw))
+        return None

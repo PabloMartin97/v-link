@@ -1,4 +1,4 @@
-import styled, { useTheme } from 'styled-components';
+import styled from 'styled-components';
 
 import LinearGauge from './../../../components/LinearGauge';
 import DataList from '../../../components/DataList'
@@ -25,9 +25,9 @@ const List = styled.div`
 `;
 
 const Race = () => {
-	const app = APP((state) => state);
 
-	const Datalist = DataList(app.settings.dash_race, 6, 2) // Amount of Items, 2 Columns
+	const dashRaceSettings = APP((state) => state.settings.dash_race);
+	const Datalist = DataList(dashRaceSettings, 6, 2) // Amount of Items, 2 Columns
 
 	return (
 		<Container>
