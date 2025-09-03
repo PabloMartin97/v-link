@@ -131,6 +131,9 @@ class VLINK:
 
     
     def start_modules(self):
+        import backend.settings as settings
+        settings.load_modules()
+
         if shared_state.vCan:
             self.start_thread('vcan', logger)
             time.sleep(.05)

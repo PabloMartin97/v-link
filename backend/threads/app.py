@@ -35,9 +35,9 @@ class APPThread(threading.Thread):
             '--enable-experimental-web-platform-features',
             '--enable-features=SharedArrayBuffer',
             '--autoplay-policy=no-user-gesture-required',
-            #'--disable-extensions',
             '--disable-logging',
             '--log-level=3'
+            '--disable-gpu'
         ]
 
         if shared_state.isKiosk:

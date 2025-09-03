@@ -251,7 +251,10 @@ function Dashboard() {
     };
   }, [isTransitioning]);
 
-  // Heavily optimized pointer move with RAF throttling
+  // Optimized pointer move with RAF throttling
+  const updateDragRenderRef = useRef(updateDragRender);
+  updateDragRenderRef.current = updateDragRender;
+
   const handlePointerMove = useCallback((position) => {
     const dragState = dragStateRef.current;
     
@@ -273,9 +276,11 @@ function Dashboard() {
     
     // Only update render if we're dragging
     if (dragState.isDragging) {
-      animationFrameRef.current = requestAnimationFrame(updateDragRender);
+      animationFrameRef.current = requestAnimationFrame(() => {
+        updateDragRenderRef.current();
+      });
     }
-  }, [isTransitioning, updateDragRender]);
+  }, [isTransitioning,]);
 
   const handlePointerEnd = useCallback(() => {
     const dragState = dragStateRef.current;

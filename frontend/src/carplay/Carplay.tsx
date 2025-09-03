@@ -47,6 +47,8 @@ const Overlay = styled.div`
   left: 0;
   height: 100%;
   width: 100%;
+
+  zIndex: 2;
   
   display: flex;
   justify-content: center;
@@ -73,13 +75,14 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
   const socket = useNamespaces();
 
-  const carplaySettings = APP((state) => state.system.carplay)
-  const content         = APP((state) => state.system.interface.content)
-  const navBar          = APP((state) => state.system.interface.navBar)
   const appUpdate       = APP((state) => state.update);
-  const dongleConfig    = APP((state) => state.settings.dongle_config);
+  const carplaySettings = APP((state) => state.system.carplay)
   const width           = APP((state) => state.system.carplaySize.width);
   const height          = APP((state) => state.system.carplaySize.height);
+  const content         = APP((state) => state.system.interface.content)
+  const navBar          = APP((state) => state.system.interface.navBar)
+
+  const dongleConfig    = APP((state) => state.settings.dongle_config);
   const exitToDash      = APP((state) => state.settings.general.exitToDash);
 
   const [phoneState, setPhoneState] = useState<Boolean | null>(false);
@@ -256,13 +259,14 @@ function Carplay({ command, commandCounter }: CarplayProps) {
             case CommandMapping.requestHostUI:
               if (exitToDash) {
                 appUpdate((state) => {
-                  state.system.interface.view = "Dashboard";
+                  state.system.view = "Dashboard";
                 });
-              } else {
+              } 
+              /* else {
                 appUpdate((state) => {
                   state.system.interface.navBar = true;
                 });
-              }
+              } */
           }
           break
         case 'failure':

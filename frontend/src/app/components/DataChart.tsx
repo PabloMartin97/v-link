@@ -84,9 +84,7 @@ const DataChart = ({
         }
 
         return () => {
-            if (containerRef.current) {
-                resizeObserver.unobserve(containerRef.current);
-            }
+            resizeObserver.disconnect(); // Fixed: use disconnect instead of unobserve
         };
     }, []);  // Empty dependency array ensures this runs once on mount
 
@@ -263,8 +261,16 @@ const DataChart = ({
         return <>{paths}</>;
     };
 
+    // Keep your original approach but use useRef to prevent timer accumulation
+    const timerRef = useRef(null);
+    
     useEffect(() => {
-        const timer = setInterval(() => {
+        // Clear any existing timer first
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+        }
+        
+        timerRef.current = setInterval(() => {
             const newDataStreams = datasets.map((dataset, index) => {
                 let value = Math.abs(dataset.data);
                 if (isNaN(value)) value = 0;
@@ -276,8 +282,12 @@ const DataChart = ({
             setDataStreams(newDataStreams);
         }, resolution);
 
-        return () => clearInterval(timer);
-    }, [dataStreams]);
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [dataStreams]); // Keep your original dependency
 
     const handleToggleRecording = () => {
         appUpdate((state) => {
