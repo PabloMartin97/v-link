@@ -40,8 +40,6 @@ export const Socket = () => {
 
   // Reusable event handlers
   const handleSettings = (module) => (data) => {
-            console.log(data)
-
     if (data) {
       if (module === 'app') {
         // Special handling for app settings to determine active modules
@@ -49,8 +47,6 @@ export const Socket = () => {
         
         // Determine which modules should be active based on app config
         const moduleConfig = data.constants?.modules || {};
-
-        console.log(module)
         const modulesToActivate = { app: APP }; // Always include app
         
         Object.entries(moduleConfig).forEach(([moduleName, isEnabled]) => {
@@ -100,7 +96,7 @@ export const Socket = () => {
 
 
   const handleReverse = () => (reverseStatus: boolean) => {
-    console.log('Reverse: ', reverseStatus);
+    socket.log.emit('info', `Reverse: ${reverseStatus}`);
     store['app'].update((state: any) => {
       state.system.reverse = reverseStatus;
     });
@@ -154,7 +150,6 @@ export const Socket = () => {
     if (!appConfigLoaded || Object.keys(activeModules).length === 0) return;
 
     const setupModuleListeners = () => {
-      console.log(activeModules)
       // Setup listeners for all active modules (except app, which is already set up)
       Object.keys(activeModules).forEach(module => {
         if (module === 'app') return; // Skip app as it's already set up

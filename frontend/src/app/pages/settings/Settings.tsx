@@ -189,12 +189,9 @@ const Settings = () => {
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
     setSave(false)
 
-    console.log(currentSettings)
     const newSettings = structuredClone(currentSettings);
     let convertedValue
     if (selectStore != 'app') {
-      console.log(selectStore)
-      console.log(dataStores[selectStore])
       convertedValue = Object.keys(dataStores[selectStore]).find(
         (messageKey) => dataStores[selectStore][messageKey].label === targetSetting
       );
@@ -203,7 +200,6 @@ const Settings = () => {
     } else {
       newSettings[key][name].value = targetSetting
     }
-    console.log(newSettings)
 
     setCurrentSettings(newSettings);
   };
@@ -359,9 +355,6 @@ const Settings = () => {
         selectStore = (Object.keys(dataOptions).length > 1 && dataOptions[newValue])
           ? dataOptions[newValue]
           : "app";
-
-
-        console.log("HANDLECHANGE:", type)
 
         const targetSetting = isBoolean ? checked : newValue                      // Handle targetSetting based on type
         handleSettingChange(selectStore, key, name, targetSetting, settingsObj);     // Execute change of settings

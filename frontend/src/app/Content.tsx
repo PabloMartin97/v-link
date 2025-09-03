@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import styled, { css, useTheme } from 'styled-components';
 import { Fade } from '../theme/styles/Effects';
 
@@ -12,6 +12,7 @@ import NavBar from '../app/sidebars/NavBar';
 import SideBar from '../app/sidebars/SideBar';
 import TopBar from '../app/sidebars/TopBar';
 import { io } from "socket.io-client";
+import { useNamespaces } from '../socket/Namespaces';
 
 const MainContainer = styled.div`
   position: absolute;
@@ -113,6 +114,8 @@ const Content = () => {
   const contentPadding    = APP((state) => state.settings.general.contentPadding.value);
   const view              = APP((state) => state.system.view);
 
+  const socket = useNamespaces();
+
 
   const reverse           = APP((state) => state.system.reverse);
   const reverseDelay      = APP((state) => state.settings.reverseCam.delay.value);
@@ -143,7 +146,7 @@ const Content = () => {
     const sysChannel = io("ws://localhost:4001/sys", { transports: ["websocket"] });
 
     const onReverse = (active) => {
-      console.log("[SYS] reverse (frontend)", active);
+      socket.log.emit(`[Frontend] Reverse: ${active}`);
       appUpdate((state) => {
         state.system.reverse = active;
       });
