@@ -13,7 +13,7 @@ The heart of this project is the open source **V-Link app**. It's running native
 
 * [Swedespeed Forum](https://www.swedespeed.com/threads/volvo-rtvi-raspberry-media-can-interface.658254/)
 * [V-Link Discord Server](https://discord.gg/V4RQG6p8vM)
-
+* [Documentation](https://www.boostedmoose.de/docs)
 
 # Installation
 
@@ -49,7 +49,7 @@ python /home/$USER/v-link/V-Link.py -h
 
 ## Wiki
 
-Detailed instructions on all the functions and features can be found in the [Wiki](https://github.com/BoostedMoose/v-link/wiki) of this repository. In there you will find schematics, instructions to set up the HAT or your custom circuit and more. Definitely check it out!
+Detailed instructions on all the functions and features can be found in the [Documentation](https://www.boostedmoose.de/docs) of this repository. In there you will find schematics, instructions to set up the HAT or your custom circuit and more. Definitely check it out!
 
 ## Disclaimer
 
