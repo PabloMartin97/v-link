@@ -1,0 +1,17 @@
+{
+    "type": "interface",
+    "name": "rti",
+
+    "interface": {
+        "type": "serial",
+        "channel": "/dev/ttyAMA1",
+        "baudrate": 2400
+    },
+    "timing": {
+        "timeout": 0.1
+    },
+    "commands": {
+    },
+    "messages": {
+    }
+}
