@@ -43,6 +43,7 @@ class Config:
                 if iface not in self.sensors:
                     self.sensors[iface] = []
 
+                scale = sensor['scale']
                 req_id = int(sensor['req_id'], 16)
                 rep_id = int(sensor['rep_id'], 16)
                 target = int(sensor['target'], 16)
@@ -53,13 +54,11 @@ class Config:
                 payload: list[int] = [target, action, *params, request_count]
 
                 message_bytes: list[int] = [0x00, *payload]
+                message_bytes[0] = 0xC8 + (len(message_bytes) - 1)
 
                 # Pad with zeroes
                 while len(message_bytes) < 8:
                     message_bytes.append(0x00)
-
-                message_bytes[0] = 0xC8 + (len(message_bytes) - 1)
-                scale = sensor['scale']
 
                 if not isinstance(scale, str) or 'value' not in scale:
                     raise ValueError(f'Invalid scale format for sensor "{key}"')
