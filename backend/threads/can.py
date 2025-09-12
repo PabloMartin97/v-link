@@ -47,14 +47,18 @@ class Config:
                 rep_id = int(sensor['rep_id'], 16)
                 target = int(sensor['target'], 16)
                 action = int(sensor['action'], 16)
-                parameter0 = int(sensor['parameter'][0], 16)
-                parameter1 = int(sensor['parameter'][1], 16)
+                params: list[int] = [int(p, 16) for p in sensor.get('parameter', [])][:2]
 
-                # calculate dlc
-                message_data = [target, action, parameter0, parameter1, 0x01]
-                dlc = 0xC8 + len(message_data)
+                request_count = 0x01
+                payload: list[int] = [target, action, *params, request_count]
 
-                message_bytes = [dlc, *message_data, 0x00, 0x00]
+                message_bytes: list[int] = [0x00, *payload]
+
+                # Pad with zeroes
+                while len(message_bytes) < 8:
+                    message_bytes.append(0x00)
+
+                message_bytes[0] = 0xC8 + (len(message_bytes) - 1)
                 scale = sensor['scale']
 
                 if not isinstance(scale, str) or 'value' not in scale:
@@ -351,7 +355,10 @@ class CANListener(can.Listener):
                     data[3] == sensor['message_bytes'][3] and  # match parameter0
                     data[4] == sensor['message_bytes'][4]):    # match parameter1
 
-                    value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
+                    if data[2] == 0xE5:
+                        value = data[7]
+                    else:
+                        value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
 
                     converted_value = eval(sensor['scale'], {'value': value})
                     shared_state.update_car_data(sensor['key'], float(converted_value))
