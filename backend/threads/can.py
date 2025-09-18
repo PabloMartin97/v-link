@@ -248,15 +248,15 @@ class CANScheduler(threading.Thread):
             1: 0,
             2: 0,
             3: 0
-            }
+        }
 
         # Token generator for smooth weighted scheduling
         self.token_stream = self.token_generator({
             1: 6,
             2: 3,
             3: 1
-            })
-        
+        })
+
     def run(self):
         self.logger.info('[CAN] Message Scheduler started.')
         while not self._stop_event.is_set():
@@ -350,23 +350,30 @@ class CANListener(can.Listener):
                     message_hex = ' '.join(f'{byte:02X}' for byte in data)
                     #self.logger.debug(f'Parsing message: {message_hex}')
 
-                if (
-                    data[3] == sensor['message_bytes'][3] and  # match parameter0
-                    data[4] == sensor['message_bytes'][4]):    # match parameter1
+                mb = sensor.get("message_bytes", ())
+                is_match = False
+                value = None
 
-                    if data[2] == 0xE5:
+                if data[2] == 0xE5:
+                    if len(mb) > 3 and data[3] == mb[3]:
                         value = data[7]
-                    else:
-                        value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
+                        is_match = True
+                else:
+                    if len(mb) > 4 and data[3] == mb[3] and data[4] == mb[4]:
+                        value = ((data[5] << 8) | data[6]) if sensor.get("is_16bit") else data[5]
+                        is_match = True
 
-                    converted_value = eval(sensor['scale'], {'value': value})
-                    shared_state.update_car_data(sensor['key'], float(converted_value))
+                if not is_match:
+                    continue
 
-                    evt = self.events.get(sensor['rep_id'][0])
-                    if evt:
-                        evt.set()
+                converted_value = eval(sensor['scale'], {'value': value})
+                shared_state.update_car_data(sensor['key'], float(converted_value))
 
-                    return
-                    
+                evt = self.events.get(sensor['rep_id'][0])
+                if evt:
+                    evt.set()
+
+                return
+
         except Exception as e:
             self.logger.error(f'[CAN] CAN listener error: {e}')
