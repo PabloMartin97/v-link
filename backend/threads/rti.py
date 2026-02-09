@@ -6,6 +6,7 @@ import subprocess
 import serial
 
 from ..shared.shared_state import shared_state
+from ..shared.backlight_helper import BacklightController
 
 class RTIThread(threading.Thread):
     def __init__(self, logger):
@@ -15,6 +16,7 @@ class RTIThread(threading.Thread):
         self.daemon = True
 
         self.logger = logger
+        self._backlight = BacklightController()
 
         try:
             if(shared_state.rpiModel == 5):
@@ -41,18 +43,25 @@ class RTIThread(threading.Thread):
             time.sleep(0.1)
 
     def run_rti(self):
-        while not self._stop_event.is_set():
-            try:
-                if shared_state.rtiStatus:
-                    self.write(0x40)
-                else:
-                    self.write(0x46)
-                
-                self.write(0x20)
-                self.write(0x83)
-            except Exception as e:
-                self.logger.error(f'[RTI] Error during operation: {e}')
-                break
+        try:
+            while not self._stop_event.is_set():
+                if not self.rti_serial or not self.rti_serial.is_open:
+                    time.sleep(0.2)
+                    continue
+                try:
+                    if shared_state.rtiStatus:
+                        self.write(0x40)
+                    else:
+                        self.write(0x46)
+
+                    byte, _changed, _mode = self._backlight.update()
+                    self.write(byte)
+                    self.write(0x83)
+                except Exception as e:
+                    self.logger.error(f'[RTI] Error during operation: {e}')
+                    break
+        finally:
+            self.cleanup()
 
     def cleanup(self):
         if self.rti_serial and self.rti_serial.is_open:

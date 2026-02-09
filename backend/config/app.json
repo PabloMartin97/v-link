@@ -93,6 +93,30 @@
       "label": "Open Screen on Start"
     }
   },
+  "daylight_backlight": {
+    "ui": "range",
+    "label": "Daylight Backlight Level",
+    "value": 15,
+    "min": 1,
+    "max": 16,
+    "step": 1
+  },
+  "auto_backlight": {
+    "title": "Automatic Backlight",
+    "type": "system",
+    "autoOpen": {
+      "value": true,
+      "label": "Enable Automatic Backlight"
+    }
+  },
+  "darkness_backlight": {
+    "ui": "range",
+    "label": "Darkness Backlight Level",
+    "value": 5,
+    "min": 1,
+    "max": 10,
+    "step": 1
+  },
   "reverseCam": {
     "title": "Reverse Camera Settings",
     "type": "system",
@@ -103,6 +127,39 @@
     "delay": {
       "value": 7,
       "label": "Off Delay (sec)"
+    },
+    "deviceSelectionMode": {
+      "value": "auto",
+      "label": "Device Selection",
+      "options": [
+        "auto",
+        "deviceId",
+        "label"
+      ]
+    },
+    "deviceId": {
+      "value": "default",
+      "label": "Camera Device",
+      "options": [
+        "default"
+      ]
+    },
+    "deviceLabel": {
+      "type": "text",
+      "value": "",
+      "label": "Device Label Contains"
+    },
+    "videoWidth": {
+      "value": 1280,
+      "label": "Video Width"
+    },
+    "videoHeight": {
+      "value": 720,
+      "label": "Video Height"
+    },
+    "videoFps": {
+      "value": 30,
+      "label": "Video FPS"
     }
   },
   "side_bars": {

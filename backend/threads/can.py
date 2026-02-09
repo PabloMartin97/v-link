@@ -43,22 +43,19 @@ class Config:
                 if iface not in self.sensors:
                     self.sensors[iface] = []
 
-                scale = sensor['scale']
                 req_id = int(sensor['req_id'], 16)
                 rep_id = int(sensor['rep_id'], 16)
                 target = int(sensor['target'], 16)
                 action = int(sensor['action'], 16)
-                params: list[int] = [int(p, 16) for p in sensor.get('parameter', [])][:2]
+                parameter0 = int(sensor['parameter'][0], 16)
+                parameter1 = int(sensor['parameter'][1], 16)
 
-                request_count = 0x01
-                payload: list[int] = [target, action, *params, request_count]
+                # calculate dlc
+                message_data = [target, action, parameter0, parameter1, 0x01]
+                dlc = 0xC8 + len(message_data)
 
-                message_bytes: list[int] = [0x00, *payload]
-                message_bytes[0] = 0xC8 + (len(message_bytes) - 1)
-
-                # Pad with zeroes
-                while len(message_bytes) < 8:
-                    message_bytes.append(0x00)
+                message_bytes = [dlc, *message_data, 0x00, 0x00]
+                scale = sensor['scale']
 
                 if not isinstance(scale, str) or 'value' not in scale:
                     raise ValueError(f'Invalid scale format for sensor "{key}"')
@@ -248,15 +245,15 @@ class CANScheduler(threading.Thread):
             1: 0,
             2: 0,
             3: 0
-        }
+            }
 
         # Token generator for smooth weighted scheduling
         self.token_stream = self.token_generator({
             1: 6,
             2: 3,
             3: 1
-        })
-
+            })
+        
     def run(self):
         self.logger.info('[CAN] Message Scheduler started.')
         while not self._stop_event.is_set():
@@ -350,30 +347,20 @@ class CANListener(can.Listener):
                     message_hex = ' '.join(f'{byte:02X}' for byte in data)
                     #self.logger.debug(f'Parsing message: {message_hex}')
 
-                mb = sensor.get("message_bytes", ())
-                is_match = False
-                value = None
+                if (
+                    data[3] == sensor['message_bytes'][3] and  # match parameter0
+                    data[4] == sensor['message_bytes'][4]):    # match parameter1
 
-                if data[2] == 0xE5:
-                    if len(mb) > 3 and data[3] == mb[3]:
-                        value = data[7]
-                        is_match = True
-                else:
-                    if len(mb) > 4 and data[3] == mb[3] and data[4] == mb[4]:
-                        value = ((data[5] << 8) | data[6]) if sensor.get("is_16bit") else data[5]
-                        is_match = True
+                    value = ((data[5] << 8) | data[6] if sensor['is_16bit'] else data[5])
 
-                if not is_match:
-                    continue
+                    converted_value = eval(sensor['scale'], {'value': value})
+                    shared_state.update_car_data(sensor['key'], float(converted_value))
 
-                converted_value = eval(sensor['scale'], {'value': value})
-                shared_state.update_car_data(sensor['key'], float(converted_value))
+                    evt = self.events.get(sensor['rep_id'][0])
+                    if evt:
+                        evt.set()
 
-                evt = self.events.get(sensor['rep_id'][0])
-                if evt:
-                    evt.set()
-
-                return
-
+                    return
+                    
         except Exception as e:
             self.logger.error(f'[CAN] CAN listener error: {e}')

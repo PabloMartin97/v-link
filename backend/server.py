@@ -159,6 +159,13 @@ class ServerThread(threading.Thread):
             # rearcam no usa settings; mantenemos la firma y no persistimos
             if module != "rearcam":
                 settings.save_settings(module, data)
+                if module == "app":
+                    try:
+                        shared_state.backlight_daylight = data.get('daylight_backlight', {}).get('value', shared_state.backlight_daylight)
+                        shared_state.backlight_darkness = data.get('darkness_backlight', {}).get('value', shared_state.backlight_darkness)
+                        shared_state.backlight_auto_enabled = data.get('auto_backlight', {}).get('autoOpen', {}).get('value', shared_state.backlight_auto_enabled)
+                    except Exception as e:
+                        logger.error(f'[Settings] Error updating backlight shared state from save: {e}')
 
         # Emit module settings
         def load_settings():
@@ -209,11 +216,34 @@ class ServerThread(threading.Thread):
         toggle_state.__name__   = f'handle_toggle_{module}'
         emit_data.__name__      = f'handle_data_{module}'
 
+        def backlight_update(data):
+            if module != "app":
+                return
+            if not isinstance(data, dict):
+                return
+            try:
+                if 'daylight' in data:
+                    shared_state.backlight_daylight = data['daylight']
+                if 'darkness' in data:
+                    shared_state.backlight_darkness = data['darkness']
+                if 'auto_enabled' in data:
+                    shared_state.backlight_auto_enabled = data['auto_enabled']
+                logger.info(
+                    f"[Backlight] daylight={shared_state.backlight_daylight} "
+                    f"darkness={shared_state.backlight_darkness} "
+                    f"auto_enabled={shared_state.backlight_auto_enabled}"
+                )
+            except Exception as e:
+                logger.error(f'[Settings] Error updating backlight shared state: {e}')
+
+        backlight_update.__name__ = f'backlight_update_{module}'
+
         socketio.on_event('load', load_settings, namespace=namespace)
         socketio.on_event('save', save_settings, namespace=namespace)
         socketio.on_event('ping', emit_state, namespace=namespace)
         socketio.on_event('data', emit_data, namespace=namespace)
         socketio.on_event('toggle', toggle_state, namespace=namespace)
+        socketio.on_event('backlight:update', backlight_update, namespace=namespace)
 
         # ------- Eventos específicos para rearcam -------
         if module == "rearcam":
