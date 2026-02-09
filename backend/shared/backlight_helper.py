@@ -24,9 +24,19 @@ DEFAULT_DAYLIGHT = {"value": 15, "min": 1, "max": 16}
 DEFAULT_DARKNESS = {"value": 5,  "min": 1, "max": 16}
 DEFAULT_AUTO = True
 
-# Temporal hysteresis (seconds)
-ENTER_NIGHT_S = 2.0
-EXIT_NIGHT_S  = 3.0
+# Temporal hysteresis (seconds), per target mode
+HOLD_TIME_S = {
+    "night": 2.0,
+    "dim": 1.5,
+    "day": 3.0,
+}
+
+# Voltage thresholds from ambient light sensor
+# voltage <= NIGHT_MAX_V => night
+# voltage <= DIM_MAX_V   => dim
+# voltage >  DIM_MAX_V   => day
+NIGHT_MAX_V = 0.9
+DIM_MAX_V = 2.4
 
 
 # ============================================================
@@ -113,16 +123,14 @@ def load_backlight_config():
 # ============================================================
 
 class LightStateHysteresis:
-    def __init__(self, enter_night_s, exit_night_s):
+    def __init__(self, hold_times):
         self.state = "day"
         self._candidate = None
         self._since = None
-        self.enter_night_s = enter_night_s
-        self.exit_night_s = exit_night_s
+        self.hold_times = hold_times
 
-    def update(self, is_dark: bool) -> str:
+    def update(self, target: str) -> str:
         now = time.monotonic()
-        target = "night" if is_dark else "day"
 
         if target == self.state:
             self._candidate = None
@@ -135,10 +143,7 @@ class LightStateHysteresis:
             return self.state
 
         elapsed = now - self._since
-        required = (
-            self.enter_night_s if target == "night"
-            else self.exit_night_s
-        )
+        required = self.hold_times.get(target, 1.0)
 
         if elapsed >= required:
             self.state = target
@@ -182,27 +187,55 @@ class BacklightController:
 
     def __init__(self):
         self._mapper = BacklightMapper()
-        self._light_state = LightStateHysteresis(
-            ENTER_NIGHT_S,
-            EXIT_NIGHT_S
-        )
+        self._light_state = LightStateHysteresis(HOLD_TIME_S)
 
     # --------------------------------------------------------
     # CAN sensor interpretation
     # --------------------------------------------------------
 
-    def _is_dark_from_can(self) -> bool:
+    def _mode_from_can(self) -> str:
         """
-        Interprets the raw CAN light sensor value.
-        Adjust here when you have real values.
+        Interprets CAN light value and returns: day, dim, night.
         """
-        raw = getattr(getattr(shared_state, "can", None), "light_raw", None)
-        if raw is None:
-            return False
+        raw = None
 
-        # Typical Volvo P2 example (adjustable)
-        # 0x00–0x05 -> dark
-        return raw <= 0x05
+        # Preferred path: CAN listeners publish sensors into shared_state.car_data
+        try:
+            with shared_state.car_data_lock:
+                raw = shared_state.car_data.get("light")
+        except Exception:
+            raw = None
+
+        # Backward-compatible fallback
+        if raw is None:
+            raw = getattr(getattr(shared_state, "can", None), "light_raw", None)
+
+        if raw is None:
+            return "day"
+
+        try:
+            voltage = float(raw)
+        except (TypeError, ValueError):
+            return "day"
+
+        if voltage <= NIGHT_MAX_V:
+            return "night"
+        if voltage <= DIM_MAX_V:
+            return "dim"
+        return "day"
+
+    def _dim_profile(self, cfg):
+        day = cfg["daylight"]
+        night = cfg["darkness"]
+        day_value = clamp(day["value"], day["min"], day["max"])
+        night_value = clamp(night["value"], night["min"], night["max"])
+        low = min(day["min"], night["min"])
+        high = max(day["max"], night["max"])
+        return {
+            "value": clamp(int(round((day_value + night_value) / 2)), low, high),
+            "min": low,
+            "max": high,
+        }
 
 
     # --------------------------------------------------------
@@ -216,11 +249,11 @@ class BacklightController:
 
         cfg = load_backlight_config()
 
-        # 1. Read CAN and decide dark/bright
-        is_dark = self._is_dark_from_can()
+        # 1. Read CAN and decide target mode
+        target_mode = self._mode_from_can()
 
         # 2. Stable state with hysteresis
-        state = self._light_state.update(is_dark)
+        state = self._light_state.update(target_mode)
 
         # 3. Profile selection
         if not cfg["auto"]:
@@ -230,6 +263,9 @@ class BacklightController:
             if state == "night":
                 profile = cfg["darkness"]
                 mode = "night"
+            elif state == "dim":
+                profile = self._dim_profile(cfg)
+                mode = "dim"
             else:
                 profile = cfg["daylight"]
                 mode = "day"
