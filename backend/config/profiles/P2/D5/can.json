@@ -57,7 +57,7 @@
             "target": "0x11",
             "is_16bit": true,
             "priority": 3,
-            "scale": "(value * 0.01)",
+            "scale": "((value * 0.1)-273,15)",
             "label": "Intake",
             "unit": "°C",
             "min_value": 0,
@@ -79,7 +79,7 @@
             "target": "0x11",
             "is_16bit": true,
             "priority": 2,
-            "scale": "(value * 0.01)",
+            "scale": "((value * 0.1)-273,15)",
             "label": "Coolant",
             "unit": "°C",
             "min_value": 0,
@@ -108,27 +108,26 @@
             "max_value": 16,
             "limit_start": 16
         },
-        "lambda1": {
+        "gearoiltemp": {
             "interface": "can2",
-            "enabled": false,
+            "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x10",
-                "0x34"
+                "0x0C",
             ],
             "app_id": "ld1",
             "req_id": "0x000FFFFE",
-            "rep_id": "0x00400021",
-            "action": "0xA6",
-            "target": "0x7A",
-            "is_16bit": true,
-            "priority": 2,
-            "scale": "((value * 16.0) / 65536.0)",
-            "label": "Lambda 1",
-            "unit": "λ",
+            "rep_id": "0x00400005",
+            "action": "0xA5",
+            "target": "0x6E",
+            "is_16bit": false,
+            "priority": 3,
+            "scale": "(value * 1)",
+            "label": "Gear Oil Temp",
+            "unit": "°C",
             "min_value": 0,
-            "max_value": 2,
-            "limit_start": 2
+            "max_value": 150,
+            "limit_start": 100
         },
         "lambda2": {
             "interface": "can2",

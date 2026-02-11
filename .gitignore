@@ -1,16 +1,27 @@
-# Python
+#directories
+#.dev/
+
+node_modules/
 venv/
+dist/
+frontend/dist/
+frontend/node_modules/
 __pycache__/
+
+
+
+#files
+*.tgz
+*.log
+*.apk
+.DS*
+.DS_Store
 *.py[cod]
 *.pyo
+._*
+create-package.sh
+v-link.code-workspace
+logs/
 
-# Node / frontend
-node_modules/
-frontend/node_modules/
-frontend/dist/
-dist/
-
-# Tooling / editor
+#tooling
 .vscode/
-.DS_Store
-*.log
