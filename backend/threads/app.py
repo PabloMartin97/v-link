@@ -4,6 +4,7 @@ import sys
 import os
 import subprocess
 import signal
+import shutil
 from ..shared.shared_state import shared_state
 
 class APPThread(threading.Thread):
@@ -28,6 +29,28 @@ class APPThread(threading.Thread):
         self._stop_event.set()
         self.close_browser()
         shared_state.toggle_app.clear()
+
+    def _browser_executable(self):
+        codename = None
+        try:
+            with open('/etc/os-release', encoding='utf-8') as os_release:
+                for line in os_release:
+                    if line.startswith('VERSION_CODENAME='):
+                        codename = line.split('=', 1)[1].strip().strip('"').lower()
+                        break
+        except OSError as error:
+            self.logger.warning(f'[Browser] Could not read /etc/os-release: {error}')
+
+        preferred = 'chromium' if codename == 'trixie' else 'chromium-browser'
+        fallback = 'chromium-browser' if preferred == 'chromium' else 'chromium'
+
+        if shutil.which(preferred):
+            return preferred
+        if shutil.which(fallback):
+            self.logger.warning(f'[Browser] "{preferred}" not found, using "{fallback}" instead.')
+            return fallback
+
+        return preferred
 
 
     def start_browser(self):
@@ -61,7 +84,7 @@ class APPThread(threading.Thread):
         flags = standard_flags + mode
 
         # Final command as list
-        command = ['chromium-browser', self.url] + flags
+        command = [self._browser_executable(), self.url] + flags
 
         self.browser = subprocess.Popen(
             command,
