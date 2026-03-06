@@ -11,7 +11,8 @@ eventlet==0.38.1
 websocket-client==1.6.4
 
 # CAN bus
-python-can==4.2.1
+python-can==4.3.1
+pyserial==3.5
 
 # Utilities
 numpy==1.26.4
