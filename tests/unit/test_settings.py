@@ -86,6 +86,156 @@ def test_copy_files_p2_d5_copies_profile_configs(temp_config_dir):
     assert (temp_config_dir / 'can.json').exists()
 
 
+# migrate_settings
+def test_migrate_settings_adds_missing_keys(tmp_path, monkeypatch):
+    """Keys present in the default config but absent from the user config are added."""
+    from backend import settings
+
+    default_dir = tmp_path / 'default'
+    default_dir.mkdir()
+    user_dir = tmp_path / 'user'
+    user_dir.mkdir()
+
+    (default_dir / 'app.json').write_text(json.dumps({'existing': {'value': 1}, 'new_key': {'value': 42}}))
+    (user_dir / 'app.json').write_text(json.dumps({'existing': {'value': 99}}))
+
+    monkeypatch.setattr(settings, 'DEFAULT_CONFIG_DIR', default_dir)
+    monkeypatch.setattr(settings, 'USER_CONFIG_DIR', user_dir)
+
+    settings.migrate_settings()
+
+    result = settings.load_settings('app')
+    assert result['new_key'] == {'value': 42}       # default value inserted
+    assert result['existing'] == {'value': 99}       # user value preserved
+
+
+def test_migrate_settings_preserves_user_values(tmp_path, monkeypatch):
+    """Keys that already exist in the user config are never overwritten."""
+    from backend import settings
+
+    default_dir = tmp_path / 'default'
+    default_dir.mkdir()
+    user_dir = tmp_path / 'user'
+    user_dir.mkdir()
+
+    (default_dir / 'app.json').write_text(json.dumps({'key': {'value': 'default_val'}}))
+    (user_dir / 'app.json').write_text(json.dumps({'key': {'value': 'user_val'}}))
+
+    monkeypatch.setattr(settings, 'DEFAULT_CONFIG_DIR', default_dir)
+    monkeypatch.setattr(settings, 'USER_CONFIG_DIR', user_dir)
+
+    settings.migrate_settings()
+
+    result = settings.load_settings('app')
+    assert result['key']['value'] == 'user_val'
+
+
+def test_migrate_settings_noop_when_no_missing_keys(tmp_path, monkeypatch):
+    """save_settings is not called when the user config already has all default keys."""
+    from backend import settings
+
+    default_dir = tmp_path / 'default'
+    default_dir.mkdir()
+    user_dir = tmp_path / 'user'
+    user_dir.mkdir()
+
+    app_data = {'key': {'value': 1}}
+    (default_dir / 'app.json').write_text(json.dumps(app_data))
+    user_file = user_dir / 'app.json'
+    user_file.write_text(json.dumps(app_data))
+    saved = []
+    monkeypatch.setattr(settings, 'save_settings', lambda name, data: saved.append(name))
+
+    monkeypatch.setattr(settings, 'DEFAULT_CONFIG_DIR', default_dir)
+    monkeypatch.setattr(settings, 'USER_CONFIG_DIR', user_dir)
+
+    settings.migrate_settings()
+
+    assert saved == [], "save_settings should not be called when nothing is missing"
+
+
+def test_migrate_settings_noop_when_default_app_json_absent(tmp_path, monkeypatch):
+    """Does not crash or modify the user config when the default app.json is missing."""
+    from backend import settings
+
+    default_dir = tmp_path / 'default'
+    default_dir.mkdir()          # intentionally no app.json
+    user_dir = tmp_path / 'user'
+    user_dir.mkdir()
+
+    user_app = {'key': {'value': 1}}
+    (user_dir / 'app.json').write_text(json.dumps(user_app))
+
+    monkeypatch.setattr(settings, 'DEFAULT_CONFIG_DIR', default_dir)
+    monkeypatch.setattr(settings, 'USER_CONFIG_DIR', user_dir)
+
+    settings.migrate_settings()   # must not raise
+
+    assert settings.load_settings('app') == user_app
+
+
+def test_migrate_settings_adds_backlight_keys_to_old_config(tmp_path, monkeypatch):
+    """Simulates a real-world old user config missing the backlight keys added in this branch."""
+    from backend import settings
+
+    default_dir = tmp_path / 'default'
+    default_dir.mkdir()
+    user_dir = tmp_path / 'user'
+    user_dir.mkdir()
+
+    backlight_defaults = {
+        'daylight_backlight': {'ui': 'range', 'label': 'Daylight Backlight Level', 'value': 15, 'min': 1, 'max': 16, 'step': 1},
+        'auto_backlight': {'title': 'Automatic Backlight', 'type': 'system', 'autoOpen': {'value': True, 'label': 'Enable Automatic Backlight'}},
+        'darkness_backlight': {'ui': 'range', 'label': 'Darkness Backlight Level', 'value': 5, 'min': 1, 'max': 10, 'step': 1},
+    }
+    default_app = {'general': {'colorTheme': {'value': 'Green'}}, **backlight_defaults}
+    user_app   = {'general': {'colorTheme': {'value': 'Red'}}}   # old config, no backlight keys
+
+    (default_dir / 'app.json').write_text(json.dumps(default_app))
+    (user_dir / 'app.json').write_text(json.dumps(user_app))
+
+    monkeypatch.setattr(settings, 'DEFAULT_CONFIG_DIR', default_dir)
+    monkeypatch.setattr(settings, 'USER_CONFIG_DIR', user_dir)
+
+    settings.migrate_settings()
+
+    result = settings.load_settings('app')
+    assert 'daylight_backlight' in result
+    assert 'auto_backlight' in result
+    assert 'darkness_backlight' in result
+    assert result['general']['colorTheme']['value'] == 'Red'   # user preference kept
+
+
+def test_check_settings_migrates_on_existing_config(tmp_path, monkeypatch):
+    """check_settings() calls migrate_settings() when a user config already exists."""
+    from backend import settings
+
+    default_dir = tmp_path / 'default'
+    default_dir.mkdir()
+    user_dir = tmp_path / 'user'
+    user_dir.mkdir()
+
+    default_app = {
+        'constants': {'modules': {'can': False, 'rti': False, 'swc': False, 'adc': False}},
+        'daylight_backlight': {'ui': 'range', 'value': 15, 'min': 1, 'max': 16, 'step': 1},
+    }
+    user_app = {
+        'constants': {'modules': {'can': False, 'rti': False, 'swc': False, 'adc': False}},
+    }
+
+    (default_dir / 'app.json').write_text(json.dumps(default_app))
+    (user_dir / 'app.json').write_text(json.dumps(user_app))
+
+    monkeypatch.setattr(settings, 'DEFAULT_CONFIG_DIR', default_dir)
+    monkeypatch.setattr(settings, 'USER_CONFIG_DIR', user_dir)
+
+    result = settings.check_settings()
+
+    assert result is True
+    migrated = settings.load_settings('app')
+    assert 'daylight_backlight' in migrated
+
+
 # load_modules
 def test_load_modules_sets_shared_state_flags(temp_config_dir, monkeypatch):
     """load_modules reads app.json constants.modules and sets shared_state flags."""

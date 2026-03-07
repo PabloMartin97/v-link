@@ -87,29 +87,36 @@ def _read_toggle_setting(app, key, nested_key, default):
 
 
 def load_backlight_config():
-    app = settings.load_settings("app") or {}
-
-    daylight = _read_range_setting(app, "daylight_backlight", DEFAULT_DAYLIGHT)
-    darkness = _read_range_setting(app, "darkness_backlight", DEFAULT_DARKNESS)
-    auto_enabled = _read_toggle_setting(app, "auto_backlight", "autoOpen", DEFAULT_AUTO)
-
     runtime_daylight = getattr(shared_state, "backlight_daylight", None)
-    if isinstance(runtime_daylight, (int, float)):
-        daylight["value"] = runtime_daylight
-    else:
-        shared_state.backlight_daylight = daylight["value"]
-
     runtime_darkness = getattr(shared_state, "backlight_darkness", None)
-    if isinstance(runtime_darkness, (int, float)):
-        darkness["value"] = runtime_darkness
-    else:
-        shared_state.backlight_darkness = darkness["value"]
-
     runtime_auto = getattr(shared_state, "backlight_auto_enabled", None)
-    if isinstance(runtime_auto, bool):
-        auto_enabled = runtime_auto
+
+    # Only read from disk if shared_state hasn't been initialized yet.
+    if not isinstance(runtime_daylight, (int, float)) or not isinstance(runtime_darkness, (int, float)) or not isinstance(runtime_auto, bool):
+        app = settings.load_settings("app") or {}
+        daylight = _read_range_setting(app, "daylight_backlight", DEFAULT_DAYLIGHT)
+        darkness = _read_range_setting(app, "darkness_backlight", DEFAULT_DARKNESS)
+        auto_enabled = _read_toggle_setting(app, "auto_backlight", "autoOpen", DEFAULT_AUTO)
+
+        if not isinstance(runtime_daylight, (int, float)):
+            shared_state.backlight_daylight = daylight["value"]
+            runtime_daylight = daylight["value"]
+        else:
+            daylight["value"] = runtime_daylight
+
+        if not isinstance(runtime_darkness, (int, float)):
+            shared_state.backlight_darkness = darkness["value"]
+            runtime_darkness = darkness["value"]
+        else:
+            darkness["value"] = runtime_darkness
+
+        if not isinstance(runtime_auto, bool):
+            shared_state.backlight_auto_enabled = auto_enabled
+            runtime_auto = auto_enabled
     else:
-        shared_state.backlight_auto_enabled = auto_enabled
+        daylight = {**DEFAULT_DAYLIGHT, "value": runtime_daylight}
+        darkness = {**DEFAULT_DARKNESS, "value": runtime_darkness}
+        auto_enabled = runtime_auto
 
     return {
         "daylight": daylight,

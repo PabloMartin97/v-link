@@ -359,7 +359,7 @@ const Settings = () => {
     /* Based on the "type", either data or interface settings are provided to the main settings file.
     */
 
-    if (!settingsObj) return null;
+    if (!settingsObj || !settingsObj[key]) return null;
 
     if (settingsObj[key]?.ui === 'range') {
       const { label, value, min, max, step } = settingsObj[key];

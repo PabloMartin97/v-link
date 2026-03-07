@@ -24,6 +24,26 @@ def load_directory():
         return None
     
 
+def migrate_settings():
+    # Merge any top-level keys present in the default config but missing from the user config.
+    default_app = DEFAULT_CONFIG_DIR / 'app.json'
+    user_app = USER_CONFIG_DIR / 'app.json'
+    if not default_app.exists() or not user_app.exists():
+        return
+    try:
+        with default_app.open('r', encoding='utf-8') as f:
+            defaults = json.load(f)
+        with user_app.open('r', encoding='utf-8') as f:
+            user = json.load(f)
+        missing = {k: v for k, v in defaults.items() if k not in user}
+        if missing:
+            user.update(missing)
+            save_settings('app', user)
+            logger.info(f'[Settings] Migrated missing keys into user config: {list(missing.keys())}')
+    except Exception as e:
+        logger.error(f'[Settings] Error during settings migration: {e}')
+
+
 def check_settings():
     # Print directory paths for debugging
     logger.info(f'[Settings] (Dir) App Root: {APP_ROOT}')
@@ -33,6 +53,7 @@ def check_settings():
 
     # If user config already exists and contains files, return True
     if USER_CONFIG_DIR.exists() and any(USER_CONFIG_DIR.iterdir()):
+        migrate_settings()
         load_modules()
         return True
     else:
