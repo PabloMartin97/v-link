@@ -4,6 +4,7 @@ import styled, { useTheme } from 'styled-components';
 import ScrollContainer from 'react-indiana-drag-scroll'
 
 import { ToggleSwitch, Select, Input, Button } from '../../../theme/styles/Inputs';
+import CustomSlider from '../../components/CustomSlider';
 import { Typography } from '../../../theme/styles/Typography';
 
 import { APP } from '../../../store/Store';
@@ -88,11 +89,16 @@ const Settings = () => {
   const swcState = APP((state) => state.system.swcState);
 
   const theme = useTheme();
+  const rangeWidth = Number(theme.interaction.buttonWidth) * 2;
 
 
   const [save, setSave] = useState(true)
   const [reset, setReset] = useState(false)
   const [currentSettings, setCurrentSettings] = useState(structuredClone(settings));
+  const [cameraDevices, setCameraDevices] = useState<{ deviceId: string; label: string }[]>([]);
+  const saveTimeoutRef = useRef(null);
+  const pendingSettingsRef = useRef(currentSettings);
+  const SAVE_DEBOUNCE_MS = 500;
 
   const setKeyStroke = APP((state) => state.setKeyStroke);
   const setSwitchPage = APP((state) => state.setSwitchPage);
@@ -108,6 +114,41 @@ const Settings = () => {
       }
     });
   }, [modules]);
+
+  useEffect(() => {
+    if (!navigator?.mediaDevices?.enumerateDevices) return;
+
+    const updateDevices = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices
+          .filter((device) => device.kind === 'videoinput')
+          .map((device, index) => ({
+            deviceId: device.deviceId,
+            label: device.label || `Camera ${index + 1}`,
+          }));
+        setCameraDevices(videoInputs);
+      } catch {
+        setCameraDevices([]);
+      }
+    };
+
+    updateDevices();
+    navigator.mediaDevices.addEventListener('devicechange', updateDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', updateDevices);
+  }, []);
+
+  useEffect(() => {
+    pendingSettingsRef.current = currentSettings;
+  }, [currentSettings]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /* Reset container to top when settings are reset */
   useEffect(() => {
@@ -132,6 +173,19 @@ const Settings = () => {
   });
 
   /* Add Settings */
+  const scheduleSave = (nextSettings) => {
+    setSave(false);
+    pendingSettingsRef.current = nextSettings;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      saveSettings(pendingSettingsRef.current);
+    }, SAVE_DEBOUNCE_MS);
+  };
+
   const handleAddSetting = (key, currentSettings) => {
     if (currentSettings.constants.chart_input_current < currentSettings.constants.chart_input_max) {
       const newSetting = {
@@ -147,14 +201,16 @@ const Settings = () => {
         updatedSettingsForKey[newSettingId] = newSetting;
 
         // Update the state with the new settings
-        setCurrentSettings({
+        const nextSettings = {
           ...currentSettings,
           constants: {
             ...currentSettings.constants,
             chart_input_current: currentSettings.constants.chart_input_current + 1,
           },
           [key]: updatedSettingsForKey,
-        });
+        };
+        setCurrentSettings(nextSettings);
+        scheduleSave(nextSettings);
       } else {
         console.error(`Key "${key}" not found in settings.`);
       }
@@ -169,14 +225,16 @@ const Settings = () => {
       delete updatedSettingsForKey[settingIdToRemove];
 
       // Update the state with the  minus the removed one
-      setCurrentSettings({
+      const nextSettings = {
         ...currentSettings,
         constants: {
           ...currentSettings.constants,
           chart_input_current: currentSettings.constants.chart_input_current - 1,
         },
         [key]: updatedSettingsForKey,
-      });
+      };
+      setCurrentSettings(nextSettings);
+      scheduleSave(nextSettings);
     } else {
       console.error("Cannot remove setting, minimum limit reached.");
     }
@@ -187,8 +245,6 @@ const Settings = () => {
 
   // Change Settings
   const handleSettingChange = (selectStore, key, name, targetSetting, currentSettings) => {
-    setSave(false)
-
     const newSettings = structuredClone(currentSettings);
     let convertedValue
     if (selectStore != 'app') {
@@ -202,15 +258,19 @@ const Settings = () => {
     }
 
     setCurrentSettings(newSettings);
+    scheduleSave(newSettings);
   };
 
   // Save Settings
-  function saveSettings() {
+  function saveSettings(settingsToSave = currentSettings) {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
     setSave(true)
     appUpdate((state) => {
-      state.settings = currentSettings;
+      state.settings = settingsToSave;
     });
-    socket.app.emit("save", currentSettings);
+    socket.app.emit("save", settingsToSave);
   }
 
   // System Tasks
@@ -299,7 +359,52 @@ const Settings = () => {
     /* Based on the "type", either data or interface settings are provided to the main settings file.
     */
 
-    if (!settingsObj) return null;
+    if (!settingsObj || !settingsObj[key]) return null;
+
+    if (settingsObj[key]?.ui === 'range') {
+      const { label, value, min, max, step } = settingsObj[key];
+
+      const handleRangeChange = (event) => {
+        const newValue = Number(event.target.value);
+        const nextSettings = {
+          ...settingsObj,
+          [key]: {
+            ...settingsObj[key],
+            value: newValue,
+          },
+        };
+        setCurrentSettings(nextSettings);
+        if (key === 'daylight_backlight') {
+          socket.app.emit('backlight:update', { daylight: newValue });
+        }
+        if (key === 'darkness_backlight') {
+          socket.app.emit('backlight:update', { darkness: newValue });
+        }
+        scheduleSave(nextSettings);
+      };
+
+      const labelStyle = key === 'daylight_backlight' ? { whiteSpace: 'nowrap' } : undefined;
+
+      return (
+        <Element>
+          <Caption2 style={labelStyle}>{label}</Caption2>
+          <Divider />
+          <Spacer style={{ width: `${rangeWidth}px` }}>
+            <CustomSlider
+              value={value}
+              min={min}
+              max={max}
+              step={step}
+              onChange={handleRangeChange}
+              width="100%"
+              backgroundColor={theme.colors.medium}
+              defaultColor={theme.colors.theme[themeColor].default}
+              activeColor={theme.colors.theme[themeColor].active}
+            />
+          </Spacer>
+        </Element>
+      );
+    }
 
     // Get label, type, and nested options from setting block
     const { title, type, ...nestedSettings } = settingsObj[key];
@@ -333,11 +438,24 @@ const Settings = () => {
       //Check if value is a number or boolean
       const isText = (content.type === 'text')
 
+      const isRearcamDeviceId = key === 'reverseCam' && setting === 'deviceId';
+      const rearcamDeviceOptions = isRearcamDeviceId
+        ? [
+          { value: 'default', label: 'Default' },
+          ...cameraDevices.map((device) => ({
+            value: device.deviceId,
+            label: device.label,
+          })),
+        ]
+        : null;
+
       const dropdown = (isText || typeof value === 'number' || typeof value === 'boolean' || key.includes('bindings'))
         ? null                                                                    //Yes? Return null
-        : (content.options || Object.keys(dataOptions).map((key) =>               //No?  Create dropdown from options
-          key
-        ))
+        : ((rearcamDeviceOptions && rearcamDeviceOptions.length > 0)
+          ? rearcamDeviceOptions
+          : (content.options || Object.keys(dataOptions).map((key) =>               //No?  Create dropdown from options
+            key
+          )))
 
       // Check for boolean setting
       const isBoolean = typeof value === 'boolean';                               // Checks if the setting is a boolean.
@@ -357,6 +475,9 @@ const Settings = () => {
           : "app";
 
         const targetSetting = isBoolean ? checked : newValue                      // Handle targetSetting based on type
+        if (key === 'auto_backlight' && setting === 'autoOpen') {
+          socket.app.emit('backlight:update', { auto_enabled: targetSetting });
+        }
         handleSettingChange(selectStore, key, name, targetSetting, settingsObj);     // Execute change of settings
       };
 
@@ -442,9 +563,11 @@ const Settings = () => {
 
     return (
       <>
-        <Element>
-          <Title> {title.toUpperCase()} </Title>
-        </Element>
+        {title && (
+          <Element>
+            <Title> {title.toUpperCase()} </Title>
+          </Element>
+        )}
         {nestedElements}
       </>
     );
@@ -488,7 +611,6 @@ const Settings = () => {
         {settingPage === 1 &&
           <>
             {renderSetting("general", currentSettings)}
-            {renderSetting("screen", currentSettings)}
             {renderSetting("shutdown", currentSettings)}
             {renderSetting("side_bars", currentSettings)}
             {renderSetting("reverseCam", currentSettings)}
@@ -537,21 +659,6 @@ const Settings = () => {
                   defaultColor={theme.colors.theme[themeColor].default}
                   activeColor={theme.colors.theme[themeColor].active}>
                   <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} disabled={!settings.constants.modules.swc} />
-                  <span className="slider"></span>
-                </ToggleSwitch>
-              </Element>
-            }
-
-            {settings.constants.modules.rti &&
-              <Element>
-                <Caption2>{`RTI ${rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
-                <Divider />
-                <ToggleSwitch
-                  theme={theme}
-                  backgroundColor={theme.colors.medium}
-                  defaultColor={theme.colors.theme[themeColor].default}
-                  activeColor={theme.colors.theme[themeColor].active}>
-                  <input type="checkbox" checked={rtiState} onChange={() => { handleIO("rti", socket.rti) }} disabled={!settings.constants.modules.rti} />
                   <span className="slider"></span>
                 </ToggleSwitch>
               </Element>
@@ -607,6 +714,41 @@ const Settings = () => {
                 <Button onClick={() => { sendForceSwitchMostMessage() }} style={{ height: '100%' }}> Switch PiMost </Button>
               </div>
             </div>
+            <p />
+          </>
+        }
+
+        {settingPage === 6 &&
+          <>
+            {renderSetting("screen", currentSettings)}
+            <Element>
+              <Title>Backlight Settings</Title>
+            </Element>
+            {renderSetting("daylight_backlight", currentSettings)}
+            {renderSetting("auto_backlight", currentSettings)}
+            {renderSetting("darkness_backlight", currentSettings)}
+            
+            {settings.constants.modules.rti &&
+              <Element>
+                <Caption2>{`RTI ${rtiState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  theme={theme}
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={rtiState} onChange={() => { handleIO("rti", socket.rti) }} disabled={!settings.constants.modules.rti} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
+            <p />
+          </>
+        }
+
+        {settingPage === 7 &&
+          <>
+           {renderSetting("reverseCam", currentSettings)}
             <p />
           </>
         }

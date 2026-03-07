@@ -195,6 +195,50 @@
             "min_value": 0,
             "max_value": 260,
             "limit_start": 240
+        },
+        "light": {
+            "interface": "can2",
+            "enabled": false,
+            "type": "diagnostic",
+            "parameter": [
+                "0x2F",
+                "0x60"
+            ],
+            "app_id": "lgt",
+            "req_id": "0x000FFFFE",
+            "rep_id": "0x00400021",
+            "action": "0xA6",
+            "target": "0x40",
+            "is_16bit": true,
+            "priority": 3,
+            "scale": "(value & 0x03FF) * 5.0 / 1023.0",
+            "label": "Light Sensor",
+            "unit": "V",
+            "min_value": 0,
+            "max_value": 5
         }
-    }
+    },
+    "signal_sensors": [
+        {
+            "key": "light",
+            "label": "Light Sensor",
+            "interface": "can2",
+            "enabled": false,
+            "can_id": "0x0100082C",
+            "byte_index": 1,
+            "bit_index": 7,
+            "invert": false,
+            "scale": "(1 - value) * 5.0"
+        },
+        {
+            "key": "reverse",
+            "label": "Reverse Gear",
+            "interface": "can2",
+            "enabled": false,
+            "can_id": "0x00000000",
+            "byte_index": 0,
+            "bit_index": 0,
+            "invert": false
+        }
+    ]
 }

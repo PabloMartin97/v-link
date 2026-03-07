@@ -24,12 +24,13 @@ import subprocess
 
 
 def activate_venv():
-    venv_path = f"/home/{os.getenv('USER')}/v-link/venv"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_path = os.path.join(script_dir, 'venv')
     activate_script = os.path.join(venv_path, 'bin', 'activate')
 
     if not os.path.exists(activate_script):
-        logger.error(f'[V-Link] Activation script for venv not found: {activate_script}')
-        logger.error(f'[V-Link] Please ensure the virtual environment is set up correctly. Exiting...')
+        sys.stderr.write(f'[V-Link] Activation script for venv not found: {activate_script}\n')
+        sys.stderr.write('[V-Link] Please ensure the virtual environment is set up correctly. Exiting...\n')
         sys.exit(0)
 
     os.system(f'. {activate_script}')

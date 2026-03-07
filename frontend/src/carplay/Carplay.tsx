@@ -86,6 +86,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const exitToDash      = APP((state) => state.settings.general.exitToDash);
 
   const [phoneState, setPhoneState] = useState<Boolean | null>(false);
+  const lastDongleConfigSigRef = useRef<string | null>(null);
 
 
   const flattenConfig = (config: Record<string, any>) => {
@@ -100,13 +101,18 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   };
 
   const config = useMemo(() => {
+    const dongleConfigFlat = flattenConfig(dongleConfig);
     const carplayConfig = {
-      ...flattenConfig(dongleConfig),
+      ...dongleConfigFlat,
       width: width,
       height: height,
     };
     
-    socket.log.emit('info', `(CarPlay) Config: ${JSON.stringify(carplayConfig)}`);
+    const sig = JSON.stringify(dongleConfigFlat);
+    if (sig !== lastDongleConfigSigRef.current) {
+      socket.log.emit('info', `(CarPlay) Config: ${JSON.stringify(carplayConfig)}`);
+      lastDongleConfigSigRef.current = sig;
+    }
 
     return carplayConfig;
   }, [dongleConfig, width, height]);

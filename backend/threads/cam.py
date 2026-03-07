@@ -134,17 +134,17 @@ except Exception as e:  # ImportError or similar
 
 
 class CameraGPIO:
-    # Driver GPIO para encender/apagar la alimentación de la cámara.
-    # - line: nº de línea BCM (p.ej. 18)
-    # - chip: nº de gpiochip (normalmente 0)
-    # - active_high: True si nivel alto = ON (inverso si False)
+    # GPIO driver to power camera on/off.
+    # - line: BCM line number (e.g. 18)
+    # - chip: gpiochip number (usually 0)
+    # - active_high: True if high level = ON (inverted if False)
 
-    # Métodos:
-    # - set(on: bool)   → enciende/apaga
-    # - get() -> bool   → último estado lógico solicitado (no lectura física)
-    #  - toggle() -> bool
-    #  - level() -> int  → nivel eléctrico actual (0/1) si es posible leerlo
-    #  - cleanup()       → apaga y libera recursos
+    # Methods:
+    # - set(on: bool)   -> power on/off
+    # - get() -> bool   -> last requested logical state (not physical read)
+    # - toggle() -> bool
+    # - level() -> int  -> current electrical level (0/1) if readable
+    # - cleanup()       -> power off and release resources
 
 
 
@@ -167,8 +167,8 @@ class CameraGPIO:
     def _require_lgpio(self) -> None:
         if not LGPIO_AVAILABLE:
             raise RuntimeError(
-                f"lgpio no disponible: {_LGPIO_IMPORT_ERROR!r}. "
-                "Instala 'lgpio' o ejecuta en hardware compatible."
+                f"lgpio not available: {_LGPIO_IMPORT_ERROR!r}. "
+                "Install 'lgpio' or run on compatible hardware."
             )
 
     def _open_chip(self) -> None:
@@ -176,7 +176,7 @@ class CameraGPIO:
             self._require_lgpio()
             try:
                 self._chip = lgpio.gpiochip_open(self._chip_num)
-                self.logger.debug(f"CameraGPIO: abierto gpiochip{self._chip_num}")
+                self.logger.debug(f"CameraGPIO: opened gpiochip{self._chip_num}")
             except Exception as e:
                 # disgnostic info
                 raise RuntimeError(f"not able to open /dev/gpiochip{self._chip_num}: {e}") from e
@@ -197,11 +197,11 @@ class CameraGPIO:
         try:
             lgpio.gpio_write(self._chip, self.line, int(level))  # type: ignore[arg-type]
         except Exception as e:
-            raise RuntimeError(f"Fallo escribiendo nivel {level} en BCM{self.line}: {e}") from e
+            raise RuntimeError(f"Failed writing level {level} on BCM{self.line}: {e}") from e
 
    
     def set(self, on: bool) -> None:
-        # On (True) o off (False) camera.
+        # On (True) or off (False) camera.
         with self._lock:
             self._open_chip()
             self._ensure_claimed()
@@ -209,7 +209,7 @@ class CameraGPIO:
             level = 1 if (desired == self.active_high) else 0
             self._write_level(level)
             self._on = desired
-            self.logger.info(f"CameraGPIO: {'ON' if desired else 'OFF'} (nivel físico={level})")
+            self.logger.info(f"CameraGPIO: {'ON' if desired else 'OFF'} (physical level={level})")
 
     def get(self) -> bool:
         #returs the last logical state requested (not physical reading).
