@@ -104,7 +104,7 @@ const TopBar = () => {
   const valueType = dashSettings.value.type;
 
   const sensor =
-    valueType && valueName
+    valueType && valueName && modules[valueType]
       ? modules[valueType]((state) => state.settings.sensors[valueName]) || {}
       : {};
 
