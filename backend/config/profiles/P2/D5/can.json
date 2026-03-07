@@ -195,5 +195,27 @@
             "max_value": 260,
             "limit_start": 240
         }
-    }
+    },
+    "signal_sensors": [
+        {
+            "key": "light",
+            "label": "Light Sensor",
+            "interface": "can2",
+            "enabled": false,
+            "can_id": "0x00000000",
+            "byte_index": 0,
+            "bit_index": 0,
+            "invert": false
+        },
+        {
+            "key": "reverse",
+            "label": "Reverse Gear",
+            "interface": "can2",
+            "enabled": false,
+            "can_id": "0x00000000",
+            "byte_index": 0,
+            "bit_index": 0,
+            "invert": false
+        }
+    ]
 }

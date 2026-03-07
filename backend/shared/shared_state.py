@@ -31,6 +31,12 @@ class SharedState:
 
         self.update = False
 
+        # Backlight settings (runtime). None means "not initialized yet".
+        self.backlight_daylight = None
+        self.backlight_darkness = None
+        self.backlight_auto_enabled = None
+        self.backlight_byte = None
+
         #Thread States:
         self.toggle_app = threading.Event()
 

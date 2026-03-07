@@ -56,17 +56,20 @@ class APPThread(threading.Thread):
     def start_browser(self):
         profile_dir = os.path.expanduser('~/.config/v-link/chromium-profile')
         os.makedirs(profile_dir, exist_ok=True)
+
         standard_flags = [
             '--enable-experimental-web-platform-features',
             '--enable-features=SharedArrayBuffer',
             '--autoplay-policy=no-user-gesture-required',
+            '--use-fake-ui-for-media-stream',
             '--disable-logging',
             '--log-level=3',
             '--disable-gpu',
-            '--use-fake-ui-for-media-stream',
             f'--user-data-dir={profile_dir}', 
             '--no-first-run',
             '--no-default-browser-check'
+            '--allow-insecure-localhost',
+            '--unsafely-treat-insecure-origin-as-secure=http://localhost:4001,http://localhost:5173'
         ]
 
         if shared_state.isKiosk:
@@ -92,7 +95,7 @@ class APPThread(threading.Thread):
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL
         )
-        # self.browser = subprocess.Popen(command)
+        #self.browser = subprocess.Popen(command)
         self.logger.info(f'[Browser] Chromium browser started with PID: "{self.browser.pid}"')
 
 
@@ -117,4 +120,3 @@ class APPThread(threading.Thread):
                 self.logger.error(f'[Browser] Error stopping chromium: {e}')
         else:
             self.logger.error('[Browser] Chromium not found on this system.')
-
