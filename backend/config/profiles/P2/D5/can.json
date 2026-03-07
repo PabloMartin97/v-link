@@ -113,7 +113,7 @@
             "enabled": true,
             "type": "diagnostic",
             "parameter": [
-                "0x0C",
+                "0x0C"
             ],
             "app_id": "ld1",
             "req_id": "0x000FFFFE",
@@ -205,7 +205,8 @@
             "can_id": "0x00000000",
             "byte_index": 0,
             "bit_index": 0,
-            "invert": false
+            "invert": false,
+            "scale": "(1 - value) * 5.0"
         },
         {
             "key": "reverse",
