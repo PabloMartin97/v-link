@@ -330,6 +330,9 @@ class ServerThread(threading.Thread):
             # Checks whether .config/v-link/ exists
             # Returns either true or an object with selectable profiles.
             result = settings.check_settings()
+            if result is True:
+                # Push the current (potentially migrated) settings
+                socketio.emit('settings', settings.load_settings('app'), namespace='/app')
             return result
         
         elif args == 'load':
