@@ -51,8 +51,8 @@ def check_settings():
     logger.info(f'[Settings] (Dir) Default configs: {DEFAULT_CONFIG_DIR}')
     logger.info(f'[Settings] (Dir) User configs: {USER_CONFIG_DIR}')
 
-    # If user config already exists and contains files, return True
-    if USER_CONFIG_DIR.exists() and any(USER_CONFIG_DIR.iterdir()):
+    # If user app config exists, return True
+    if (USER_CONFIG_DIR / 'app.json').exists():
         migrate_settings()
         load_modules()
         return True
@@ -176,6 +176,9 @@ def copy_files(data):
 # Setting a shared_state based on app.json
 def load_modules():
     settings = load_settings('app')
+    if settings is None:
+        logger.error('[Settings] Cannot load modules: app.json missing or invalid')
+        return
     constants = settings.get('constants', {})
 
     shared_state.canModule = constants['modules']['can']
