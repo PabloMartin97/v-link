@@ -97,18 +97,22 @@ const mmiKeyDown = (event: KeyboardEvent) => {
     const handleResize = () => {
       if (containerRef.current)
         if (containerRef.current && systemSettings.startedUp) {
-          const topBarHeight = APP.getState().settings.side_bars.topBarHeight.value;
-          const carplayFullscreen = containerRef.current.offsetHeight;
-          const carplayWindowed = containerRef.current.offsetHeight - topBarHeight;
+          const store         = APP.getState() as any;
+          const topBarEnabled = store.settings.side_bars.topBar.value as boolean;
+          const topBarHeight  = store.settings.side_bars.topBarHeight.value as number;
+          const el            = containerRef.current as HTMLDivElement;
+          const containerWidth  = el.offsetWidth;
+          const containerHeight = el.offsetHeight;
+          const carplayHeight   = topBarEnabled ? containerHeight - topBarHeight : containerHeight;
 
-          socket.log.emit('info', `Window size changed: {Fullscreen: ${containerRef.current.offsetWidth}x${carplayFullscreen}, Without Topbar: ${containerRef.current.offsetWidth}x${carplayWindowed}}`)
+          socket.log.emit('info', `Window size changed: ${containerWidth}x${containerHeight}, CarPlay: ${containerWidth}x${carplayHeight}`)
 
           appUpdate((state) => {
-            state.system.windowSize.width = containerRef.current.offsetWidth;
-            state.system.windowSize.height = containerRef.current.offsetHeight;
+            state.system.windowSize.width  = containerWidth;
+            state.system.windowSize.height = containerHeight;
 
-            state.system.carplaySize.width = containerRef.current.offsetWidth;
-            state.system.carplaySize.height = (topBarHeight ? carplayFullscreen : carplayWindowed);
+            state.system.carplaySize.width  = containerWidth;
+            state.system.carplaySize.height = carplayHeight;
           });
 
           setReady(true);

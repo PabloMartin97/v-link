@@ -245,7 +245,10 @@ const Content = () => {
 
   /* Carplay connection effect */
   useEffect(() => {
-    if (carplaySettings.connected && carplaySettings.worker) {
+    // Primary: both connected (stream confirmed) and worker (plugged) are true
+    // Fallback: worker alone is true, meaning the session is active even if the render
+    // worker never fired streamStarted (e.g. SPS NALU not yet seen or renderer error)
+    if (carplaySettings.worker) {
       appUpdate((state) => { state.system.interface.carplay = true; });
     } else {
       appUpdate((state) => { state.system.interface.carplay = false; });

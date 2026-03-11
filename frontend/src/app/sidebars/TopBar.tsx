@@ -15,8 +15,8 @@ const Topbar = styled.div`
   height: ${({ height }) => `${height}px`};
   animation: ${({ height, theme, isActive }) => css`
     ${isActive
-      ? theme.animations.getSlideUp(-height)
-      : theme.animations.getSlideDown(-height)} 0.3s ease-in-out forwards
+      ? theme.animations.getSlideDown(-height)
+      : theme.animations.getSlideUp(-height)} 0.3s ease-in-out forwards
   `};
   width: 100%;
   display: flex;
@@ -93,8 +93,8 @@ const TopBar = () => {
   const dashSettings = APP(state => state.settings.dash_topbar);
   const view = APP(state => state.system.view);
   const content = APP(state => state.system.interface.content);
-  const navBar = APP(state => state.system.interface.navBar);
-  const phone = APP(state => state.system.carplay.phone);
+  // const navBar = APP(state => state.system.interface.navBar);
+  const phone = APP((state: any) => state.system.carplay.phone as boolean);
   const wifiState = APP(state => state.system.wifiState);
   const modules = APP(state => state.modules);
   const data = DATA(state => state.data);
@@ -128,10 +128,7 @@ const TopBar = () => {
   return (
     <Topbar
       isActive={
-        topBarActive &&
-        view === 'Carplay' &&
-        !content &&
-        !navBar
+        view !== 'Carplay' || topBarActive || !phone
       }
       theme={theme}
       height={topBarHeight}
