@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import styled, { useTheme } from 'styled-components';
 
-import { DATA, APP, ModuleState, useThemeColor, ThemeColorKey } from '../../store/Store';
-import { CustomIcon } from '../../theme/styles/Icons';
+import { DATA, APP, ModuleState, useThemeColor, ThemeColorKey } from '@/store/Store';
+import { CustomIcon } from '@/theme/styles/Icons';
 
 type SettingValue<T> = { value: T };
 type SensorSetting = { value: string; type: string };

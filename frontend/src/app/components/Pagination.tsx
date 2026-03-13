@@ -1,5 +1,5 @@
 import styled, { useTheme } from 'styled-components';
-import { useThemeColor } from '../../store/Store';
+import { useThemeColor } from '@/store/Store';
 
 const Dots = styled.div`
   height: 20px;

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense, useCallback } from 'react';
 import React from 'react';
-import { APP, useThemeColor } from '../../../store/Store';
+import { APP, useThemeColor } from '@/store/Store';
 import styled, { useTheme } from 'styled-components';
 import { Oval } from 'react-loader-spinner';
 
-import { Fade } from '../../../theme/styles/Effects';
-import Pagination from '../../components/Pagination';
+import { Fade } from '@/theme/styles/Effects';
+import Pagination from '@/app/components/Pagination';
 
 // Lazy load components
 const Classic = lazy(() => import('./classic/Classic'));

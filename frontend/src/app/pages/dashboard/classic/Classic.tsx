@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import styled, { useTheme } from 'styled-components';
 
-import { APP } from '../../../../store/Store';
+import { APP } from '@/store/Store';
 
-import RadialGauge from '../../../components/RadialGauge'
-import DataBox from '../../../components/DataBox'
+import RadialGauge from '@/app/components/RadialGauge'
+import DataBox from '@/app/components/DataBox'
 
 type GaugeSetting = { value: string; type: string };
 type DashClassicSettings = {

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import styled, { keyframes, css } from 'styled-components';
-import { Typography } from '../theme/styles/Typography';
-import { Button } from '../theme/styles/Inputs';
-import { APP } from '../store/Store';
+import { Typography } from '@/theme/styles/Typography';
+import { Button } from '@/theme/styles/Inputs';
+import { APP } from '@/store/Store';
 
-import { useNamespaces } from '../socket/Namespaces';
+import { useNamespaces } from '@/socket/Namespaces';
 const socket = useNamespaces();
 //socket.log.emit('error', 'Could not load profile. Exiting.')
 

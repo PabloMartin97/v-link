@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import styled, { useTheme } from 'styled-components';
-import { useNamespaces } from "../../../socket/Namespaces";
-import { Typography } from "../../../theme/styles/Typography";
-import { APP } from "../../../store/Store";
+import { useNamespaces } from "@/socket/Namespaces";
+import { Typography } from "@/theme/styles/Typography";
+import { APP } from "@/store/Store";
 
 type ReverseCamSettings = {
   deviceSelectionMode?: { value: string };

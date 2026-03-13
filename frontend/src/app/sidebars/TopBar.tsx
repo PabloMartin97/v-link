@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { APP, DATA, ModuleState, useThemeColor } from '../../store/Store';
+import { APP, DATA, ModuleState, useThemeColor } from '@/store/Store';
 import styled, { css, useTheme } from 'styled-components';
 
-import { IconSmall, CustomIcon } from '../../theme/styles/Icons';
-import { Caption1 } from '../../theme/styles/Typography';
+import { IconSmall, CustomIcon } from '@/theme/styles/Icons';
+import { Caption1 } from '@/theme/styles/Typography';
 
 type SideBarsSettings = { topBar: { value: boolean }; topBarHeight: { value: number } };
 type DashTopbarSettings = { value: { value: string; type: string } };

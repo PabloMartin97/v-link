@@ -1,7 +1,7 @@
 import styled, { useTheme } from 'styled-components';
-import { DATA, APP, ModuleState, useThemeColor } from '../../store/Store';
-import { Typography } from '../../theme/styles/Typography';
-import { CustomIcon } from '../../theme/styles/Icons';
+import { DATA, APP, ModuleState, useThemeColor } from '@/store/Store';
+import { Typography } from '@/theme/styles/Typography';
+import { CustomIcon } from '@/theme/styles/Icons';
 
 
 

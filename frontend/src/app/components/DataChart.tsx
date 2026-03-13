@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled, { useTheme } from 'styled-components';
 
-import { DATA, APP, ModuleState, useThemeColor } from '../../store/Store';
+import { DATA, APP, ModuleState, useThemeColor } from '@/store/Store';
 import convert from 'color-convert';
 
 // ── local setting-shape types ─────────────────────────────────────────────────

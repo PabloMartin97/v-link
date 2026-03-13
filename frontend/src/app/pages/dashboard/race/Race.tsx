@@ -1,9 +1,9 @@
 import styled from 'styled-components';
 
-import LinearGauge from './../../../components/LinearGauge';
-import DataList from '../../../components/DataList'
+import LinearGauge from '@/app/components/LinearGauge';
+import DataList from '@/app/components/DataList'
 
-import { APP } from '../../../../store/Store';
+import { APP } from '@/store/Store';
 
 const Container = styled.div`
   display: flex;

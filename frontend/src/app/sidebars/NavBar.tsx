@@ -1,6 +1,6 @@
-import { APP, useThemeColor } from '../../store/Store';
-import { IconNav } from '../../theme/styles/Icons';
-import { GlowLarge as GlowLargeBase } from '../../theme/styles/Effects';
+import { APP, useThemeColor } from '@/store/Store';
+import { IconNav } from '@/theme/styles/Icons';
+import { GlowLarge as GlowLargeBase } from '@/theme/styles/Effects';
 import styled, { css, useTheme } from 'styled-components';
 import React from 'react';
 

@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import hexToRgba from '../../app/helper/HexToRGBA'
+import hexToRgba from '@/app/helper/HexToRGBA'
 
 interface BaseIconProps {
   isActive?: boolean;

@@ -6,7 +6,7 @@ import { Canvas2DRenderer } from './Canvas2DRenderer'
 import { WebGL2Renderer } from './WebGL2Renderer'
 import { WebGLRenderer } from './WebGLRenderer'
 import { WebGPURenderer } from './WebGPURenderer'
-import { useNamespaces } from '../../../socket/Namespaces'
+import { useNamespaces } from '@/socket/Namespaces'
 
 export interface FrameRenderer {
   draw(data: VideoFrame): void

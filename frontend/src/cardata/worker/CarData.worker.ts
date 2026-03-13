@@ -1,4 +1,4 @@
-import { useNamespaces } from "../../socket/Namespaces";
+import { useNamespaces } from "@/socket/Namespaces";
 const socket = useNamespaces();
 
 type LatestData = { values: unknown; timestamp: number } | null;

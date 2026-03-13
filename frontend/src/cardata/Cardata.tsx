@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { CARWorker } from './worker/types'
-import { DATA } from './../store/Store';
-import { APP } from './../store/Store';
+import { DATA } from '@/store/Store';
+import { APP } from '@/store/Store';
 
 import Display from './helper/Display';
 import Ignition from './helper/Ignition';

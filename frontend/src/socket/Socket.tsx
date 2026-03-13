@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { APP, modules } from '../store/Store';
+import { APP, modules } from '@/store/Store';
 import { useNamespaces } from './Namespaces';
 
 

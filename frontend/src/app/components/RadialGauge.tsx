@@ -1,4 +1,4 @@
-import { DATA, APP, ModuleState, useThemeColor } from '../../store/Store';
+import { DATA, APP, ModuleState, useThemeColor } from '@/store/Store';
 import styled, { useTheme } from 'styled-components';
 import { useState, useEffect, useRef } from 'react';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

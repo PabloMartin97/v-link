@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import styled, { css } from 'styled-components';
-import { Fade as FadeBase } from '../theme/styles/Effects';
+import { Fade as FadeBase } from '@/theme/styles/Effects';
 const Fade = FadeBase as React.ComponentType<{ className?: string; fadeLength?: number; children?: React.ReactNode }>;
 
-import { APP } from '../store/Store';
+import { APP } from '@/store/Store';
 
 import Dashboard from './pages/dashboard/Dashboard';
 import Carplay from './pages/carplay/Carplay';
 import Rearcam from './pages/rearcam/Rearcam';
 import Settings from './pages/settings/Settings';
-import NavBar from '../app/sidebars/NavBar';
-import SideBar from '../app/sidebars/SideBar';
-import TopBar from '../app/sidebars/TopBar';
+import NavBar from '@/app/sidebars/NavBar';
+import SideBar from '@/app/sidebars/SideBar';
+import TopBar from '@/app/sidebars/TopBar';
 import { io } from "socket.io-client";
-import { useNamespaces } from '../socket/Namespaces';
+import { useNamespaces } from '@/socket/Namespaces';
 
 type SideBarsSettings = { topBarHeight: { value: number }; navBarHeight: { value: number } };
 type InterfaceSettings = { carplay: boolean; navBar: boolean; content: boolean };

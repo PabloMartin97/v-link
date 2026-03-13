@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import styled, { useTheme } from 'styled-components';
 
-import { APP } from '../../../../store/Store';
+import { APP } from '@/store/Store';
 
 type DashChartsSettings = Record<string, { value: string | number; type: string }> & {
   length: { value: number };
@@ -10,8 +10,8 @@ type DashChartsSettings = Record<string, { value: string | number; type: string 
 type ConstantsSettings = { chart_input_current: number };
 type DashPageSettings = Record<string, { value: string; type: string }>;
 
-import DataChart from '../../../components/DataChart'
-import DataList from '../../../components/DataList'
+import DataChart from '@/app/components/DataChart'
+import DataList from '@/app/components/DataList'
 
 
 const Container = styled.div`

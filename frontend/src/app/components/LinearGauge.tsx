@@ -1,8 +1,8 @@
 import styled, { useTheme } from 'styled-components';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
-import { DATA, APP, ModuleState, useThemeColor } from '../../store/Store';
-import { Display3, Typography } from '../../theme/styles/Typography';
+import { DATA, APP, ModuleState, useThemeColor } from '@/store/Store';
+import { Display3, Typography } from '@/theme/styles/Typography';
 
 // Styled container for the gauge
 const Container = styled.div`

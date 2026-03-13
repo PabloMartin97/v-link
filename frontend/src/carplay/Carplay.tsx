@@ -1,8 +1,8 @@
 /* eslint-disable no-case-declarations */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { findDevice, requestDevice, CommandMapping, } from 'node-carplay/web'
-import { eventEmitter } from '../app/helper/EventEmitter';
-import { useNamespaces } from '../socket/Namespaces';
+import { eventEmitter } from '@/app/helper/EventEmitter';
+import { useNamespaces } from '@/socket/Namespaces';
 
 import styled, { css, useTheme } from 'styled-components';
 
@@ -12,8 +12,8 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 
-import { APP } from '../store/Store';
-import hexToRGBA from '../app/helper/HexToRGBA'
+import { APP } from '@/store/Store';
+import hexToRGBA from '@/app/helper/HexToRGBA'
 
 import "./../themes.scss"
 

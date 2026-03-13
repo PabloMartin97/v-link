@@ -3,14 +3,14 @@ import { useState, useEffect, useRef, ReactNode } from 'react';
 import styled, { useTheme } from 'styled-components';
 import ScrollContainer from 'react-indiana-drag-scroll'
 
-import { ToggleSwitch, Select, Input, Button } from '../../../theme/styles/Inputs';
-import CustomSlider from '../../components/CustomSlider';
-import { Typography } from '../../../theme/styles/Typography';
+import { ToggleSwitch, Select, Input, Button } from '@/theme/styles/Inputs';
+import CustomSlider from '@/app/components/CustomSlider';
+import { Typography } from '@/theme/styles/Typography';
 
-import { APP, ModuleState, useThemeColor } from '../../../store/Store';
-import { openModal } from '../../components/Modal';
+import { APP, ModuleState, useThemeColor } from '@/store/Store';
+import { openModal } from '@/app/components/Modal';
 
-import { useNamespaces } from '../../../socket/Namespaces';
+import { useNamespaces } from '@/socket/Namespaces';
 const socket = useNamespaces();
 
 type SettingContent = {

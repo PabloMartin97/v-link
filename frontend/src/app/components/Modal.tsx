@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styled from 'styled-components';
-import { Typography } from '../../theme/styles/Typography';
-import { Button } from '../../theme/styles/Inputs';
-import { APP } from '../../store/Store';
+import { Typography } from '@/theme/styles/Typography';
+import { Button } from '@/theme/styles/Inputs';
+import { APP } from '@/store/Store';
 
 interface OverlayProps {
   $visible: boolean;

@@ -1,13 +1,13 @@
 import { useState, useEffect, } from "react";
 import styled, { css, useTheme } from 'styled-components';
 
-import { APP, useThemeColor } from '../../store/Store';
+import { APP, useThemeColor } from '@/store/Store';
 
-import { Typography } from '../../theme/styles/Typography';
-import { Link, Button } from '../../theme/styles/Inputs';
-import { IconMedium } from '../../theme/styles/Icons';
+import { Typography } from '@/theme/styles/Typography';
+import { Link, Button } from '@/theme/styles/Inputs';
+import { IconMedium } from '@/theme/styles/Icons';
 
-import {openModal, closeModal} from '../components/Modal';
+import {openModal, closeModal} from '@/app/components/Modal';
 
 type SideBarsSettings = { sideBarWidth: { value: number } };
 
