@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import styled, { css, keyframes, useTheme } from 'styled-components';
 import { eventEmitter } from '../../../app/helper/EventEmitter';
-import { APP } from '../../../store/Store';
+import { APP, useThemeColor } from '../../../store/Store';
 import { Typography } from '../../../theme/styles/Typography';
 import { Link } from '../../../theme/styles/Inputs';
 import { CustomIcon } from '../../../theme/styles/Icons';
@@ -71,9 +71,7 @@ function Carplay() {
     const theme = useTheme();
     const socket = useNamespaces();
     
-    type GeneralSettings = { colorTheme?: { value: string } };
-    type ThemeColorKey = 'green' | 'blue' | 'red' | 'white';
-    const themeColor = (APP((state) => (state.settings.general as GeneralSettings | undefined)?.colorTheme?.value ?? 'blue').toLowerCase()) as ThemeColorKey;
+    const themeColor = useThemeColor();
     const carplaySettings = APP((state) => state.system.carplay);
     const appUpdate       = APP((state) => state.update);
     

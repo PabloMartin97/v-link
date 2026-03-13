@@ -20,7 +20,7 @@ interface IndicatorProps {
 interface BlobProps {
   isActive: boolean;
   isHovering: boolean;
-  themeColor: string;
+  activeColor: string;
 }
 
 interface NavBarProps {
@@ -75,7 +75,7 @@ const Indicator = styled.div<IndicatorProps>`
 const Blob = styled.div<BlobProps>`
     width: 100px;
     height: 3px;
-    background: ${({ theme, themeColor, isHovering }) => `${isHovering ? theme.colors.theme[themeColor as 'green' | 'blue' | 'red' | 'white'].active : theme.colors.medium}`};
+    background: ${({ theme, activeColor, isHovering }) => isHovering ? activeColor : theme.colors.medium};
 
     border-radius: 2.5px;
     border: none;
@@ -106,7 +106,7 @@ const NavBar = ({ isHovering }: NavBarProps) => {
     <>
       <Indicator isActive={isActive}>
         <GlowLarge color={theme.colors.theme[themeColor].active} opacity={isHovering ? 0.75 : 0}>
-          {content && <Blob isActive={isActive} isHovering={isHovering} themeColor={themeColor} onClick={handleClick}/> }
+          {content && <Blob isActive={isActive} isHovering={isHovering} activeColor={theme.colors.theme[themeColor].active} onClick={handleClick}/> }
         </GlowLarge>
       </Indicator>
       <Navbar navBarHeight={navBarHeight} isActive={isActive}>
