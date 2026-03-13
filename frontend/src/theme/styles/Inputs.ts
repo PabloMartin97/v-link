@@ -114,7 +114,7 @@ interface SelectProps {
 }
 
 export const Select = styled.select<SelectProps>`
-  font-size: ${({ textSize = 1, textScale = 1 }) => `${textSize * textScale}vh`};
+  font-size: ${({ theme }) => theme.typography.caption2.fontSize};
   height: ${({ theme }) => theme.interaction.buttonHeight}px;
   width: 100%;
   border-radius: 10px;
@@ -135,6 +135,7 @@ export const Select = styled.select<SelectProps>`
 export const Input = styled.input`
     height: ${({ theme }) => theme.interaction.buttonHeight}px;
     width: 100%;
+    font-size: ${({ theme }) => theme.typography.caption2.fontSize};
     text-align: center;
     text-decoration: none;
     display: inline-block;

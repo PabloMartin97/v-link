@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import { theme } from './theme/Theme';
 import styled, { ThemeProvider, StyleSheetManager } from 'styled-components';
@@ -42,6 +42,22 @@ function App() {
 
   const socket = useNamespaces();
 
+  const textSizeValue = APP((state) => ((state.settings.general as Record<string, { value: string }> | undefined)?.textSize?.value) ?? 'Default');
+  const textScaleMap: Record<string, number> = { Small: 0.85, Default: 1, Large: 1.2 };
+  const scaledTheme = useMemo(() => {
+    const scale = textScaleMap[textSizeValue] ?? 1;
+    if (scale === 1) return theme;
+    return {
+      ...theme,
+      typography: Object.fromEntries(
+        Object.entries(theme.typography).map(([key, val]) => {
+          const match = (val.fontSize as string).match(/^([\d.]+)(.+)$/);
+          const scaled = match ? `${(parseFloat(match[1]) * scale).toFixed(2)}${match[2]}` : val.fontSize;
+          return [key, { ...val, fontSize: scaled }];
+        })
+      ) as typeof theme.typography,
+    };
+  }, [textSizeValue]);
 
   const [commandCounter, setCommandCounter] = useState(0);
   const [keyCommand, setKeyCommand] = useState('');
@@ -129,7 +145,7 @@ const mmiKeyDown = (event: KeyboardEvent) => {
       <AppContainer ref={containerRef}>
         <Socket />
 
-        <ThemeProvider theme={theme}>
+        <ThemeProvider theme={scaledTheme}>
 
           <Splash />
           <Init />
