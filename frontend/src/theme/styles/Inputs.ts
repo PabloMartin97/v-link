@@ -111,8 +111,6 @@ export const ToggleSwitch = styled.label<ToggleSwitchProps>`
 
 interface SelectProps {
   isActive?: boolean;
-  textSize?: number;
-  textScale?: number;
 }
 
 export const Select = styled.select<SelectProps>`

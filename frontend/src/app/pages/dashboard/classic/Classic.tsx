@@ -6,6 +6,14 @@ import { APP } from '../../../../store/Store';
 import RadialGauge from '../../../components/RadialGauge'
 import DataBox from '../../../components/DataBox'
 
+type GaugeSetting = { value: string; type: string };
+type DashClassicSettings = {
+  gauge_1: GaugeSetting;
+  gauge_2: GaugeSetting;
+  gauge_3: GaugeSetting;
+  gauge_4: GaugeSetting;
+};
+
 
 const Container = styled.div`
   display: flex; 
@@ -33,17 +41,18 @@ const Gauges = styled.div`
 
 const Classic = () => {
 
-	const gauge1 = APP(state => state.settings.dash_classic.gauge_1);
-  const gauge2 = APP(state => state.settings.dash_classic.gauge_2);
-  const gauge3 = APP(state => state.settings.dash_classic.gauge_3);
-  const gauge4 = APP(state => state.settings.dash_classic.gauge_4);
+  const dashClassic = APP(state => state.settings.dash_classic as DashClassicSettings | undefined);
+  const gauge1 = dashClassic?.gauge_1 ?? { value: '', type: '' };
+  const gauge2 = dashClassic?.gauge_2 ?? { value: '', type: '' };
+  const gauge3 = dashClassic?.gauge_3 ?? { value: '', type: '' };
+  const gauge4 = dashClassic?.gauge_4 ?? { value: '', type: '' };
 
 	const theme = useTheme()
 	const Databox = DataBox()
 
 
 	/* Observe container resizing and update dimensions. */
-	const containerRef = useRef(null);
+	const containerRef = useRef<HTMLDivElement | null>(null);
 	    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
 

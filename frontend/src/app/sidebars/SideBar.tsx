@@ -1,7 +1,7 @@
 import { useState, useEffect, } from "react";
 import styled, { css, useTheme } from 'styled-components';
 
-import { APP } from '../../store/Store';
+import { APP, useThemeColor } from '../../store/Store';
 
 import { Typography } from '../../theme/styles/Typography';
 import { Link, Button } from '../../theme/styles/Inputs';
@@ -9,9 +9,20 @@ import { IconMedium } from '../../theme/styles/Icons';
 
 import {openModal, closeModal} from '../components/Modal';
 
+type SideBarsSettings = { sideBarWidth: { value: number } };
 
+interface SidebarProps {
+  currentView: string;
+  minWidth: number;
+  maxWidth: number;
+  collapseLength: number;
+}
 
-const Sidebar = styled.div`
+interface SideBarProps {
+  collapseLength: number;
+}
+
+const Sidebar = styled.div<SidebarProps>`
 
     display: flex;
     flex-direction: column;
@@ -47,15 +58,14 @@ const Menu = styled.div`
 `;
 
 
-const SideBar = ({ collapseLength }) => {
-    
+const SideBar = ({ collapseLength }: SideBarProps) => {
 
     const view          = APP((state) => state.system.view)
     const settingPage   = APP((state) => state.system.settingPage)
     const appUpdate     = APP((state) => state.update)
     const versionNumber = APP((state) => state.system.version)
-    const sideBarWidth  = APP((state) => state.settings.side_bars.sideBarWidth.value)
-    const themeColor    = APP((state) => state.settings.general.colorTheme.value).toLowerCase();
+    const sideBarWidth  = APP((state) => (state.settings.side_bars as SideBarsSettings | undefined)?.sideBarWidth?.value ?? 0);
+    const themeColor    = useThemeColor();
 
     const theme = useTheme();
 
@@ -64,11 +74,10 @@ const SideBar = ({ collapseLength }) => {
     const Title = Typography.Title;
 
     const [moose, setMoose] = useState(false);
-    const [currentPage, setCurrentPage] = useState(view)
     const [currentTab, setCurrentTab] = useState(settingPage)
 
     /* Switch Tabs */
-    const handleTabChange = (tabIndex) => {
+    const handleTabChange = (tabIndex: number) => {
         appUpdate((state) => {
             state.system.settingPage = tabIndex;
         });
@@ -78,11 +87,9 @@ const SideBar = ({ collapseLength }) => {
         setCurrentTab(settingPage)
     }, [settingPage])
 
-    
+
     return (
         <Sidebar
-            theme={theme}
-            currentPage={currentPage}
             currentView={view}
             collapseLength={collapseLength / 1000}
             minWidth={0}
@@ -103,7 +110,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 1}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -122,7 +128,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 6}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -141,7 +146,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 7}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -160,7 +164,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 2}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -180,7 +183,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 3}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -200,7 +202,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 4}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -220,7 +221,6 @@ const SideBar = ({ collapseLength }) => {
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
                                 isActive={currentTab === 5}
-                                theme={theme}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -239,7 +239,7 @@ const SideBar = ({ collapseLength }) => {
                             setMoose(true)
                         }}>
 
-                            <IconMedium theme={theme} style={{ fill: 'none', stroke: moose ? theme.colors.theme[themeColor].active : 'none' }} onClick={() => setMoose(!moose)}>
+                            <IconMedium style={{ fill: 'none', stroke: moose ? theme.colors.theme[themeColor].active : 'none' }} onClick={() => setMoose(!moose)}>
                                 <use xlinkHref={`/assets/svg/logos/moose.svg#moose`}></use>
                             </IconMedium>
 

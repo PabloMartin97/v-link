@@ -34,7 +34,7 @@ function App() {
   const systemSettings = APP((state) => state.system);
   const appUpdate = APP((state) => state.update);
   const setKeyStroke = APP((state) => state.setKeyStroke);
-  const dongleBindings = APP((state) => state.settings.dongle_bindings);
+  const dongleBindings = APP((state) => state.settings.dongle_bindings) as Record<string, { value: string }> | undefined;
 
   const keyStroke = APP((state) => state.keyStroke);
   const switchPage = APP((state) => state.switchPage);

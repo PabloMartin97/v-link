@@ -26,8 +26,8 @@ const List = styled.div`
 
 const Race = () => {
 
-	const dashRaceSettings = APP((state) => state.settings.dash_race);
-	const Datalist = DataList(dashRaceSettings, 6, 2) // Amount of Items, 2 Columns
+	const dashRaceSettings = APP((state) => state.settings.dash_race as Record<string, { value: string; type: string }> | undefined);
+	const Datalist = DataList(dashRaceSettings ?? {}, 6, 2) // Amount of Items, 2 Columns
 
 	return (
 		<Container>
