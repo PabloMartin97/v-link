@@ -41,7 +41,12 @@ const Stream = styled.div`
   margin: 0;
 `
 
-const Overlay = styled.div`
+interface OverlayProps {
+  isVisible: boolean;
+  navVisible: boolean;
+}
+
+const Overlay = styled.div<OverlayProps>`
   position: absolute;
   top: 0;
   left: 0;
@@ -49,7 +54,7 @@ const Overlay = styled.div`
   width: 100%;
 
   zIndex: 2;
-  
+
   display: flex;
   justify-content: center;
   alignItems: center;
@@ -83,11 +88,17 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const navBar          = APP((state) => state.system.interface.navBar)
 
   const view            = APP((state) => state.system.view);
-  const dongleConfig    = APP((state) => state.settings.dongle_config);
-  const exitToDash      = APP((state) => state.settings.general.exitToDash);
-  const useStandardizedResolution  = APP((state) => state.settings.dongle_config?.useStandardizedResolution?.value ?? false);
+  type DongleConfig = Record<string, { value: unknown }>;
+  type GeneralSettings = { exitToDash?: { value: boolean } };
 
-  const [phoneState, setPhoneState] = useState<Boolean | null>(false);
+  const dongleConfig = APP((state) => state.settings.dongle_config as DongleConfig | undefined);
+  const exitToDash = APP((state) => (state.settings.general as GeneralSettings | undefined)?.exitToDash?.value ?? false);
+  const exitToDashRef = useRef(exitToDash);
+
+  useEffect(() => { exitToDashRef.current = exitToDash; }, [exitToDash]);
+  const useStandardizedResolution = APP((state) => (state.settings.dongle_config as { useStandardizedResolution?: { value: boolean } } | undefined)?.useStandardizedResolution?.value ?? false);
+
+  const [phoneState, setPhoneState] = useState<boolean | null>(false);
   const lastDongleConfigSigRef = useRef<string | null>(null);
 
   // Keys that must not be forwarded to the dongle driver
@@ -105,7 +116,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   };
 
   const config = useMemo(() => {
-    const dongleConfigFlat = flattenConfig(dongleConfig);
+    const dongleConfigFlat = dongleConfig ? flattenConfig(dongleConfig) : {};
     let configWidth  = width;
     let configHeight = height;
 
@@ -293,16 +304,15 @@ function Carplay({ command, commandCounter }: CarplayProps) {
               stopRecording()
               break
             case CommandMapping.requestHostUI:
-              if (exitToDash) {
+              if (exitToDashRef.current) {
                 appUpdate((state) => {
                   state.system.view = "Dashboard";
                 });
-              } 
-              /* else {
+              } else {
                 appUpdate((state) => {
                   state.system.interface.navBar = true;
                 });
-              } */
+              }
           }
           break
         case 'failure':

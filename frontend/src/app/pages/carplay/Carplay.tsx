@@ -29,8 +29,12 @@ const closeChainRight = keyframes`
 `;
 
 
+interface SvgContainerProps {
+  connected?: boolean;
+}
+
 // Styled SVG container for animation
-const SvgContainer = styled.svg`
+const SvgContainer = styled.svg<SvgContainerProps>`
   width: 100px;
   height: auto;
 
@@ -67,7 +71,9 @@ function Carplay() {
     const theme = useTheme();
     const socket = useNamespaces();
     
-    const themeColor      = APP((state) => state.settings.general.colorTheme.value).toLowerCase()
+    type GeneralSettings = { colorTheme?: { value: string } };
+    type ThemeColorKey = 'green' | 'blue' | 'red' | 'white';
+    const themeColor = (APP((state) => (state.settings.general as GeneralSettings | undefined)?.colorTheme?.value ?? 'blue').toLowerCase()) as ThemeColorKey;
     const carplaySettings = APP((state) => state.system.carplay);
     const appUpdate       = APP((state) => state.update);
     

@@ -1,19 +1,24 @@
 import styled from 'styled-components';
 
-export const Link = styled.button`
+interface LinkProps {
+  isActive?: boolean;
+  activeColor?: string;
+  inactiveColor?: string;
+}
+
+export const Link = styled.button<LinkProps>`
     height: ${({ theme }) => theme.interaction.buttonHeight}px;
     width: 100%;
 
     color: ${({ theme, isActive, activeColor, inactiveColor }) => isActive ? activeColor : inactiveColor};
     font-size: ${({ theme }) => theme.typography.caption2.fontSize};
-    
+
     display: flex;
     flex-direction: row;
     justify-content: left;
     align-items: center;
 
     gap: 10px;
-    //color: ${({ theme }) => theme.colors.text};
     background: none;
     border: none;
 
@@ -30,7 +35,7 @@ export const Button = styled.button`
     font-family: ${({ theme }) => theme.typography.button.fontFamily};
     font-weight: ${({ theme }) => theme.typography.button.fontWeight};
     font-size: ${({ theme }) => theme.typography.button.fontSize};
-    
+
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -48,7 +53,13 @@ export const Button = styled.button`
     }
 `;
 
-export const ToggleSwitch = styled.label`
+interface ToggleSwitchProps {
+  backgroundColor?: string;
+  defaultColor?: string;
+  activeColor?: string;
+}
+
+export const ToggleSwitch = styled.label<ToggleSwitchProps>`
   position: relative;
   display: inline-block;
   width: 50px; /* Width of the toggle */
@@ -94,11 +105,17 @@ export const ToggleSwitch = styled.label`
 
   input:checked + .slider:before {
     transform: translateX(28px); /* Move the circle to the right */
-    background-color: ${({ activeColor }) =>activeColor}; /* Change to active */
+    background-color: ${({ activeColor }) => activeColor}; /* Change to active */
   }
 `;
 
-export const Select = styled.select`
+interface SelectProps {
+  isActive?: boolean;
+  textSize?: number;
+  textScale?: number;
+}
+
+export const Select = styled.select<SelectProps>`
   font-size: ${({ textSize = 1, textScale = 1 }) => `${textSize * textScale}vh`};
   height: ${({ theme }) => theme.interaction.buttonHeight}px;
   width: 100%;
@@ -109,13 +126,13 @@ export const Select = styled.select`
   border: none;
   color: ${({ theme }) => theme.colors.text};
   background-color: ${({ isActive, theme }) => (isActive ? theme.colors.button : theme.colors.medium)};
-  
+
     &:focus {
     outline: none;
     border-color:${({ theme }) => theme.colors.text};;
     background-color:${({ theme }) => theme.colors.dark};;
   }
-  `;
+`;
 
 export const Input = styled.input`
     height: ${({ theme }) => theme.interaction.buttonHeight}px;
@@ -128,5 +145,4 @@ export const Input = styled.input`
     opacity: 1;
     color: ${({ theme }) => theme.colors.text};;
     background-color: ${({ theme }) => theme.colors.button};
-
 `;
