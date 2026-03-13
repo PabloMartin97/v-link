@@ -95,6 +95,7 @@ interface CustomIconProps {
   isActive?: boolean;
   color?: string;
   activeColor?: string;
+  inactiveColor?: string;
   defaultColor?: string;
   glowColor?: string;
   fill?: string;

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
+import type { ReactNode } from 'react'
 
 interface SizeState {
   width: number;
@@ -29,7 +30,8 @@ interface InterfaceState {
 interface ModalState {
   visible: boolean;
   title: string | null;
-  content: string | null;
+  content: ReactNode;
+  exit?: boolean | null;
 }
 
 interface SystemState {
@@ -246,5 +248,15 @@ const modules = {
   adc: ADC,
   rti: RTI,
 }
+
+// theme color helper
+export type ThemeColorKey = 'green' | 'blue' | 'red' | 'white';
+
+type GeneralSettings = { colorTheme?: { value: string } };
+
+export const useThemeColor = (): ThemeColorKey =>
+    (APP((state) =>
+        (state.settings.general as GeneralSettings | undefined)?.colorTheme?.value ?? 'blue'
+    ) as string).toLowerCase() as ThemeColorKey;
 
 export { APP, CAN, SWC, ADC, RTI, DATA, modules };
