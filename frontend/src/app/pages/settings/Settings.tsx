@@ -570,6 +570,9 @@ const Settings = () => {
                 onChange={handleChange}
                 value={value as string}
               >
+                <option value="" disabled>
+                  N/A
+                </option>
                 {dropdown.map((option) => {
                   const optVal = typeof option === 'string' ? option : option.value;
                   const optLabel = typeof option === 'string' ? option : option.label;
@@ -726,8 +729,9 @@ const Settings = () => {
           </>
         }
 
+        {/* TODO Fix box name showing CAN sensor config */}
         {settingPage === 4 &&
-          <>
+          <> 
             {renderSetting("dongle_config", currentSettings)}
           </>
         }
