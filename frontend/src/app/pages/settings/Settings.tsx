@@ -652,8 +652,6 @@ const Settings = () => {
             {renderSetting("general", currentSettings)}
             {renderSetting("shutdown", currentSettings)}
             {renderSetting("side_bars", currentSettings)}
-            {renderSetting("reverseCam", currentSettings)}
-
             <Element>
               <Title>Toggle Modules</Title>
             </Element>
