@@ -152,6 +152,7 @@ const Content = () => {
 
   const reverse           = APP((state) => state.system.reverse);
   const reverseDelay      = APP((state) => (state.settings.reverseCam as { delay: { value: number } } | undefined)?.delay?.value ?? 2);
+  const rearcamEnabled    = APP((state) => (state.settings.reverseCam as { enabled?: { value: boolean } } | undefined)?.enabled?.value);
 
   const cardPadding = 20;
   const windowSize = { width: window.innerWidth, height: window.innerHeight };
@@ -369,8 +370,12 @@ const Content = () => {
     }
   }, [appBindings, appUpdate]);
 
+  const viewEnabled: Partial<Record<string, boolean>> = {
+    Rearcam: rearcamEnabled,
+  };
+
   const cycleView = () => {
-    const viewKeys = Object.keys(viewMap);
+    const viewKeys = Object.keys(viewMap).filter((v) => viewEnabled[v] !== false);
     let currentIndex = viewKeys.indexOf(view);
     currentIndex = (currentIndex + 1) % viewKeys.length;
     appUpdate((state) => { state.system.view = viewKeys[currentIndex]; });
