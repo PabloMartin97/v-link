@@ -188,6 +188,14 @@ def test_data_request_returns_car_data(seeded_config_dir):
         client.disconnect(namespace='/data')
 
 
+_CAN_PROFILE = _APP_ROOT / 'backend' / 'config' / 'profiles' / 'P1' / 'T5' / 'can.json'
+
+
+def _seed_can(config_dir):
+    """Copy the P1/T5 can.json into config_dir so load_settings('can') succeeds."""
+    shutil.copy(_CAN_PROFILE, config_dir / 'can.json')
+
+
 # /can namespace
 def test_can_toggle_sets_shared_state_event(seeded_config_dir):
     """'toggle' on /can must set shared_state.toggle_can."""
@@ -203,4 +211,63 @@ def test_can_toggle_sets_shared_state_event(seeded_config_dir):
         assert shared_state.toggle_can.is_set()
     finally:
         shared_state.toggle_can.clear()
+        client.disconnect(namespace='/can')
+
+
+def test_can_load_returns_settings(seeded_config_dir):
+    """'load' on /can must respond with a 'settings' event containing sensors and interfaces."""
+    _seed_can(seeded_config_dir)
+    from backend.server import server, socketio
+    server.config['TESTING'] = True
+
+    client = socketio.test_client(server, namespace='/can')
+    try:
+        client.get_received('/can')
+        client.emit('load', namespace='/can')
+        received = client.get_received('/can')
+        settings_events = [r for r in received if r['name'] == 'settings']
+        assert len(settings_events) == 1
+        payload = settings_events[0]['args'][0]
+        assert isinstance(payload, dict)
+        assert 'sensors' in payload
+        assert 'interfaces' in payload
+        assert 'signal_sensors' in payload
+    finally:
+        client.disconnect(namespace='/can')
+
+
+def test_can_save_persists_sensor_enabled(seeded_config_dir):
+    """'save' on /can must write the modified sensor enabled state to can.json."""
+    _seed_can(seeded_config_dir)
+    from backend.server import server, socketio
+    server.config['TESTING'] = True
+
+    # Build a minimal payload toggling boost sensor to disabled
+    can_data = json.loads(_CAN_PROFILE.read_text())
+    can_data['sensors']['boost']['enabled'] = False
+
+    client = socketio.test_client(server, namespace='/can')
+    try:
+        client.emit('save', can_data, namespace='/can')
+        written = json.loads((seeded_config_dir / 'can.json').read_text())
+        assert written['sensors']['boost']['enabled'] is False
+    finally:
+        client.disconnect(namespace='/can')
+
+
+def test_can_save_persists_signal_sensor_enabled(seeded_config_dir):
+    """'save' on /can must persist signal_sensor enabled toggles to can.json."""
+    _seed_can(seeded_config_dir)
+    from backend.server import server, socketio
+    server.config['TESTING'] = True
+
+    can_data = json.loads(_CAN_PROFILE.read_text())
+    can_data['signal_sensors'][0]['enabled'] = True
+
+    client = socketio.test_client(server, namespace='/can')
+    try:
+        client.emit('save', can_data, namespace='/can')
+        written = json.loads((seeded_config_dir / 'can.json').read_text())
+        assert written['signal_sensors'][0]['enabled'] is True
+    finally:
         client.disconnect(namespace='/can')

@@ -65,6 +65,7 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
     const appUpdate     = APP((state) => state.update)
     const versionNumber = APP((state) => state.system.version)
     const sideBarWidth  = APP((state) => (state.settings.side_bars as SideBarsSettings | undefined)?.sideBarWidth?.value ?? 0);
+    const canEnabled    = APP((state) => (state.settings as any)?.constants?.modules?.can);
     const themeColor    = useThemeColor();
 
     const theme = useTheme();
@@ -155,6 +156,26 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                         </div>
                     </div>
                 </Link>
+                {canEnabled &&
+                    <Link
+                        onClick={() => handleTabChange('can')}
+                        isActive={currentTab === 'can'}
+                        activeColor={theme.colors.light}
+                        inactiveColor={theme.colors.medium}>
+                        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
+                            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
+                                <IconMedium
+                                    isActive={currentTab === 'can'}
+                                    activeColor={theme.colors.theme[themeColor].active}
+                                    defaultColor={theme.colors.theme[themeColor].default}
+                                    inactiveColor={theme.colors.medium}>
+                                    <use xlinkHref={`/assets/svg/buttons/link.svg#link`}></use>
+                                </IconMedium>
+                                CAN Bus
+                            </div>
+                        </div>
+                    </Link>
+                }
                 <Link
                     onClick={() => handleTabChange('interface')}
                     isActive={currentTab === 'interface'}
