@@ -77,9 +77,9 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
     const [currentTab, setCurrentTab] = useState(settingPage)
 
     /* Switch Tabs */
-    const handleTabChange = (tabIndex: number) => {
+    const handleTabChange = (tabId: string) => {
         appUpdate((state) => {
-            state.system.settingPage = tabIndex;
+            state.system.settingPage = tabId;
         });
     };
 
@@ -102,14 +102,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                     </div>
                 </Link>
                 <Link
-                    onClick={() => handleTabChange(1)}
-                    isActive={currentTab === 1}
+                    onClick={() => handleTabChange('general')}
+                    isActive={currentTab === 'general'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 1}
+                                isActive={currentTab === 'general'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -120,14 +120,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                     </div>
                 </Link>
                 <Link
-                    onClick={() => handleTabChange(6)}
-                    isActive={currentTab === 6}
+                    onClick={() => handleTabChange('display')}
+                    isActive={currentTab === 'display'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 6}
+                                isActive={currentTab === 'display'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -138,14 +138,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                     </div>
                 </Link>
                 <Link
-                    onClick={() => handleTabChange(7)}
-                    isActive={currentTab === 7}
+                    onClick={() => handleTabChange('rearcam')}
+                    isActive={currentTab === 'rearcam'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 7}
+                                isActive={currentTab === 'rearcam'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -156,14 +156,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                     </div>
                 </Link>
                 <Link
-                    onClick={() => handleTabChange(2)}
-                    isActive={currentTab === 2}
+                    onClick={() => handleTabChange('interface')}
+                    isActive={currentTab === 'interface'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 2}
+                                isActive={currentTab === 'interface'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -175,14 +175,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                 </Link>
 
                 <Link
-                    onClick={() => handleTabChange(3)}
-                    isActive={currentTab === 3}
+                    onClick={() => handleTabChange('keymap')}
+                    isActive={currentTab === 'keymap'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 3}
+                                isActive={currentTab === 'keymap'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -194,14 +194,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                 </Link>
 
                 <Link
-                    onClick={() => handleTabChange(4)}
-                    isActive={currentTab === 4}
+                    onClick={() => handleTabChange('dongle')}
+                    isActive={currentTab === 'dongle'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 4}
+                                isActive={currentTab === 'dongle'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -213,14 +213,14 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                 </Link>
 
                 <Link
-                    onClick={() => handleTabChange(5)}
-                    isActive={currentTab === 5}
+                    onClick={() => handleTabChange('system')}
+                    isActive={currentTab === 'system'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 5}
+                                isActive={currentTab === 'system'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
@@ -230,7 +230,6 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                         </div>
                     </div>
                 </Link>
-
 
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'left', height: `${theme.interaction.buttonHeight}px` }}>
                     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '5px' }}>

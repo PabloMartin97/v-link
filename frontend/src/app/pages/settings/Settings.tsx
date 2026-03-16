@@ -647,7 +647,7 @@ const Settings = () => {
         ignoreElements='input, select'
         innerRef={scrollRef}
       >
-        {settingPage === 1 &&
+        {settingPage === 'general' &&
           <>
             {renderSetting("general", currentSettings)}
             {renderSetting("shutdown", currentSettings)}
@@ -701,7 +701,7 @@ const Settings = () => {
           </>
         }
 
-        {settingPage === 2 &&
+        {settingPage === 'interface' &&
           <>
             {renderSetting("dash_topbar", currentSettings)}
             {renderSetting("dash_classic", currentSettings)}
@@ -720,7 +720,7 @@ const Settings = () => {
           </>
         }
 
-        {settingPage === 3 &&
+        {settingPage === 'keymap' &&
           <>
             {renderSetting("app_bindings", currentSettings)}
             {renderSetting("dongle_bindings", currentSettings)}
@@ -728,13 +728,13 @@ const Settings = () => {
         }
 
         {/* TODO Fix box name showing CAN sensor config */}
-        {settingPage === 4 &&
+        {settingPage === 'dongle' &&
           <> 
             {renderSetting("dongle_config", currentSettings)}
           </>
         }
 
-        {settingPage === 5 &&
+        {settingPage === 'system' &&
           <>
             <div style={{ display: 'flex', width: '100%', height: '90%', gap: '10px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>
@@ -753,7 +753,7 @@ const Settings = () => {
           </>
         }
 
-        {settingPage === 6 &&
+        {settingPage === 'display' &&
           <>
             {renderSetting("screen", currentSettings)}
             <Element>
@@ -780,7 +780,7 @@ const Settings = () => {
           </>
         }
 
-        {settingPage === 7 &&
+        {settingPage === 'rearcam' &&
           <>
            {renderSetting("reverseCam", currentSettings)}
             <p />

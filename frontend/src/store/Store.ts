@@ -40,7 +40,7 @@ interface SystemState {
   switch: string;
   lastUpdate: number;
   firstStart: boolean;
-  settingPage: number;
+  settingPage: string;
   configLoaded: boolean;
   initialized: boolean;
   startedUp: boolean;
@@ -99,7 +99,7 @@ const APP = create<AppState>()(
       lastUpdate: 0,
 
       firstStart: true,
-      settingPage: 1,
+      settingPage: 'general',
 
       configLoaded: false,
       initialized: false,
