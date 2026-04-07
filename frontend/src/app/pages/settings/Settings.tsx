@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, ReactNode } from 'react';
+import CanSettings from './CanSettings';
 
 import styled, { useTheme } from 'styled-components';
 import ScrollContainer from 'react-indiana-drag-scroll'
@@ -783,6 +784,13 @@ const Settings = () => {
         {settingPage === 'rearcam' &&
           <>
            {renderSetting("reverseCam", currentSettings)}
+            <p />
+          </>
+        }
+
+        {settingPage === 'can' &&
+          <>
+            <CanSettings />
             <p />
           </>
         }
