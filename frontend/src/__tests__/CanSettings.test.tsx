@@ -107,8 +107,8 @@ describe('CanSettings', () => {
     expect(screen.getByText('MODULE')).toBeInTheDocument();
     expect(screen.getByText('INTERFACES')).toBeInTheDocument();
     expect(screen.getByText('SENSORS')).toBeInTheDocument();
-    expect(screen.getByText('BY TARGET')).toBeInTheDocument();
-    expect(screen.getByText('BY PRIORITY')).toBeInTheDocument();
+    expect(screen.getByText('SENSORS BY TARGET')).toBeInTheDocument();
+    expect(screen.getByText('SENSORS BY PRIORITY')).toBeInTheDocument();
     expect(screen.getByText('SIGNAL SENSORS')).toBeInTheDocument();
   });
 
@@ -144,14 +144,14 @@ describe('CanSettings', () => {
   it('renders sensors grouped by rep_id as group headers when BY TARGET is expanded', () => {
     renderComponent();
     // BY TARGET is collapsed by default — expand it
-    fireEvent.click(screen.getByText('BY TARGET'));
+    fireEvent.click(screen.getByText('SENSORS BY TARGET'));
     expect(screen.getAllByText('0x00400021').length).toBeGreaterThan(0);
     expect(screen.getAllByText('0x00400022').length).toBeGreaterThan(0);
   });
 
   it('renders priority group headers when BY PRIORITY is expanded', () => {
     renderComponent();
-    fireEvent.click(screen.getByText('BY PRIORITY'));
+    fireEvent.click(screen.getByText('SENSORS BY PRIORITY'));
     expect(screen.getByText('Priority 1')).toBeInTheDocument();
     expect(screen.getByText('Priority 2')).toBeInTheDocument();
   });
@@ -171,7 +171,7 @@ describe('CanSettings', () => {
   it('BY TARGET section expands on click adding sensor checkboxes', () => {
     renderComponent();
     const before = screen.getAllByRole('checkbox').length;
-    fireEvent.click(screen.getByText('BY TARGET'));
+    fireEvent.click(screen.getByText('SENSORS BY TARGET'));
     // Expanding BY TARGET adds 3 more sensor checkboxes (boost, rpm, coolant)
     expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(before);
   });
