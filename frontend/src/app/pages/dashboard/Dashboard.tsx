@@ -11,6 +11,7 @@ import Pagination from '@/app/components/Pagination';
 const Classic = lazy(() => import('./classic/Classic'));
 const Race = lazy(() => import('./race/Race'));
 const Charts = lazy(() => import('./charts/Charts'));
+const Simple = lazy(() => import('./simple/Simple'));
 
 const DashBoard = styled.div`
   height: 100%;
@@ -100,6 +101,7 @@ function Dashboard() {
     { name: "Classic", component: Classic },
     { name: "Race", component: Race },
     { name: "Charts", component: Charts },
+    { name: "Simple", component: Simple },
   ], []);
 
   const defaultComponentIndex = useMemo(() => 

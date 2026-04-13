@@ -324,6 +324,50 @@
       "label": "Value 4"
     }
   },
+  "dash_simple": {
+    "title": "Simple-Dash",
+    "type": "data",
+    "value_1": {
+      "type": "",
+      "value": "",
+      "label": "Value 1"
+    },
+    "value_2": {
+      "type": "",
+      "value": "",
+      "label": "Value 2"
+    },
+    "value_3": {
+      "type": "",
+      "value": "",
+      "label": "Value 3"
+    },
+    "value_4": {
+      "type": "",
+      "value": "",
+      "label": "Value 4"
+    },
+    "value_5": {
+      "type": "",
+      "value": "",
+      "label": "Value 4"
+    },
+    "value_6": {
+      "type": "",
+      "value": "",
+      "label": "Value 4"
+    },
+    "value_7": {
+      "type": "",
+      "value": "",
+      "label": "Value 4"
+    },
+    "value_8": {
+      "type": "",
+      "value": "",
+      "label": "Value 4"
+    }
+  },
   "dash_topbar": {
     "title": "TopBar",
     "type": "data",
