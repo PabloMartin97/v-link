@@ -206,14 +206,10 @@ const CanSettings = () => {
     if (!sortCol) return 0;
     const aVal: string | number = sortCol === 'priority'
       ? a.priority
-      : sortCol === 'parameter'
-        ? (a.parameter?.join(', ') ?? '')
-        : (a[sortCol] ?? '');
+      : (a[sortCol] ?? '');
     const bVal: string | number = sortCol === 'priority'
       ? b.priority
-      : sortCol === 'parameter'
-        ? (b.parameter?.join(', ') ?? '')
-        : (b[sortCol] ?? '');
+      : (b[sortCol] ?? '');
     if (typeof aVal === 'number' && typeof bVal === 'number')
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
     return sortDir === 'asc'
