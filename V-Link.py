@@ -315,6 +315,7 @@ def clear_screen():
 
 _display_initialized = False
 _app_started = False
+_prev_display_snapshot = None
 
 LOG_CAPACITY = 20
 
@@ -367,8 +368,26 @@ def display_starting():
     sys.stdout.flush()
 
 
+def _get_display_snapshot():
+    thread_states = tuple(
+        (key, isinstance(thread, threading.Thread) and thread.is_alive())
+        for key, thread in shared_state.THREADS.items()
+    )
+    return (
+        thread_states,
+        shared_state.rtiStatus,
+        shared_state.ignStatus.is_set(),
+        tuple(_log_handler.buffer),
+    )
+
+
 def display_thread_states():
-    global _display_initialized
+    global _display_initialized, _prev_display_snapshot
+
+    snapshot = _get_display_snapshot()
+    if _display_initialized and snapshot == _prev_display_snapshot:
+        return
+    _prev_display_snapshot = snapshot
 
     lines = [
         '',
