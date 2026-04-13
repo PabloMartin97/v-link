@@ -92,6 +92,7 @@ def _make_record(level: int, msg: str) -> logging.LogRecord:
 def reset_state(monkeypatch):
     """Reset all module-level display state before every test."""
     monkeypatch.setattr(_vmod, '_display_initialized', False)
+    monkeypatch.setattr(_vmod, '_prev_display_snapshot', None)
     monkeypatch.setattr(_vmod, 'vlink', _MockVlink(), raising=False)
     _vmod._log_handler.buffer.clear()
     ss = _vmod.shared_state
@@ -256,11 +257,13 @@ class TestRenderMechanics:
     def test_subsequent_render_uses_home_escape(self, capsys):
         _vmod.display_thread_states()
         capsys.readouterr()
+        _vmod.shared_state.rtiStatus = True
         assert '\033[H' in _render(capsys)
 
     def test_subsequent_render_erases_each_line(self, capsys):
         _vmod.display_thread_states()
         capsys.readouterr()
+        _vmod.shared_state.rtiStatus = True
         second = _render(capsys)
         after_home = second.split('\033[H', 1)[1]
         assert '\033[K' in after_home
