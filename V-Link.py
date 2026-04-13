@@ -51,8 +51,7 @@ import logging
 
 from pathlib import Path
 
-import json
-VERSION = json.loads((Path(__file__).parent / 'frontend' / 'package.json').read_text())['version']
+from backend.version import VERSION
 
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
