@@ -152,45 +152,45 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
                                 inactiveColor={theme.colors.medium}>
                                 <use xlinkHref={`/assets/svg/buttons/rearcam.svg#rearcam`}></use>
                             </IconMedium>
-                            Rear Camera
+                            Camera
                         </div>
                     </div>
                 </Link>
                 {canEnabled &&
                     <Link
-                        onClick={() => handleTabChange('can')}
-                        isActive={currentTab === 'can'}
+                        onClick={() => handleTabChange('interface')}
+                        isActive={currentTab === 'interface'}
                         activeColor={theme.colors.light}
                         inactiveColor={theme.colors.medium}>
                         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                                 <IconMedium
-                                    isActive={currentTab === 'can'}
+                                    isActive={currentTab === 'interface'}
                                     activeColor={theme.colors.theme[themeColor].active}
                                     defaultColor={theme.colors.theme[themeColor].default}
                                     inactiveColor={theme.colors.medium}>
                                     <use xlinkHref={`/assets/svg/buttons/link.svg#link`}></use>
                                 </IconMedium>
-                                CAN Bus
+                                Interface
                             </div>
                         </div>
                     </Link>
                 }
                 <Link
-                    onClick={() => handleTabChange('interface')}
-                    isActive={currentTab === 'interface'}
+                    onClick={() => handleTabChange('dashboard')}
+                    isActive={currentTab === 'dashboard'}
                     activeColor={theme.colors.light}
                     inactiveColor={theme.colors.medium}>
                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', width: '100%' }}>
                             <IconMedium
-                                isActive={currentTab === 'interface'}
+                                isActive={currentTab === 'dashboard'}
                                 activeColor={theme.colors.theme[themeColor].active}
                                 defaultColor={theme.colors.theme[themeColor].default}
                                 inactiveColor={theme.colors.medium}>
                                 <use xlinkHref={`/assets/svg/buttons/interface.svg#interface`}></use>
                             </IconMedium>
-                            Interface
+                            Dashboard
                         </div>
                     </div>
                 </Link>

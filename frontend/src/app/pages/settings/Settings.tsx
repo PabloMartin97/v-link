@@ -702,7 +702,7 @@ const Settings = () => {
           </>
         }
 
-        {settingPage === 'interface' &&
+        {settingPage === 'dashboard' &&
           <>
             {renderSetting("dash_topbar", currentSettings)}
             {renderSetting("dash_classic", currentSettings)}
@@ -788,7 +788,7 @@ const Settings = () => {
           </>
         }
 
-        {settingPage === 'can' &&
+        {settingPage === 'interface' &&
           <>
             <CanSettings />
             <p />

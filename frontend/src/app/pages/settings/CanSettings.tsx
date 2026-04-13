@@ -77,7 +77,6 @@ const Spacer = styled.div`
   box-sizing: border-box;
 `;
 
-// Collapsible section header — same height/style as Element but clickable
 const CollapsibleHeader = styled.div`
   display: flex;
   align-items: center;
@@ -85,7 +84,7 @@ const CollapsibleHeader = styled.div`
   user-select: none;
   height: 35px;
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 20px;
   &:active { opacity: 0.7; }
 `;
 
@@ -96,15 +95,14 @@ const Chevron = styled.span`
   flex-shrink: 0;
 `;
 
-// Table components for sensor details
 const SensorTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 16px;
 `;
 
-const Th = styled.th`
-  color: ${({ theme }) => theme.colors.medium};
+const Th = styled.th<{ sortable?: boolean; active?: boolean }>`
+  color: ${({ theme, active }) => active ? theme.colors.light : theme.colors.medium};
   font-family: ${({ theme }) => theme.typography.caption2.fontFamily};
   font-size: ${({ theme }) => theme.typography.caption2.fontSize};
   font-weight: 600;
@@ -112,6 +110,14 @@ const Th = styled.th`
   padding: 3px 6px 5px 6px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.dark};
   white-space: nowrap;
+  cursor: ${({ sortable }) => sortable ? 'pointer' : 'default'};
+  user-select: ${({ sortable }) => sortable ? 'none' : 'auto'};
+  &:active { opacity: ${({ sortable }) => sortable ? 0.7 : 1}; }
+`;
+
+const SortIndicator = styled.span`
+  padding-left: 3px;
+  font-size: 9px;
 `;
 
 const Td = styled.td`
@@ -137,17 +143,7 @@ const Tr = styled.tr`
   &:last-child { border-bottom: none; }
 `;
 
-const GroupTr = styled.tr`
-  background-color: ${({ theme }) => theme.colors.dark};
-`;
-
-const GroupTd = styled.td`
-  color: ${({ theme }) => theme.colors.medium};
-  font-family: ${({ theme }) => theme.typography.caption2.fontFamily};
-  font-size: ${({ theme }) => theme.typography.caption2.fontSize};
-  font-weight: 600;
-  padding: 3px 6px;
-`;
+type SortCol = 'label' | 'unit' | 'priority';
 
 const CanSettings = () => {
   const Title = Typography.Title;
@@ -159,10 +155,11 @@ const CanSettings = () => {
   const themeColor = useThemeColor();
   const theme = useTheme();
 
+  const [modulesOpen, setModulesOpen] = useState(true);
   const [sensorsOpen, setSensorsOpen] = useState(true);
-  const [byTargetOpen, setByTargetOpen] = useState(false);
-  const [byPriorityOpen, setByPriorityOpen] = useState(false);
   const [signalOpen, setSignalOpen] = useState(true);
+  const [sortCol, setSortCol] = useState<SortCol | null>('label');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   if (!canSettings || !canSettings.sensors) {
     return (
@@ -190,27 +187,39 @@ const CanSettings = () => {
     socket.can.emit('save', updated);
   };
 
-  // Group sensors by rep_id
-  const byTarget = Object.entries(sensors).reduce<Record<string, [string, CanSensor][]>>(
-    (acc, entry) => {
-      const repId = entry[1].rep_id;
-      if (!acc[repId]) acc[repId] = [];
-      acc[repId].push(entry);
-      return acc;
-    },
-    {}
-  );
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else setSortCol(null);
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
 
-  // Group sensors by priority
-  const byPriority = Object.entries(sensors).reduce<Record<string, [string, CanSensor][]>>(
-    (acc, entry) => {
-      const prio = String(entry[1].priority);
-      if (!acc[prio]) acc[prio] = [];
-      acc[prio].push(entry);
-      return acc;
-    },
-    {}
-  );
+  const sortIndicator = (col: SortCol) => {
+    if (sortCol !== col) return null;
+    return <SortIndicator>{sortDir === 'asc' ? '▲' : '▼'}</SortIndicator>;
+  };
+
+  const sortedSensors = Object.entries(sensors).sort(([, a], [, b]) => {
+    if (!sortCol) return 0;
+    const aVal: string | number = sortCol === 'priority'
+      ? a.priority
+      : sortCol === 'parameter'
+        ? (a.parameter?.join(', ') ?? '')
+        : (a[sortCol] ?? '');
+    const bVal: string | number = sortCol === 'priority'
+      ? b.priority
+      : sortCol === 'parameter'
+        ? (b.parameter?.join(', ') ?? '')
+        : (b[sortCol] ?? '');
+    if (typeof aVal === 'number' && typeof bVal === 'number')
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    return sortDir === 'asc'
+      ? String(aVal).localeCompare(String(bVal))
+      : String(bVal).localeCompare(String(aVal));
+  });
 
   const renderToggle = (sensorKey: string, sensor: CanSensor) => (
     <ToggleSwitch
@@ -226,53 +235,53 @@ const CanSettings = () => {
   return (
     <>
       {/* Module state toggle */}
-      <Element>
-        <Title>MODULE</Title>
-      </Element>
-      <Element>
-        <Caption2>{`CAN Bus ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
+      <CollapsibleHeader onClick={() => setModulesOpen((o) => !o)}>
+        <Title>Modules</Title>
         <Divider />
-        <Spacer>
-          <ToggleSwitch
-            backgroundColor={theme.colors.medium}
-            defaultColor={theme.colors.theme[themeColor].default}
-            activeColor={theme.colors.theme[themeColor].active}
-          >
-            <input
-              type="checkbox"
-              checked={canState}
-              onChange={() => socket.can.emit('toggle')}
-            />
-            <span className="slider"></span>
-          </ToggleSwitch>
-        </Spacer>
-      </Element>
-
-      {/* Interfaces — read-only */}
-      <Element>
-        <Title>INTERFACES</Title>
-      </Element>
-      {interfaces.map((iface, i) => (
-        <Element key={i}>
-          <Caption2>{`${iface.channel} — ${iface.bitrate ? iface.bitrate / 1000 : '?'} kbps — ${iface.bustype}`}</Caption2>
-          <Divider />
-          <Spacer>
-            <Caption2
-              style={{
-                color: iface.enabled
-                  ? theme.colors.theme[themeColor].active
-                  : theme.colors.medium,
-              }}
-            >
-              {iface.enabled ? 'Enabled' : 'Disabled'}
-            </Caption2>
-          </Spacer>
-        </Element>
-      ))}
-
-      {/* Sensors — flat list (collapsible) */}
+        <Chevron>{modulesOpen ? '▼' : '▶'}</Chevron>
+      </CollapsibleHeader>
+      {modulesOpen && (
+        <>
+          <Element>
+            <Caption2>{`CAN Bus ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
+            <Divider />
+            <Spacer>
+              <ToggleSwitch
+                backgroundColor={theme.colors.medium}
+                defaultColor={theme.colors.theme[themeColor].default}
+                activeColor={theme.colors.theme[themeColor].active}
+              >
+                <input
+                  type="checkbox"
+                  checked={canState}
+                  onChange={() => socket.can.emit('toggle')}
+                />
+                <span className="slider"></span>
+              </ToggleSwitch>
+            </Spacer>
+          </Element>
+          {interfaces.map((iface, i) => (
+            <Element key={i} style={{ paddingLeft: '5rem', boxSizing: 'border-box' }}>
+              <Caption2>{`${iface.channel} — ${iface.bitrate ? iface.bitrate / 1000 : '?'} kbps — ${iface.bustype}`}</Caption2>
+              <Divider />
+              <Spacer>
+                <Caption2
+                  style={{
+                    color: iface.enabled
+                      ? theme.colors.theme[themeColor].active
+                      : theme.colors.medium,
+                  }}
+                >
+                  {iface.enabled ? 'Enabled' : 'Disabled'}
+                </Caption2>
+              </Spacer>
+            </Element>
+          ))}
+        </>
+      )}
+      {/* Sensors — sortable flat list (collapsible) */}
       <CollapsibleHeader onClick={() => setSensorsOpen((o) => !o)}>
-        <Title>SENSORS</Title>
+        <Title>Diagnostic</Title>
         <Divider />
         <Chevron>{sensorsOpen ? '▼' : '▶'}</Chevron>
       </CollapsibleHeader>
@@ -280,23 +289,23 @@ const CanSettings = () => {
         <SensorTable>
           <thead>
             <tr>
-              <Th>NAME</Th>
-              <Th>UNIT</Th>
-              <Th>PARAMS</Th>
-              <Th>REQ ID</Th>
-              <Th>REP ID</Th>
-              <Th>PRIO</Th>
-              <Th></Th>
+              <Th sortable active={sortCol === 'label'} onClick={() => handleSort('label')}>
+                NAME{sortIndicator('label')}
+              </Th>
+              <Th sortable active={sortCol === 'unit'} onClick={() => handleSort('unit')}>
+                UNIT{sortIndicator('unit')}
+              </Th>
+              <Th sortable active={sortCol === 'priority'} onClick={() => handleSort('priority')}>
+                PRIO{sortIndicator('priority')}
+              </Th>
+              <Th style={{ width: '1%' }}></Th>
             </tr>
           </thead>
           <tbody>
-            {Object.entries(sensors).map(([key, sensor]) => (
+            {sortedSensors.map(([key, sensor]) => (
               <Tr key={key}>
                 <Td>{sensor.label}</Td>
                 <Td>{sensor.unit ?? '—'}</Td>
-                <Td>{sensor.parameter?.join(', ') ?? '—'}</Td>
-                <Td>{sensor.req_id}</Td>
-                <Td>{sensor.rep_id}</Td>
                 <Td>{sensor.priority}</Td>
                 <TdControl>{renderToggle(key, sensor)}</TdControl>
               </Tr>
@@ -305,91 +314,9 @@ const CanSettings = () => {
         </SensorTable>
       )}
 
-      {/* Sensors — grouped by target / rep_id (collapsible) */}
-      <CollapsibleHeader onClick={() => setByTargetOpen((o) => !o)}>
-        <Title>SENSORS BY TARGET</Title>
-        <Divider />
-        <Chevron>{byTargetOpen ? '▼' : '▶'}</Chevron>
-      </CollapsibleHeader>
-      {byTargetOpen && (
-        <SensorTable>
-          <thead>
-            <tr>
-              <Th>NAME</Th>
-              <Th>UNIT</Th>
-              <Th>PARAMS</Th>
-              <Th>REQ ID</Th>
-              <Th>PRIO</Th>
-              <Th></Th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(byTarget).map(([repId, entries]) => (
-              <Fragment key={repId}>
-                <GroupTr>
-                  <GroupTd colSpan={6}>{repId}</GroupTd>
-                </GroupTr>
-                {entries.map(([key, sensor]) => (
-                  <Tr key={`target-${key}`}>
-                    <Td>{sensor.label}</Td>
-                    <Td>{sensor.unit ?? '—'}</Td>
-                    <Td>{sensor.parameter?.join(', ') ?? '—'}</Td>
-                    <Td>{sensor.req_id}</Td>
-                    <Td>{sensor.priority}</Td>
-                    <TdControl>{renderToggle(key, sensor)}</TdControl>
-                  </Tr>
-                ))}
-              </Fragment>
-            ))}
-          </tbody>
-        </SensorTable>
-      )}
-
-      {/* Sensors — grouped by priority (collapsible) */}
-      <CollapsibleHeader onClick={() => setByPriorityOpen((o) => !o)}>
-        <Title>SENSORS BY PRIORITY</Title>
-        <Divider />
-        <Chevron>{byPriorityOpen ? '▼' : '▶'}</Chevron>
-      </CollapsibleHeader>
-      {byPriorityOpen && (
-        <SensorTable>
-          <thead>
-            <tr>
-              <Th>NAME</Th>
-              <Th>UNIT</Th>
-              <Th>PARAMS</Th>
-              <Th>REQ ID</Th>
-              <Th>REP ID</Th>
-              <Th></Th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(byPriority)
-              .sort(([a], [b]) => Number(a) - Number(b))
-              .map(([prio, entries]) => (
-                <Fragment key={prio}>
-                  <GroupTr>
-                    <GroupTd colSpan={6}>{`Priority ${prio}`}</GroupTd>
-                  </GroupTr>
-                  {entries.map(([key, sensor]) => (
-                    <Tr key={`prio-${key}`}>
-                      <Td>{sensor.label}</Td>
-                      <Td>{sensor.unit ?? '—'}</Td>
-                      <Td>{sensor.parameter?.join(', ') ?? '—'}</Td>
-                      <Td>{sensor.req_id}</Td>
-                      <Td>{sensor.rep_id}</Td>
-                      <TdControl>{renderToggle(key, sensor)}</TdControl>
-                    </Tr>
-                  ))}
-                </Fragment>
-              ))}
-          </tbody>
-        </SensorTable>
-      )}
-
       {/* Signal Sensors (collapsible) */}
       <CollapsibleHeader onClick={() => setSignalOpen((o) => !o)}>
-        <Title>SIGNAL SENSORS</Title>
+        <Title>Signals</Title>
         <Divider />
         <Chevron>{signalOpen ? '▼' : '▶'}</Chevron>
       </CollapsibleHeader>
@@ -402,7 +329,7 @@ const CanSettings = () => {
               <Th>CAN ID</Th>
               <Th>BYTE</Th>
               <Th>BIT</Th>
-              <Th></Th>
+              <Th style={{ width: '1%' }}></Th>
             </tr>
           </thead>
           <tbody>
