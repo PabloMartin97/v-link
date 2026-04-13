@@ -401,7 +401,7 @@
                 "0x12",
                 "0xCB"
             ],
-            "app_id": "rac",
+            "app_id": "det",
             "req_id": "0x000FFFFE",
             "rep_id": "0x00400021",
             "action": "0xA6",
