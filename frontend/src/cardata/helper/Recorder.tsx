@@ -17,7 +17,7 @@ const Recorder: React.FC<RecorderProps> = ({ data, resolution, recording, settin
     // Dynamically generate datasets for all the keys in data object
     const datasets = Object.keys(data).map((sensorLabel) => {
         const config = modules['sensorType']?.(settings); // Retrieve the configuration for each sensor type if needed
-        
+
         return {
             label: sensorLabel, // Use the key as the label (or map it to a human-readable label if desired)
             sensorLabel, // Same as key, it's the identifier for the data
@@ -75,19 +75,31 @@ const Recorder: React.FC<RecorderProps> = ({ data, resolution, recording, settin
         const date = new Date();
         const timestamp = date.toISOString().replace(/[-:T.]/g, '_');
 
-        // Use the ref value for recordedData to export the latest data
-        const exportObj = Object.keys(recordedDataRef.current).map((label) => {
-            return {
-                label,
-                data: recordedDataRef.current[label]?.map((entry) => ({
-                    timestamp: entry.timestamp,
-                    value: entry.value,
-                })) || [],
-            };
+        const data = recordedDataRef.current;
+        const labels = Object.keys(data);
+
+        if (labels.length === 0) return;
+
+        // Collect all unique timestamps across all sensors
+        const allTimestamps = Array.from(
+            new Set(labels.flatMap(label => data[label].map(e => e.timestamp)))
+        ).sort();
+
+        // Build CSV header row
+        const header = ['timestamp', ...labels].join(',');
+
+        // Build each data row
+        const rows = allTimestamps.map(ts => {
+            const values = labels.map(label => {
+                const entry = data[label].find(e => e.timestamp === ts);
+                return entry !== undefined ? entry.value : '';
+            });
+            return [ts, ...values].join(',');
         });
 
-        const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
-        saveAs(blob, `V-Link_Recording_${timestamp}.json`);
+        const csv = [header, ...rows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        saveAs(blob, `V-Link_Recording_${timestamp}.csv`);
     };
 
     return null;
