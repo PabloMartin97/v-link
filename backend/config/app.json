@@ -67,6 +67,10 @@
     "exitToDash": {
       "value": false,
       "label": "Exit CarPlay to Dashboard"
+    },
+    "autoSave": {
+      "label": "Auto Save",
+      "value": false
     }
   },
   "shutdown": {
@@ -350,22 +354,22 @@
     "value_5": {
       "type": "",
       "value": "",
-      "label": "Value 4"
+      "label": "Value 5"
     },
     "value_6": {
       "type": "",
       "value": "",
-      "label": "Value 4"
+      "label": "Value 6"
     },
     "value_7": {
       "type": "",
       "value": "",
-      "label": "Value 4"
+      "label": "Value 7"
     },
     "value_8": {
       "type": "",
       "value": "",
-      "label": "Value 4"
+      "label": "Value 8"
     }
   },
   "dash_topbar": {
@@ -456,7 +460,6 @@
   "dongle_config": {
     "title": "Dongle Configuration",
     "type": "system",
-
     "fps": {
       "value": 60,
       "label": "Frames per Second",

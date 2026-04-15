@@ -7,19 +7,19 @@ import { Typography } from '@/theme/styles/Typography';
 import { Link, Button } from '@/theme/styles/Inputs';
 import { IconMedium } from '@/theme/styles/Icons';
 
-import {openModal, closeModal} from '@/app/components/Modal';
+import { openModal, closeModal } from '@/app/components/Modal';
 
 type SideBarsSettings = { sideBarWidth: { value: number } };
 
 interface SidebarProps {
-  currentView: string;
-  minWidth: number;
-  maxWidth: number;
-  collapseLength: number;
+    currentView: string;
+    minWidth: number;
+    maxWidth: number;
+    collapseLength: number;
 }
 
 interface SideBarProps {
-  collapseLength: number;
+    collapseLength: number;
 }
 
 const Sidebar = styled.div<SidebarProps>`
@@ -60,13 +60,13 @@ const Menu = styled.div`
 
 const SideBar = ({ collapseLength }: SideBarProps) => {
 
-    const view          = APP((state) => state.system.view)
-    const settingPage   = APP((state) => state.system.settingPage)
-    const appUpdate     = APP((state) => state.update)
+    const view = APP((state) => state.system.view)
+    const settingPage = APP((state) => state.system.settingPage)
+    const appUpdate = APP((state) => state.update)
     const versionNumber = APP((state) => state.system.version)
-    const sideBarWidth  = APP((state) => (state.settings.side_bars as SideBarsSettings | undefined)?.sideBarWidth?.value ?? 0);
-    const canEnabled    = APP((state) => (state.settings as any)?.constants?.modules?.can);
-    const themeColor    = useThemeColor();
+    const sideBarWidth = APP((state) => (state.settings.side_bars as SideBarsSettings | undefined)?.sideBarWidth?.value ?? 0);
+    const canEnabled = APP((state) => (state.settings as any)?.constants?.modules?.can);
+    const themeColor = useThemeColor();
 
     const theme = useTheme();
 
@@ -88,6 +88,13 @@ const SideBar = ({ collapseLength }: SideBarProps) => {
         setCurrentTab(settingPage)
     }, [settingPage])
 
+    useEffect(() => {
+        if (view !== 'Settings') {
+            appUpdate((state) => {
+                state.system.settingPage = 'general';
+            });
+        }
+    }, [view]);
 
     return (
         <Sidebar

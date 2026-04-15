@@ -84,7 +84,7 @@
             "unit": "°C",
             "min_value": 0,
             "max_value": 150,
-            "limit_start": 100
+            "limit_start": 115
         },
         "voltage": {
             "interface": "can2",
@@ -391,7 +391,7 @@
             "unit": "%",
             "min_value": 0,
             "max_value": 300,
-            "limit_start": 300
+            "limit_start": 250
         },
         "desiredenginetorque": {
             "interface": "can2",

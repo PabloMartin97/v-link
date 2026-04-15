@@ -206,7 +206,14 @@ const Settings = () => {
   });
 
   /* Add Settings */
+  const autoSave = (currentSettings?.general as Record<string, SettingContent>)?.autoSave?.value as boolean ?? false;
+
   const scheduleSave = (nextSettings: AppSettings) => {
+    if (!autoSave) {
+      setSave(false);
+      return;
+    }
+
     setSave(false);
     pendingSettingsRef.current = nextSettings;
 
@@ -498,22 +505,26 @@ const Settings = () => {
 
 
       const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value, type } = event.target;                              // Grab info from the handler
+        const { name, value, type } = event.target;
         const checked = (event.target as HTMLInputElement).checked;
-        const newValue = type === 'checkbox' ? checked :                          // Check if type is a boolean
-          type === 'number' ? Number(value) : value;               // Check if type is a number
+        const newValue = type === 'checkbox' ? checked
+          : type === 'number' ? Number(value) : value;
 
+        // Don't try to resolve a data store for text fields — always treat as plain app setting
         let selectStore: string;
+        if (isText || isBoolean || typeof content.value === 'number') {
+          selectStore = "app";
+        } else {
+          selectStore = (Object.keys(dataOptions).length > 1 && dataOptions[newValue as string])
+            ? dataOptions[newValue as string]
+            : "app";
+        }
 
-        selectStore = (Object.keys(dataOptions).length > 1 && dataOptions[newValue as string])
-          ? dataOptions[newValue as string]
-          : "app";
-
-        const targetSetting = isBoolean ? checked : newValue;                    // Handle targetSetting based on type
+        const targetSetting = isBoolean ? checked : newValue;
         if (key === 'auto_backlight' && setting === 'autoOpen') {
           socket.app.emit('backlight:update', { auto_enabled: targetSetting });
         }
-        handleSettingChange(selectStore, key, name, targetSetting, settingsObj);     // Execute change of settings
+        handleSettingChange(selectStore, key, name, targetSetting, settingsObj);
       };
 
 
@@ -717,6 +728,8 @@ const Settings = () => {
                 <Button onClick={() => { handleRemoveSetting("dash_charts", currentSettings) }} style={{ justifyContent: 'center' }}> - </Button>
               </Spacer>
             </Element>
+
+            {renderSetting("dash_simple", currentSettings)}
             <p />
           </>
         }
@@ -730,7 +743,7 @@ const Settings = () => {
 
         {/* TODO Fix box name showing CAN sensor config */}
         {settingPage === 'dongle' &&
-          <> 
+          <>
             {renderSetting("dongle_config", currentSettings)}
           </>
         }
@@ -783,7 +796,7 @@ const Settings = () => {
 
         {settingPage === 'rearcam' &&
           <>
-           {renderSetting("reverseCam", currentSettings)}
+            {renderSetting("reverseCam", currentSettings)}
             <p />
           </>
         }
@@ -796,9 +809,11 @@ const Settings = () => {
         }
 
       </ScrollContainer>
-      <Button onClick={() => { saveSettings() }}>
-        {save ? 'All Settings saved.' : 'Save Settings'}
-      </Button>
+      {!autoSave && (
+        <Button onClick={() => { saveSettings() }}>
+          {save ? 'All Settings saved.' : 'Save Settings'}
+        </Button>
+      )}
     </Container>
   )
 };
