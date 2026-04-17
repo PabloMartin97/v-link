@@ -55,6 +55,18 @@ const NavButton = styled.button`
     &:hover {
         cursor: pointer;
     }
+
+    /* Extend the clickable area of the button */
+    &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+
+    top: -1.5rem; 
+    bottom: -1.5rem;
+
+  }
 `;
 
 const Indicator = styled.div<IndicatorProps>`
@@ -82,6 +94,18 @@ const Blob = styled.div<BlobProps>`
 
     /* Add transition for background color change */
     transition: background 0.4s ease-in-out;
+
+    /* REQUIRED: Set position relative so the hitbox stays attached to the blob */
+    position: relative;
+
+    /* Extend the clickable area of the button */
+    &::before {
+      content: '';
+      position: absolute;
+
+      top: -2rem;
+      bottom: -2rem;
+    }
 `;
 
 

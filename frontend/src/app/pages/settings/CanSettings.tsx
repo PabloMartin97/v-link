@@ -228,6 +228,18 @@ const CanSettings = () => {
     </ToggleSwitch>
   );
 
+  const renderStatus = (enabled: boolean) => (
+  <Caption2
+    style={{
+      color: enabled
+        ? theme.colors.theme[themeColor].active
+        : theme.colors.medium,
+    }}
+  >
+    {enabled ? 'Enabled' : 'Disabled'}
+  </Caption2>
+);
+
   return (
     <>
       {/* Module state toggle */}
@@ -303,7 +315,8 @@ const CanSettings = () => {
                 <Td>{sensor.label}</Td>
                 <Td>{sensor.unit ?? '—'}</Td>
                 <Td>{sensor.priority}</Td>
-                <TdControl>{renderToggle(key, sensor)}</TdControl>
+                {/*<TdControl>{renderToggle(key, sensor)}</TdControl>*/}
+                <TdControl>{renderStatus(sensor.enabled)}</TdControl>
               </Tr>
             ))}
           </tbody>
@@ -336,7 +349,7 @@ const CanSettings = () => {
                 <Td>{signal.can_id}</Td>
                 <Td>{signal.byte_index}</Td>
                 <Td>{signal.bit_index}</Td>
-                <TdControl>
+                {/*<TdControl>
                   <ToggleSwitch
                     backgroundColor={theme.colors.medium}
                     defaultColor={theme.colors.theme[themeColor].default}
@@ -349,7 +362,8 @@ const CanSettings = () => {
                     />
                     <span className="slider"></span>
                   </ToggleSwitch>
-                </TdControl>
+                </TdControl>*/}
+                <TdControl>{renderStatus(signal.enabled)}</TdControl>
               </Tr>
             ))}
           </tbody>
