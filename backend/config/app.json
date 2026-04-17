@@ -481,6 +481,7 @@
       "label": "iBox Version"
     },
     "boxName": {
+      "type": "text",
       "value": "CarPlay",
       "label": "Box Name"
     },
