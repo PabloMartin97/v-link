@@ -8,7 +8,7 @@ import { ToggleSwitch, Select, Input, Button } from '@/theme/styles/Inputs';
 import CustomSlider from '@/app/components/CustomSlider';
 import { Typography } from '@/theme/styles/Typography';
 
-import { APP, ModuleState, useThemeColor } from '@/store/Store';
+import { APP, CAN, ModuleState, useThemeColor } from '@/store/Store';
 import { openModal } from '@/app/components/Modal';
 
 import { useNamespaces } from '@/socket/Namespaces';
@@ -120,6 +120,9 @@ const Settings = () => {
   const adcState = APP((state) => state.system.adcState);
   const swcState = APP((state) => state.system.swcState);
 
+  const canSettings = CAN((state) => state.settings);
+  const prevCanSettingsRef = useRef(canSettings);
+
   const theme = useTheme();
   const rangeWidth = Number(theme.interaction.buttonWidth) * 2;
 
@@ -195,13 +198,33 @@ const Settings = () => {
   }, [reset, settings]);
 
 
+  useEffect(() => {
+    if (prevCanSettingsRef.current === canSettings) return;
+    prevCanSettingsRef.current = canSettings;
+    setSave(false);
+    if (autoSave) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        socket.can.emit('save', canSettings);
+      }, SAVE_DEBOUNCE_MS);
+    }
+  }, [canSettings]);
+
+
   /* Create combined data store for dropdown */
   const dataStores: DataStoreMap = {};
   Object.entries(modules).map(([key, module]) => {
     const currentModule = (module as ModuleSelectorFn)((state) => state);
-    const moduleSettings = currentModule.settings as Record<string, unknown> & { type?: string; sensors?: Record<string, { label: string }> };
+    const moduleSettings = currentModule.settings as Record<string, unknown> & {
+      type?: string;
+      sensors?: Record<string, { label: string; enabled?: boolean }>
+    };
     if (moduleSettings.type && moduleSettings.type === 'data') {
-      Object.assign(dataStores, { [key]: moduleSettings.sensors })
+      const activeSensors = Object.fromEntries(
+        Object.entries(moduleSettings.sensors ?? {})
+          .filter(([, sensor]) => sensor.enabled !== false)
+      );
+      Object.assign(dataStores, { [key]: activeSensors });
     }
   });
 
@@ -301,16 +324,53 @@ const Settings = () => {
     scheduleSave(newSettings);
   };
 
+  // Clean Dashboard Entries when sensors are removed to prevent ghost entries and crashes
+  function cleanDashboardEntries(settingsToClean: AppSettings, activeSensorKeys: Set<string>): { cleaned: AppSettings; didClean: boolean } {
+    const cleaned = structuredClone(settingsToClean) as AppSettings;
+    const dashKeys = ['dash_charts', 'dash_classic', 'dash_race', 'dash_simple', 'dash_topbar'];
+    let didClean = false;
+
+    dashKeys.forEach((dashKey) => {
+      const block = cleaned[dashKey] as Record<string, SettingContent> | undefined;
+      if (!block) return;
+      Object.entries(block).forEach(([entryKey, entry]) => {
+        if (
+          entry?.value &&
+          typeof entry.value === 'string' &&
+          entry.value !== '' &&
+          typeof entry.type === 'string' &&
+          entry.type !== '' &&
+          entry.type !== 'text' &&
+          !activeSensorKeys.has(entry.value)
+        ) {
+          block[entryKey] = { ...entry, value: '', type: '' };
+          didClean = true;
+        }
+      });
+    });
+
+    return { cleaned, didClean };
+  }
+
   // Save Settings
   function saveSettings(settingsToSave: AppSettings = currentSettings) {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setSave(true);
+
+    const activeSensorKeys = new Set(
+      Object.values(dataStores).flatMap((store) => Object.keys(store))
+    );
+
+    const { cleaned, didClean } = cleanDashboardEntries(settingsToSave, activeSensorKeys);
+
+    if (didClean) {
+      setCurrentSettings(cleaned);
+      pendingSettingsRef.current = cleaned;
     }
-    setSave(true)
-    appUpdate((state) => {
-      state.settings = settingsToSave;
-    });
-    socket.app.emit("save", settingsToSave);
+
+    appUpdate((state) => { state.settings = cleaned; });
+    socket.app.emit('save', cleaned);
+    socket.can.emit('save', canSettings);
   }
 
   // System Tasks
@@ -582,7 +642,7 @@ const Settings = () => {
                 onChange={handleChange}
                 value={value as string}
               >
-                <option value="" disabled>
+                <option value="">
                   N/A
                 </option>
                 {dropdown.map((option) => {
@@ -664,52 +724,6 @@ const Settings = () => {
             {renderSetting("general", currentSettings)}
             {renderSetting("shutdown", currentSettings)}
             {renderSetting("side_bars", currentSettings)}
-            <Element>
-              <Title>Toggle Modules</Title>
-            </Element>
-
-            {settings.constants.modules.can &&
-              <Element>
-                <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
-                <Divider />
-                <ToggleSwitch
-                  backgroundColor={theme.colors.medium}
-                  defaultColor={theme.colors.theme[themeColor].default}
-                  activeColor={theme.colors.theme[themeColor].active}>
-                  <input type="checkbox" checked={canState} onChange={() => { handleIO("can", socket.can) }} />
-                  <span className="slider"></span>
-                </ToggleSwitch>
-              </Element>
-            }
-
-            {settings.constants.modules.adc &&
-              <Element>
-                <Caption2>{`ADC ${adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
-                <Divider />
-                <ToggleSwitch
-                  backgroundColor={theme.colors.medium}
-                  defaultColor={theme.colors.theme[themeColor].default}
-                  activeColor={theme.colors.theme[themeColor].active}>
-                  <input type="checkbox" checked={adcState} onChange={() => { handleIO("adc", socket.adc) }} disabled={!settings.constants.modules.adc} />
-                  <span className="slider"></span>
-                </ToggleSwitch>
-              </Element>
-            }
-
-            {settings.constants.modules.swc &&
-              <Element>
-                <Caption2>{`SWC ${swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
-                <Divider />
-                <ToggleSwitch
-                  backgroundColor={theme.colors.medium}
-                  defaultColor={theme.colors.theme[themeColor].default}
-                  activeColor={theme.colors.theme[themeColor].active}>
-                  <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} disabled={!settings.constants.modules.swc} />
-                  <span className="slider"></span>
-                </ToggleSwitch>
-              </Element>
-            }
-            <p />
           </>
         }
 
@@ -803,6 +817,56 @@ const Settings = () => {
 
         {settingPage === 'interface' &&
           <>
+            <Element>
+              <Title>Modules</Title>
+            </Element>
+
+            {settings.constants.modules.can &&
+              <Element>
+                <Caption2>{`CAN ${canState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={canState} onChange={() => { handleIO("can", socket.can) }} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
+
+            {settings.constants.modules.adc &&
+              <Element>
+                <Caption2>{`ADC ${adcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={adcState} onChange={() => { handleIO("adc", socket.adc) }} disabled={!settings.constants.modules.adc} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
+
+            {settings.constants.modules.swc &&
+              <Element>
+                <Caption2>{`SWC ${swcState ? '(Active)' : '(Inactive)'}`}</Caption2>
+                <Divider />
+                <ToggleSwitch
+                  backgroundColor={theme.colors.medium}
+                  defaultColor={theme.colors.theme[themeColor].default}
+                  activeColor={theme.colors.theme[themeColor].active}>
+                  <input type="checkbox" checked={swcState} onChange={() => { handleIO("swc", socket.swc) }} disabled={!settings.constants.modules.swc} />
+                  <span className="slider"></span>
+                </ToggleSwitch>
+              </Element>
+            }
+            <p />
+
+            <Element>
+              <Title>Sensors</Title>
+            </Element>
             <CanSettings />
             <p />
           </>

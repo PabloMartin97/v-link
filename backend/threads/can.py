@@ -312,18 +312,33 @@ class CANScheduler(threading.Thread):
                     self.logger.error(f'[CAN] Error adding sensor "{sensor["key"]}" with priority "{prio}"')
 
         # Keep track of the last sent sensor for each priority (round robin)
-        self.rotation = {
-            1: 0,
-            2: 0,
-            3: 0
-            }
+        self.rotation = {1: 0, 2: 0, 3: 0}
 
-        # Token generator for smooth weighted scheduling
-        self.token_stream = self.token_generator({
-            1: 6,
-            2: 3,
-            3: 1
-            })
+        # Base ratios: how many times each priority polls relative to prio 3
+        BASE_WEIGHTS = {1: 6, 2: 3, 3: 1}
+
+        # Scale by sensor count so every sensor in a group gets its fair share.
+        # A group with N sensors needs N tokens just to poll each sensor once,
+        # multiplied by the base weight to maintain the inter-priority ratio.
+
+        dynamic_weights = {
+            prio: BASE_WEIGHTS[prio]  # Don't scale by count — rotation handles fairness within group
+            for prio in (1, 2, 3) if self.prio_sensors.get(prio)
+        }
+
+        # Drop empty groups entirely so they don't waste tokens
+        dynamic_weights = {
+            prio: w for prio, w in dynamic_weights.items()
+            if self.prio_sensors.get(prio)
+        }
+
+        self.logger.info(
+            f'[CAN] Scheduler weights — '
+            + ', '.join(f'P{p}: {w} tokens ({len(self.prio_sensors[p])} sensors)'
+                        for p, w in dynamic_weights.items())
+        )
+
+        self.token_stream = self.token_generator(dynamic_weights)
         
     def run(self):
         self.logger.info('[CAN] Message Scheduler started.')
@@ -413,8 +428,8 @@ class CANListener(can.Listener):
 
     def on_message_received(self, msg):
         try:
+            data = list(msg.data)
             for sensor in self.sensors_by_id.get(msg.arbitration_id, []):
-                data = list(msg.data)
                 if shared_state.verbose:
                     message_hex = ' '.join(f'{byte:02X}' for byte in data)
                     #self.logger.debug(f'Parsing message: {message_hex}')

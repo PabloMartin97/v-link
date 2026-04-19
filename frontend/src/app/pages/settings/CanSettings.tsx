@@ -101,6 +101,29 @@ const SensorTable = styled.table`
   margin-bottom: 16px;
 `;
 
+const PrioritySelect = styled.select`
+  background: transparent;
+  border: 1px solid ${({ theme }) => theme.colors.dark};
+  border-radius: 4px;
+  color: ${({ theme }) => theme.colors.light};
+  font-family: ${({ theme }) => theme.typography.caption1.fontFamily};
+  font-size: ${({ theme }) => theme.typography.caption1.fontSize};
+  padding: 2px 4px;
+  cursor: pointer;
+  outline: none;
+  width: 44px;
+  text-align: center;
+
+  &:focus {
+    border-color: ${({ theme }) => theme.colors.medium};
+  }
+
+  option {
+    background: ${({ theme }) => theme.colors.dark};
+    color: ${({ theme }) => theme.colors.light};
+  }
+`;
+
 const Th = styled.th<{ sortable?: boolean; active?: boolean }>`
   color: ${({ theme, active }) => active ? theme.colors.light : theme.colors.medium};
   font-family: ${({ theme }) => theme.typography.caption2.fontFamily};
@@ -177,14 +200,20 @@ const CanSettings = () => {
     const updated = structuredClone(canSettings);
     updated.sensors[sensorKey].enabled = !updated.sensors[sensorKey].enabled;
     canUpdate((state) => { state.settings = updated as unknown as Record<string, unknown>; });
-    socket.can.emit('save', updated);
+    // No socket.can.emit here anymore
+  };
+
+  const changePriority = (sensorKey: string, priority: number) => {
+    const updated = structuredClone(canSettings);
+    updated.sensors[sensorKey].priority = priority;
+    canUpdate((state) => { state.settings = updated as unknown as Record<string, unknown>; });
   };
 
   const toggleSignalSensor = (index: number) => {
     const updated = structuredClone(canSettings);
     updated.signal_sensors[index].enabled = !updated.signal_sensors[index].enabled;
     canUpdate((state) => { state.settings = updated as unknown as Record<string, unknown>; });
-    socket.can.emit('save', updated);
+    // No socket.can.emit here anymore
   };
 
   const handleSort = (col: SortCol) => {
@@ -229,20 +258,21 @@ const CanSettings = () => {
   );
 
   const renderStatus = (enabled: boolean) => (
-  <Caption2
-    style={{
-      color: enabled
-        ? theme.colors.theme[themeColor].active
-        : theme.colors.medium,
-    }}
-  >
-    {enabled ? 'Enabled' : 'Disabled'}
-  </Caption2>
-);
+    <Caption2
+      style={{
+        color: enabled
+          ? theme.colors.theme[themeColor].active
+          : theme.colors.medium,
+      }}
+    >
+      {enabled ? 'Enabled' : 'Disabled'}
+    </Caption2>
+  );
 
   return (
     <>
       {/* Module state toggle */}
+      {/*
       <CollapsibleHeader onClick={() => setModulesOpen((o) => !o)}>
         <Title>Modules</Title>
         <Divider />
@@ -287,6 +317,7 @@ const CanSettings = () => {
           ))}
         </>
       )}
+        */}
       {/* Sensors — sortable flat list (collapsible) */}
       <CollapsibleHeader onClick={() => setSensorsOpen((o) => !o)}>
         <Title>Diagnostic</Title>
@@ -314,9 +345,18 @@ const CanSettings = () => {
               <Tr key={key}>
                 <Td>{sensor.label}</Td>
                 <Td>{sensor.unit ?? '—'}</Td>
-                <Td>{sensor.priority}</Td>
-                {/*<TdControl>{renderToggle(key, sensor)}</TdControl>*/}
-                <TdControl>{renderStatus(sensor.enabled)}</TdControl>
+                <Td>
+                  <PrioritySelect
+                    value={sensor.priority}
+                    onChange={(e) => changePriority(key, Number(e.target.value))}
+                  >
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                  </PrioritySelect>
+                </Td>
+                <TdControl>{renderToggle(key, sensor)}</TdControl>
+                {/*<TdControl>{renderStatus(sensor.enabled)}</TdControl>*/}
               </Tr>
             ))}
           </tbody>
@@ -349,7 +389,7 @@ const CanSettings = () => {
                 <Td>{signal.can_id}</Td>
                 <Td>{signal.byte_index}</Td>
                 <Td>{signal.bit_index}</Td>
-                {/*<TdControl>
+                <TdControl>
                   <ToggleSwitch
                     backgroundColor={theme.colors.medium}
                     defaultColor={theme.colors.theme[themeColor].default}
@@ -362,8 +402,8 @@ const CanSettings = () => {
                     />
                     <span className="slider"></span>
                   </ToggleSwitch>
-                </TdControl>*/}
-                <TdControl>{renderStatus(signal.enabled)}</TdControl>
+                </TdControl>
+                {/*<TdControl>{renderStatus(signal.enabled)}</TdControl>*/}
               </Tr>
             ))}
           </tbody>
