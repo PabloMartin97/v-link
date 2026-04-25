@@ -1,7 +1,8 @@
 import threading
 import time
 import can
-import random
+
+from collections import deque
 
 from .. import settings
 from ..shared.shared_state import shared_state
@@ -134,9 +135,9 @@ class CANThread(threading.Thread):
 
         self.config = Config(logger)
 
-        self.can_buses = {}         # can interfaces
-        self.notifiers = {}         # can filters (using a callback)
-        self.broadcast_tasks = []   # scheduled tasks to send can messages
+        self.can_buses = {}
+        self.notifiers = {}
+        self.broadcast_tasks = []
 
         
     def run(self):
@@ -148,23 +149,23 @@ class CANThread(threading.Thread):
         except KeyboardInterrupt:
             pass
 
-    # Initialize CAN interface and load configurations
     def initialize_can(self):
         interfaces_to_process = []
 
         if shared_state.vCan:
             self.logger.debug('[CAN] vCAN mode is enabled. Overriding CAN settings to use vcan0.')
             all_sensors = [sensor for sensor_list in self.config.sensors.values() for sensor in sensor_list]
-            all_signal_sensors = [ sensor for sensor_list in self.config.signal_sensors.values() for sensor in sensor_list ]
+            all_signal_sensors = [sensor for sensor_list in self.config.signal_sensors.values() for sensor in sensor_list]
             
             if all_sensors or all_signal_sensors:
                 interfaces_to_process.append({
                     'channel': 'vcan0',
                     'bustype': 'socketcan',
                     'bitrate': 500000,
-                    'is_extended': True,  # Assume extended for debugging simplicity
+                    'is_extended': True,
                     'sensors': all_sensors,
                     'signal_sensors': all_signal_sensors,
+                    'wait_for_ecu': False,
                 })
         else:
             for interface in self.config.interfaces:
@@ -180,14 +181,15 @@ class CANThread(threading.Thread):
                         'is_extended': interface['is_extended'],
                         'sensors': sensors_for_channel,
                         'signal_sensors': signal_sensors_for_channel,
+                        'wait_for_ecu': interface['wait_for_ecu'],
                     })
 
-        # --- Unified Initialization Loop ---
         for iface_cfg in interfaces_to_process:
             channel = iface_cfg['channel']
             sensors = iface_cfg['sensors']
             signal_sensors = iface_cfg.get('signal_sensors', [])
             is_extended = iface_cfg['is_extended']
+            wait_for_ecu = iface_cfg['wait_for_ecu']
 
             try:
                 bus = can.interface.Bus(
@@ -197,12 +199,10 @@ class CANThread(threading.Thread):
                 )
                 self.can_buses[channel] = bus
 
-                # Gather all reply IDs for filtering
-                rep_ids = {s['rep_id'][0] for s in sensors} # TODO double check [0]
+                rep_ids = {s['rep_id'][0] for s in sensors}
                 signal_ids = {s['can_id'] for s in signal_sensors}
                 filter_ids = rep_ids | signal_ids
             
-                # Apply filters
                 if filter_ids:
                     filters = [
                         {
@@ -217,10 +217,9 @@ class CANThread(threading.Thread):
 
                 self.logger.info(f'[CAN] Initialized {bus}')
 
-                # Group sensors by reply ID for listeners
                 sensors_by_id = {}
                 for sensor in sensors:
-                    rep_id = sensor['rep_id'][0] # TODO doublecheck [0]
+                    rep_id = sensor['rep_id'][0]
                     sensors_by_id.setdefault(rep_id, []).append(sensor)
 
                 signal_sensors_by_id = {}
@@ -228,32 +227,33 @@ class CANThread(threading.Thread):
                     can_id = signal_sensor['can_id']
                     signal_sensors_by_id.setdefault(can_id, []).append(signal_sensor)
 
-                # Start Scheduler only if there are sensors to request
-                canScheduler = None
-                if sensors:
-                    canScheduler = CANScheduler(sensors_by_id, bus, is_extended, self.logger, wait_for_ecu=any(i.get('wait_for_ecu') for i in self.config.interfaces if i['channel'] == channel))
-                    self.broadcast_tasks.append(canScheduler)
-                    canScheduler.start()
+                reply_event = threading.Event()
 
-                # Setup Listeners
-                listeners = []
-                if sensors or signal_sensors:
-                    listeners.append(
-                        CANListener(
-                            sensors_by_id,
-                            signal_sensors_by_id,
-                            self.logger,
-                            canScheduler.events if canScheduler else None
-                        )
+                if sensors:
+                    canScheduler = CANScheduler(
+                        sensors,
+                        bus,
+                        is_extended,
+                        self.logger,
+                        reply_event=reply_event if wait_for_ecu else None,
+                        wait_for_ecu=wait_for_ecu,
                     )
-                
-                if listeners:
-                    notifier = can.Notifier(bus, listeners)
-                    self.notifiers[channel] = notifier
+                    self.broadcast_tasks.append(canScheduler)
+
+                listener = CANListener(
+                    sensors_by_id,
+                    signal_sensors_by_id,
+                    self.logger,
+                    reply_event=reply_event if wait_for_ecu else None,
+                )
+                notifier = can.Notifier(bus, [listener])
+                self.notifiers[channel] = notifier
+
+                if sensors:
+                    canScheduler.start()
 
             except Exception as e:
                 self.logger.error(f'[CAN] Failed to initialize CAN interface "{channel}": {e}')
-
 
 
     def stop_thread(self):
@@ -272,12 +272,30 @@ class CANThread(threading.Thread):
             bus.shutdown()
 
 
-#############################################################
-# CAN Scheduler - Sending out scheduled messages to network #
-#############################################################
+def build_poll_cycle(sensors: list[dict]) -> list[dict]:
+    WEIGHT = {1: 6, 2: 3, 3: 1}
+
+    credits = {s['key']: WEIGHT.get(s['priority'], 1) for s in sensors}
+    weights = {s['key']: WEIGHT.get(s['priority'], 1) for s in sensors}
+    sensor_map = {s['key']: s for s in sensors}
+
+    total_slots = sum(weights.values())
+    cycle = []
+
+    for _ in range(total_slots):
+        winner_key = max(credits, key=lambda k: (credits[k], k))
+        cycle.append(sensor_map[winner_key])
+        credits[winner_key] -= total_slots
+        for k in credits:
+            credits[k] += weights[k]
+
+    return cycle
+
 
 class CANScheduler(threading.Thread):
-    def __init__(self, sensors_config, can_bus, is_extended, logger, wait_for_ecu=False):
+    REPLY_TIMEOUT = 0.1
+
+    def __init__(self, sensors, can_bus, is_extended, logger, reply_event=None, wait_for_ecu=False):
         super().__init__()
         self.daemon = True
         self.logger = logger
@@ -285,154 +303,84 @@ class CANScheduler(threading.Thread):
         self.is_extended = is_extended
         self._stop_event = threading.Event()
         self.wait_for_ecu = wait_for_ecu
+        self.reply_event = reply_event
 
-        self.interval = 0.01  # 100Hz tick, one message every 10ms
-        self.events = {}
-
-        # Initialize events for all reply IDs if wait_for_ecu is enabled
-        if self.wait_for_ecu:
-            for device_id, sensor_list in sensors_config.items():
-                for sensor in sensor_list:
-                    if sensor['type'] != 'internal':
-                        rep_id = sensor['rep_id'][0]
-                        self.events.setdefault(rep_id, threading.Event())
-
-        # Group sensors by priority (1 = highest, 3 = lowest)
-        self.prio_sensors = {1: [], 2: [], 3: []}
-
-        for device_id, sensor_list in sensors_config.items():
-            for sensor in sensor_list:
-                try:
-                    if sensor['type'] == 'internal':
-                        continue
-
-                    prio = sensor.get('priority', 2)
-                    self.prio_sensors.setdefault(prio, []).append(sensor)
-                except Exception as e:
-                    self.logger.error(f'[CAN] Error adding sensor "{sensor["key"]}" with priority "{prio}"')
-
-        # Keep track of the last sent sensor for each priority (round robin)
-        self.rotation = {1: 0, 2: 0, 3: 0}
-
-        # Base ratios: how many times each priority polls relative to prio 3
-        BASE_WEIGHTS = {1: 6, 2: 3, 3: 1}
-
-        # Scale by sensor count so every sensor in a group gets its fair share.
-        # A group with N sensors needs N tokens just to poll each sensor once,
-        # multiplied by the base weight to maintain the inter-priority ratio.
-
-        dynamic_weights = {
-            prio: BASE_WEIGHTS[prio]  # Don't scale by count — rotation handles fairness within group
-            for prio in (1, 2, 3) if self.prio_sensors.get(prio)
-        }
-
-        # Drop empty groups entirely so they don't waste tokens
-        dynamic_weights = {
-            prio: w for prio, w in dynamic_weights.items()
-            if self.prio_sensors.get(prio)
-        }
+        self.poll_cycle = build_poll_cycle(sensors)
+        self.cycle_length = len(self.poll_cycle)
 
         self.logger.info(
-            f'[CAN] Scheduler weights — '
-            + ', '.join(f'P{p}: {w} tokens ({len(self.prio_sensors[p])} sensors)'
-                        for p, w in dynamic_weights.items())
+            f'[CAN] Scheduler cycle: {self.cycle_length} slots — '
+            + ', '.join(
+                f'{s["label"]} (P{s["priority"]})'
+                for s in self.poll_cycle
+            )
         )
 
-        self.token_stream = self.token_generator(dynamic_weights)
-        
     def run(self):
         self.logger.info('[CAN] Message Scheduler started.')
+        index = 0
+
         while not self._stop_event.is_set():
-            # Get next token from pool (i.e. priority)
-            token = next(self.token_stream)
+            sensor = self.poll_cycle[index % self.cycle_length]
+            index += 1
 
-            if self.prio_sensors[token]:
-                #Select next sensor based on the token
-                sensor = self.return_sensor(token)
+            try:
+                msg = can.Message(
+                    arbitration_id=sensor['req_id'][0],
+                    data=bytes(sensor['message_bytes']),
+                    is_extended_id=self.is_extended
+                )
 
-                try:
-                    # Construct message
-                    msg = can.Message(
-                        arbitration_id=sensor['req_id'][0],
-                        data=bytes(sensor['message_bytes']),
-                        is_extended_id=self.is_extended
-                    )
+                if self.wait_for_ecu and self.reply_event:
+                    self.reply_event.clear()
 
-                    rep_id = sensor['rep_id'][0]
-                    evt = None
+                self.can_bus.send(msg)
 
-                    if self.wait_for_ecu:
-                        evt = self.events.get(rep_id)
-                        if evt:
-                            evt.clear()
+                if self.wait_for_ecu and self.reply_event:
+                    replied = self.reply_event.wait(timeout=self.REPLY_TIMEOUT)
+                    if not replied:
+                        self.logger.warning(f'[CAN] No reply for "{sensor["label"]}" within {self.REPLY_TIMEOUT * 1000:.0f}ms, moving on.')
 
-                    self.can_bus.send(msg)
-
-                    if self.wait_for_ecu and evt:
-                        if not evt.wait(timeout=1.0):
-                            self.logger.warning(f'[CAN] Timeout waiting for response to {sensor["label"]}')
-                    
-                    #self.logger.debug(f'Sending message: {sensor['label']}: {msg}')
-
-                except Exception as e:
-                    err_msg = str(e)
-                    self.logger.error(f'[CAN] Failed to send message: {err_msg}')
-                    
-                    self.logger.error(f'[CAN] Bus not available, stopping thread.')
-                    self._stop_event.set()
-
-            # Sleep to maintain 0.01s interval between messages
-            time.sleep(0.01)
-
-
-    def return_sensor(self, priority):
-        #Get the next index of the message in the selected priority group
-        index = self.rotation[priority]
-        sensors = self.prio_sensors[priority]
-
-        #Select sensor based on index
-        sensor = sensors[index % len(sensors)]
-
-
-        self.rotation[priority] = (index + 1) % len(sensors)
-        return sensor
-
-    def token_generator(self, weights):
-        # Generator to create random token pools based on the provided weights
-        token_pool = []
-        for prio, weight in weights.items():
-            token_pool.extend([prio] * weight)
-
-        while True:
-            # Shuffle the token pool after all tokens have been yealded
-            random.shuffle(token_pool)
-
-            for token in token_pool:
-                # Return token from the pool one after another
-                yield token
+            except Exception as e:
+                self.logger.error(f'[CAN] Failed to send message for "{sensor["label"]}": {e}')
+                self.logger.error(f'[CAN] Bus not available, stopping scheduler.')
+                self._stop_event.set()
 
     def stop(self):
         self._stop_event.set()
 
 
-#############################################################
-# CAN Listener - Listening to diagnostic messages           #
-#############################################################
-
 class CANListener(can.Listener):
-    def __init__(self, sensors_by_id, signal_sensors_by_id, logger, events=None):
+    def __init__(self, sensors_by_id, signal_sensors_by_id, logger, reply_event=None):
         self.logger = logger
         self.sensors_by_id = sensors_by_id
         self.signal_sensors_by_id = signal_sensors_by_id
-        self.events = events or {}
+        self.reply_event = reply_event
+
+
+        self.polling_timestamps = {}
+        self.polling_windows: dict[int, deque] = {}
+
+        for sensors in sensors_by_id.values():
+            for sensor in sensors:
+                priority = sensor['priority']
+                key = sensor['key']
+                if priority not in self.polling_timestamps:
+                    self.polling_timestamps[priority] = {}
+                    self.polling_windows[priority] = deque(maxlen=100)
+                self.polling_timestamps[priority][key] = {
+                    'last_received': None,
+                    'time_received': None,
+                    'delta_ms': None,
+                }
 
     def on_message_received(self, msg):
         try:
             data = list(msg.data)
+
             for sensor in self.sensors_by_id.get(msg.arbitration_id, []):
                 if shared_state.verbose:
                     message_hex = ' '.join(f'{byte:02X}' for byte in data)
-                    #self.logger.debug(f'Parsing message: {message_hex}')
 
                 mb = sensor.get("message_bytes", ())
                 is_match = False
@@ -452,12 +400,33 @@ class CANListener(can.Listener):
 
                 converted_value = eval(sensor['scale'], {'value': value})
                 shared_state.update_car_data(sensor['key'], float(converted_value))
+                
+                # Update polling timestamps
+                priority = sensor['priority']
+                key = sensor['key']
+                entry = self.polling_timestamps[priority][key]
+                now = time.monotonic()
+                entry['last_received'] = entry['time_received']
+                entry['time_received'] = now
 
-                evt = self.events.get(sensor['rep_id'][0])
-                if evt:
-                    evt.set()
+                if entry['last_received'] is not None:
+                    entry['delta_ms'] = (entry['time_received'] - entry['last_received']) * 1000
 
-                return            
+                # Compute polling averages using rolling windows per priority group
+                polling_rate = {}
+                for prio, sensors in self.polling_timestamps.items():
+                    deltas = [s['delta_ms'] for s in sensors.values() if s['delta_ms'] is not None]
+                    if deltas:
+                        avg = sum(deltas) / len(deltas)
+                        self.polling_windows[prio].append(avg)
+                        polling_rate[prio] = round(sum(self.polling_windows[prio]) / len(self.polling_windows[prio]), 1)
+
+                shared_state.update_polling_rate(polling_rate)
+
+                if self.reply_event:
+                    self.reply_event.set()
+                
+                return
 
             for sensor in self.signal_sensors_by_id.get(msg.arbitration_id, []):
                 byte_index = sensor['byte_index']

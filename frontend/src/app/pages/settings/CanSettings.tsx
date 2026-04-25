@@ -1,10 +1,10 @@
-import { useState, Fragment } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import styled, { useTheme } from 'styled-components';
 
 import { ToggleSwitch } from '@/theme/styles/Inputs';
 import { Typography } from '@/theme/styles/Typography';
 
-import { CAN, APP, useThemeColor } from '@/store/Store';
+import { CAN, APP, useThemeColor, DATA } from '@/store/Store';
 import { useNamespaces } from '@/socket/Namespaces';
 
 const socket = useNamespaces();
@@ -136,6 +136,11 @@ const Th = styled.th<{ sortable?: boolean; active?: boolean }>`
   cursor: ${({ sortable }) => sortable ? 'pointer' : 'default'};
   user-select: ${({ sortable }) => sortable ? 'none' : 'auto'};
   &:active { opacity: ${({ sortable }) => sortable ? 0.7 : 1}; }
+
+  &:last-child {
+    text-align: right;
+    padding-right: 12px;
+  }
 `;
 
 const SortIndicator = styled.span`
@@ -159,6 +164,11 @@ const TdControl = styled.td`
   padding: 10px 6px;
   vertical-align: middle;
   white-space: nowrap;
+
+  // Match the header alignment
+  text-align: right;
+  width: 1%; /* Keeps the 'shrink-wrap' behavior */
+  }
 `;
 
 const Tr = styled.tr`
@@ -166,7 +176,7 @@ const Tr = styled.tr`
   &:last-child { border-bottom: none; }
 `;
 
-type SortCol = 'label' | 'unit' | 'priority';
+type SortCol = 'label' | 'unit' | 'priority' | 'enabled';
 
 const CanSettings = () => {
   const Title = Typography.Title;
@@ -195,6 +205,10 @@ const CanSettings = () => {
   const interfaces = canSettings.interfaces ?? [];
   const sensors = canSettings.sensors ?? {};
   const signalSensors = canSettings.signal_sensors ?? [];
+
+  const p1CycleMs = DATA((state) => state.polling["1"]);
+  const p2CycleMs = DATA((state) => state.polling["2"]);
+  const p3CycleMs = DATA((state) => state.polling["3"]);
 
   const toggleSensor = (sensorKey: string) => {
     const updated = structuredClone(canSettings);
@@ -233,14 +247,26 @@ const CanSettings = () => {
 
   const sortedSensors = Object.entries(sensors).sort(([, a], [, b]) => {
     if (!sortCol) return 0;
-    const aVal: string | number = sortCol === 'priority'
-      ? a.priority
-      : (a[sortCol] ?? '');
-    const bVal: string | number = sortCol === 'priority'
-      ? b.priority
-      : (b[sortCol] ?? '');
-    if (typeof aVal === 'number' && typeof bVal === 'number')
+
+    let aVal: any;
+    let bVal: any;
+
+    // Logic for the new "enabled" column
+    if (sortCol === 'enabled') {
+      aVal = a.enabled ? 1 : 0;
+      bVal = b.enabled ? 1 : 0;
+    } else if (sortCol === 'priority') {
+      aVal = a.priority;
+      bVal = b.priority;
+    } else {
+      aVal = a[sortCol] ?? '';
+      bVal = b[sortCol] ?? '';
+    }
+
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+
     return sortDir === 'asc'
       ? String(aVal).localeCompare(String(bVal))
       : String(bVal).localeCompare(String(aVal));
@@ -324,6 +350,20 @@ const CanSettings = () => {
         <Divider />
         <Chevron>{sensorsOpen ? '▼' : '▶'}</Chevron>
       </CollapsibleHeader>
+      {[1, 2, 3].map((prio) => {
+        const value = [p1CycleMs, p2CycleMs, p3CycleMs][prio - 1];
+        return (
+          <Element key={`p${prio}_cycle_ms`}>
+            <Caption2>{`Priority ${prio}`}</Caption2>
+            <Divider />
+            <Spacer>
+              <Caption2 style={{ color: value !== undefined ? theme.colors.light : theme.colors.medium }}>
+                {value !== undefined ? `${value} ms` : '—'}
+              </Caption2>
+            </Spacer>
+          </Element>
+        );
+      })}
       {sensorsOpen && (
         <SensorTable>
           <thead>
@@ -337,7 +377,9 @@ const CanSettings = () => {
               <Th sortable active={sortCol === 'priority'} onClick={() => handleSort('priority')}>
                 PRIO{sortIndicator('priority')}
               </Th>
-              <Th style={{ width: '1%' }}></Th>
+              <Th sortable active={sortCol === 'enabled'} onClick={() => handleSort('enabled')}>
+                STATUS{sortIndicator('enabled')}
+              </Th>
             </tr>
           </thead>
           <tbody>

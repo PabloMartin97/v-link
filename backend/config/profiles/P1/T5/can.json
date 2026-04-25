@@ -16,7 +16,7 @@
             "channel": "can2",
             "is_extended": true,
             "bitrate": 500000,
-            "wait_for_ecu": false
+            "wait_for_ecu": true
         }
     ],
     "sensors": {
