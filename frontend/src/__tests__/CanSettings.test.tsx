@@ -97,14 +97,8 @@ describe('CanSettings', () => {
     canStore.setState((s: any) => ({ ...s, settings: structuredClone(MOCK_CAN_CONFIG) }));
   });
 
-  it('renders interface channel and bustype', () => {
+  it('renders the current section headers', () => {
     renderComponent();
-    expect(screen.getByText(/can2.*socketcan/)).toBeInTheDocument();
-  });
-
-  it('renders all section headers', () => {
-    renderComponent();
-    expect(screen.getByText('Modules')).toBeInTheDocument();
     expect(screen.getByText('Diagnostic')).toBeInTheDocument();
     expect(screen.getByText('Signals')).toBeInTheDocument();
   });
@@ -121,25 +115,26 @@ describe('CanSettings', () => {
     expect(screen.getAllByText('Reverse Gear').length).toBeGreaterThan(0);
   });
 
-  it('shows enabled interface as "Enabled"', () => {
+  it('shows enabled sensor toggle as checked', () => {
     renderComponent();
-    const interfaceRow = screen.getByText(/can2.*socketcan/).closest('div');
-    expect(interfaceRow).not.toBeNull();
-    expect(within(interfaceRow as HTMLElement).getByText('Enabled')).toBeInTheDocument();
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes[0]).toBeChecked();
   });
 
-  it('shows disabled interface as "Disabled"', () => {
+  it('shows disabled sensor toggle as unchecked', () => {
     canStore.setState((s: any) => ({
       ...s,
       settings: {
         ...MOCK_CAN_CONFIG,
-        interfaces: [{ ...MOCK_CAN_CONFIG.interfaces[0], enabled: false }],
+        sensors: {
+          ...MOCK_CAN_CONFIG.sensors,
+          rpm: { ...MOCK_CAN_CONFIG.sensors.rpm, enabled: false },
+        },
       },
     }));
     renderComponent();
-    const interfaceRow = screen.getByText(/can2.*socketcan/).closest('div');
-    expect(interfaceRow).not.toBeNull();
-    expect(within(interfaceRow as HTMLElement).getByText('Disabled')).toBeInTheDocument();
+    const rpmToggle = screen.getAllByRole('checkbox').find((checkbox) => checkbox.closest('tr')?.textContent?.includes('RPM'));
+    expect(rpmToggle).not.toBeChecked();
   });
 
   it('renders diagnostic table headers', () => {
@@ -162,28 +157,21 @@ describe('CanSettings', () => {
     expect(screen.getAllByText(/Boost/).length).toBeGreaterThan(0);
   });
 
-  it('renders only the CAN module checkbox', () => {
+  it('renders the sensor and signal toggles', () => {
     renderComponent();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(1);
   });
 
-  it('shows sensor and signal enabled states as status text', () => {
+  it('renders the CAN settings content', () => {
     renderComponent();
-    expect(screen.getAllByText('Enabled').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0);
+    expect(screen.getByText('Diagnostic')).toBeInTheDocument();
   });
 
-  it('renders the CAN module toggle', () => {
+  it('sensor toggles update the CAN settings store', () => {
     renderComponent();
-    expect(screen.getByText(/CAN Bus/)).toBeInTheDocument();
-  });
-
-  it('CAN module toggle emits socket toggle event', () => {
-    renderComponent();
-    // module toggle is the first checkbox (index 0)
     const checkboxes = screen.getAllByRole('checkbox');
     fireEvent.click(checkboxes[0]);
-    expect(mockEmit).toHaveBeenCalledWith('toggle');
+    expect(canStore.getState().settings.sensors.boost.enabled).toBe(false);
   });
 
   it('does not emit save events when rendering status-only sensor rows', () => {

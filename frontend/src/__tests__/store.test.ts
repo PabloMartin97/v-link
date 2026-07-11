@@ -98,24 +98,24 @@ describe('DATA store', () => {
     expect(dataStore.getState().data).toEqual({});
   });
 
-  it('update() merges new values into data', () => {
-    dataStore.getState().update({ rpm: 1500, boost: 1.2 });
+  it('updateData() merges new values into data', () => {
+    dataStore.getState().updateData({ rpm: 1500, boost: 1.2 });
     const { data } = dataStore.getState();
     expect(data.rpm).toBe(1500);
     expect(data.boost).toBe(1.2);
   });
 
-  it('update() preserves existing keys when adding new ones', () => {
-    dataStore.getState().update({ rpm: 2000 });
-    dataStore.getState().update({ boost: 0.9 });
+  it('updateData() preserves existing keys when adding new ones', () => {
+    dataStore.getState().updateData({ rpm: 2000 });
+    dataStore.getState().updateData({ boost: 0.9 });
     const { data } = dataStore.getState();
     expect(data.rpm).toBe(2000);
     expect(data.boost).toBe(0.9);
   });
 
-  it('update() overwrites an existing key', () => {
-    dataStore.getState().update({ rpm: 1000 });
-    dataStore.getState().update({ rpm: 3500 });
+  it('updateData() overwrites an existing key', () => {
+    dataStore.getState().updateData({ rpm: 1000 });
+    dataStore.getState().updateData({ rpm: 3500 });
     expect(dataStore.getState().data.rpm).toBe(3500);
   });
 });

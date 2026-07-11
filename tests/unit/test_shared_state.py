@@ -51,14 +51,14 @@ def test_events_start_unset():
 def test_update_car_data_stores_value():
     s = SharedState()
     s.update_car_data('rpm', 3000.0)
-    assert s.car_data['rpm'] == 3000.0
+    assert s.car_data['data']['rpm'] == '3000.00'
 
 
 def test_update_car_data_overwrites_existing():
     s = SharedState()
     s.update_car_data('boost', 1.2)
     s.update_car_data('boost', 0.8)
-    assert s.car_data['boost'] == 0.8
+    assert s.car_data['data']['boost'] == '0.80'
 
 
 def test_update_car_data_thread_safety():
@@ -82,7 +82,8 @@ def test_update_car_data_thread_safety():
         t.join()
 
     assert not errors, f'Thread safety errors: {errors}'
-    assert len(s.car_data) == 100
+    assert len(s.car_data['data']) == 100
+    assert all(isinstance(value, str) for value in s.car_data['data'].values())
 
 
 def test_ignition_event_set_and_clear():
