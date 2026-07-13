@@ -143,6 +143,7 @@ const Content = () => {
   const sidebarSettings   = APP((state) => state.settings.side_bars as SideBarsSettings | undefined);
   const interfaceSettings = APP((state) => state.system.interface);
   const carplaySettings   = APP((state) => state.system.carplay);
+  const projectionPhase   = APP((state) => state.system.carplay.phase);
   const appBindings       = APP((state) => state.settings.app_bindings as AppBindings | undefined);
   const contentPadding    = APP((state) => (state.settings.general as { contentPadding: { value: number } } | undefined)?.contentPadding?.value ?? 0);
   const view              = APP((state) => state.system.view);
@@ -277,15 +278,13 @@ const Content = () => {
 
   /* Carplay connection effect */
   useEffect(() => {
-    // Primary: both connected (stream confirmed) and worker (plugged) are true
-    // Fallback: worker alone is true, meaning the session is active even if the render
-    // worker never fired streamStarted (e.g. SPS NALU not yet seen or renderer error)
-    if (carplaySettings.worker) {
+    // Keep the connection page visible until the decoder confirms an actual stream.
+    if (projectionPhase === 'streaming') {
       appUpdate((state) => { state.system.interface.carplay = true; });
     } else {
       appUpdate((state) => { state.system.interface.carplay = false; });
     }
-  }, [carplaySettings, appUpdate]);
+  }, [projectionPhase, appUpdate]);
 
   /* Auto-hide NavBar */
   useEffect(() => {

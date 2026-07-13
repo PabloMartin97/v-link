@@ -155,7 +155,7 @@ function Carplay() {
         <Container>
             <Body2>
                 {carplaySettings.paired && carplaySettings.dongle
-                    ? carplaySettings.connected && carplaySettings.worker
+                    ? carplaySettings.phase === 'connected'
                         ? 'LAUNCHING...'
                         : 'CONNECT iPHONE / ANDROID DEVICE'
                     : 'CLICK TO PAIR DONGLE'}
