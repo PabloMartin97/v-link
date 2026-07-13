@@ -1,13 +1,17 @@
 # shared_state.py
 
 import threading
-
 from threading import Lock
+import time
 
 class SharedState:
     def __init__(self):
         #Global Variables
-        self.car_data = {}
+        self.car_data = {
+            'data': {},
+            'pollingrate': {},
+            'timestamp': None,
+        }
         self.car_data_lock = Lock()
 
         #Hardware
@@ -80,7 +84,12 @@ class SharedState:
 
     def update_car_data(self, key, value):
         with self.car_data_lock:
-            self.car_data[key] = value
+            self.car_data['data'][key] = f"{value:.2f}" if isinstance(value, float) else value
+            self.car_data['timestamp'] = f"{time.monotonic():.3f}".replace('.', ',')
+
+    def update_polling_rate(self, polling_rate: dict):
+        with self.car_data_lock:
+            self.car_data['pollingrate'] = polling_rate
 
 
 shared_state = SharedState()

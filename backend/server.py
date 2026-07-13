@@ -303,19 +303,11 @@ class ServerThread(threading.Thread):
     @socketio.on('request', namespace='/data')
     def handle_can_request():
         try:
-            request_timestamp = time.time()
-
-            # Limit output to 2 decimal places
-            data = {
-                k: round(v, 2) if isinstance(v, float) else v
-                for k, v in shared_state.car_data.items()
-            }
-
             payload = {
-                'timestamp': request_timestamp,
-                'data': data
+                'data':        shared_state.car_data['data'],
+                'pollingrate': shared_state.car_data['pollingrate'],
+                'timestamp':   shared_state.car_data['timestamp'],
             }
-
             socketio.emit('data', payload, namespace='/data')
         except Exception as e:
             logger.error(f'[Server] Error handling data request: {e}')

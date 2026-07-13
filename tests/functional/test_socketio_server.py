@@ -183,7 +183,7 @@ def test_data_request_returns_car_data(seeded_config_dir):
         payload = data_events[0]['args'][0]
         assert 'timestamp' in payload
         assert 'data' in payload
-        assert payload['data'].get('rpm') == 2500.0
+        assert payload['data'].get('rpm') == '2500.00'
     finally:
         client.disconnect(namespace='/data')
 

@@ -2,34 +2,44 @@ import React, { useState, useEffect, useRef } from 'react';
 import { saveAs } from 'file-saver';
 
 interface RecorderProps {
-    data: Record<string, string | number>; // dynamic sensor data
-    resolution: number; // update interval in ms
+    data: Record<string, string | number>;
+    timestamp: string;
+    resolution: number;
     recording: boolean;
-    settings: any; // Assuming settings are passed in as a prop, or you can get it from context or store
-    modules: any;  // Assuming modules are passed in as a prop, or you can get it from context or store
+    settings: any;
+    modules: any;
 }
 
-const Recorder: React.FC<RecorderProps> = ({ data, resolution, recording, settings, modules }) => {
+const Recorder: React.FC<RecorderProps> = ({ data, timestamp, resolution, recording, settings, modules }) => {
     const [recordedData, setRecordedData] = useState<Record<string, { timestamp: string; value: number }[]>>({});
-    const dataRef = useRef(data); // Reference to keep latest data
-    const recordedDataRef = useRef(recordedData); // Ref to store the latest recordedData for export
+    const dataRef = useRef(data);
+    const timeRef = useRef(timestamp);
+    const recordedDataRef = useRef(recordedData);
 
-    // Dynamically generate datasets for all the keys in data object
-    const datasets = Object.keys(data).map((sensorLabel) => {
-        const config = modules['sensorType']?.(settings); // Retrieve the configuration for each sensor type if needed
+    // Exclude _ts keys and the global timestamp — those are not sensor values
+    const datasets = Object.keys(data)
+        .filter(key => !key.endsWith('_ts'))
+        .map((sensorLabel) => {
+            const config = modules['sensorType']?.(settings);
 
-        return {
-            label: sensorLabel, // Use the key as the label (or map it to a human-readable label if desired)
-            sensorLabel, // Same as key, it's the identifier for the data
-            yMin: config?.min_value ?? -Infinity, // Provide default min/max if not available
-            yMax: config?.max_value ?? Infinity,
-        };
-    });
+            return {
+                label: sensorLabel,
+                sensorLabel,
+                yMin: config?.min_value ?? -Infinity,
+                yMax: config?.max_value ?? Infinity,
+            };
+        });
 
     // Update data ref to avoid stale closure
     useEffect(() => {
         dataRef.current = data;
     }, [data]);
+
+
+
+    useEffect(() => {
+        timeRef.current = timestamp;
+    }, [timestamp]);
 
     // Recording logic
     useEffect(() => {
@@ -37,36 +47,35 @@ const Recorder: React.FC<RecorderProps> = ({ data, resolution, recording, settin
 
         if (recording) {
             interval = setInterval(() => {
-                const timestamp = new Date().toISOString();
-
                 setRecordedData(prevData => {
                     const updated = { ...prevData };
 
-                    datasets.forEach(({ label, sensorLabel, yMin, yMax }) => {
-                        const value = dataRef.current[sensorLabel]; // Get the value from data using sensorLabel
-                        const numValue = isNaN(Number(value)) ? 0 : Math.max(yMin, Math.min(Number(value), yMax)); // Ensure value is within yMin and yMax
+                    // Read the global timestamp once per tick — all sensors share it
+                    const timestamp = String(timeRef.current ?? new Date().toISOString());
 
-                        if (!updated[label]) updated[label] = []; // Initialize an empty array for each label
+                    datasets.forEach(({ label, sensorLabel, yMin, yMax }) => {
+                        const value = dataRef.current[sensorLabel];
+                        const numValue = isNaN(Number(value)) ? 0 : Math.max(yMin, Math.min(Number(value), yMax));
+
+                        if (!updated[label]) updated[label] = [];
                         updated[label].push({ timestamp, value: numValue });
                     });
 
-                    // Update the ref with the latest data for export
                     recordedDataRef.current = updated;
                     return updated;
                 });
             }, resolution);
         } else {
             if (interval) {
-                clearInterval(interval); // Stop recording when recording is false
-                exportData(); // Export the data when stopping the recording
+                clearInterval(interval);
+                exportData();
             }
         }
 
-        // Cleanup on component unmount or when recording stops
         return () => {
             if (interval) {
                 clearInterval(interval);
-                exportData(); // Export data if it's unmounted or recording stops
+                exportData();
             }
         };
     }, [recording, resolution, settings, modules]);
@@ -80,25 +89,52 @@ const Recorder: React.FC<RecorderProps> = ({ data, resolution, recording, settin
 
         if (labels.length === 0) return;
 
-        // Collect all unique timestamps across all sensors
+        // 1. Collect and sort all unique timestamps
         const allTimestamps = Array.from(
             new Set(labels.flatMap(label => data[label].map(e => e.timestamp)))
-        ).sort();
+        ).sort((a, b) => Number(a.replace(',', '.')) - Number(b.replace(',', '.')));
 
-        // Build CSV header row
-        const header = ['timestamp', ...labels].join(',');
+        // 2. Initialize an object to track the "Last Known Value" for each sensor
+        const lastKnownValues: Record<string, string | number> = {};
+        labels.forEach(label => {
+            lastKnownValues[label] = '';
+        });
 
-        // Build each data row
+        // 3. Build CSV header (German format: semicolon separator)
+        const header = ['timestamp', ...labels].join(';');
+
+        // Helper: format a value for German CSV (decimal comma)
+        const formatValue = (val: string | number): string => {
+            if (typeof val === 'number') {
+                return String(val).replace('.', ',');
+            }
+            if (typeof val === 'string' && val !== '') {
+                const asNum = Number(val);
+                if (!isNaN(asNum)) {
+                    return String(asNum).replace('.', ',');
+                }
+            }
+            return String(val);
+        };
+
+        // 4. Build rows using Forward Fill logic
         const rows = allTimestamps.map(ts => {
-            const values = labels.map(label => {
+            const rowValues = labels.map(label => {
                 const entry = data[label].find(e => e.timestamp === ts);
-                return entry !== undefined ? entry.value : '';
+
+                if (entry !== undefined) {
+                    lastKnownValues[label] = entry.value;
+                }
+
+                return formatValue(lastKnownValues[label]);
             });
-            return [ts, ...values].join(',');
+
+            return [ts, ...rowValues].join(';');
         });
 
         const csv = [header, ...rows].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        // BOM (\uFEFF) ensures Excel erkennt UTF-8 korrekt
+        const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
         saveAs(blob, `V-Link_Recording_${timestamp}.csv`);
     };
 

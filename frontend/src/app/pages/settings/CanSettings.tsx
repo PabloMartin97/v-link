@@ -1,10 +1,10 @@
-import { useState, Fragment } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import styled, { useTheme } from 'styled-components';
 
 import { ToggleSwitch } from '@/theme/styles/Inputs';
 import { Typography } from '@/theme/styles/Typography';
 
-import { CAN, APP, useThemeColor } from '@/store/Store';
+import { CAN, APP, useThemeColor, DATA } from '@/store/Store';
 import { useNamespaces } from '@/socket/Namespaces';
 
 const socket = useNamespaces();
@@ -101,6 +101,29 @@ const SensorTable = styled.table`
   margin-bottom: 16px;
 `;
 
+const PrioritySelect = styled.select`
+  background: transparent;
+  border: 1px solid ${({ theme }) => theme.colors.dark};
+  border-radius: 4px;
+  color: ${({ theme }) => theme.colors.light};
+  font-family: ${({ theme }) => theme.typography.caption1.fontFamily};
+  font-size: ${({ theme }) => theme.typography.caption1.fontSize};
+  padding: 2px 4px;
+  cursor: pointer;
+  outline: none;
+  width: 44px;
+  text-align: center;
+
+  &:focus {
+    border-color: ${({ theme }) => theme.colors.medium};
+  }
+
+  option {
+    background: ${({ theme }) => theme.colors.dark};
+    color: ${({ theme }) => theme.colors.light};
+  }
+`;
+
 const Th = styled.th<{ sortable?: boolean; active?: boolean }>`
   color: ${({ theme, active }) => active ? theme.colors.light : theme.colors.medium};
   font-family: ${({ theme }) => theme.typography.caption2.fontFamily};
@@ -113,6 +136,11 @@ const Th = styled.th<{ sortable?: boolean; active?: boolean }>`
   cursor: ${({ sortable }) => sortable ? 'pointer' : 'default'};
   user-select: ${({ sortable }) => sortable ? 'none' : 'auto'};
   &:active { opacity: ${({ sortable }) => sortable ? 0.7 : 1}; }
+
+  &:last-child {
+    text-align: right;
+    padding-right: 12px;
+  }
 `;
 
 const SortIndicator = styled.span`
@@ -136,6 +164,11 @@ const TdControl = styled.td`
   padding: 10px 6px;
   vertical-align: middle;
   white-space: nowrap;
+
+  // Match the header alignment
+  text-align: right;
+  width: 1%; /* Keeps the 'shrink-wrap' behavior */
+  }
 `;
 
 const Tr = styled.tr`
@@ -143,7 +176,7 @@ const Tr = styled.tr`
   &:last-child { border-bottom: none; }
 `;
 
-type SortCol = 'label' | 'unit' | 'priority';
+type SortCol = 'label' | 'unit' | 'priority' | 'enabled';
 
 const CanSettings = () => {
   const Title = Typography.Title;
@@ -173,18 +206,28 @@ const CanSettings = () => {
   const sensors = canSettings.sensors ?? {};
   const signalSensors = canSettings.signal_sensors ?? [];
 
+  const p1CycleMs = DATA((state) => state.polling["1"]);
+  const p2CycleMs = DATA((state) => state.polling["2"]);
+  const p3CycleMs = DATA((state) => state.polling["3"]);
+
   const toggleSensor = (sensorKey: string) => {
     const updated = structuredClone(canSettings);
     updated.sensors[sensorKey].enabled = !updated.sensors[sensorKey].enabled;
     canUpdate((state) => { state.settings = updated as unknown as Record<string, unknown>; });
-    socket.can.emit('save', updated);
+    // No socket.can.emit here anymore
+  };
+
+  const changePriority = (sensorKey: string, priority: number) => {
+    const updated = structuredClone(canSettings);
+    updated.sensors[sensorKey].priority = priority;
+    canUpdate((state) => { state.settings = updated as unknown as Record<string, unknown>; });
   };
 
   const toggleSignalSensor = (index: number) => {
     const updated = structuredClone(canSettings);
     updated.signal_sensors[index].enabled = !updated.signal_sensors[index].enabled;
     canUpdate((state) => { state.settings = updated as unknown as Record<string, unknown>; });
-    socket.can.emit('save', updated);
+    // No socket.can.emit here anymore
   };
 
   const handleSort = (col: SortCol) => {
@@ -204,14 +247,26 @@ const CanSettings = () => {
 
   const sortedSensors = Object.entries(sensors).sort(([, a], [, b]) => {
     if (!sortCol) return 0;
-    const aVal: string | number = sortCol === 'priority'
-      ? a.priority
-      : (a[sortCol] ?? '');
-    const bVal: string | number = sortCol === 'priority'
-      ? b.priority
-      : (b[sortCol] ?? '');
-    if (typeof aVal === 'number' && typeof bVal === 'number')
+
+    let aVal: any;
+    let bVal: any;
+
+    // Logic for the new "enabled" column
+    if (sortCol === 'enabled') {
+      aVal = a.enabled ? 1 : 0;
+      bVal = b.enabled ? 1 : 0;
+    } else if (sortCol === 'priority') {
+      aVal = a.priority;
+      bVal = b.priority;
+    } else {
+      aVal = a[sortCol] ?? '';
+      bVal = b[sortCol] ?? '';
+    }
+
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+
     return sortDir === 'asc'
       ? String(aVal).localeCompare(String(bVal))
       : String(bVal).localeCompare(String(aVal));
@@ -229,20 +284,21 @@ const CanSettings = () => {
   );
 
   const renderStatus = (enabled: boolean) => (
-  <Caption2
-    style={{
-      color: enabled
-        ? theme.colors.theme[themeColor].active
-        : theme.colors.medium,
-    }}
-  >
-    {enabled ? 'Enabled' : 'Disabled'}
-  </Caption2>
-);
+    <Caption2
+      style={{
+        color: enabled
+          ? theme.colors.theme[themeColor].active
+          : theme.colors.medium,
+      }}
+    >
+      {enabled ? 'Enabled' : 'Disabled'}
+    </Caption2>
+  );
 
   return (
     <>
       {/* Module state toggle */}
+      {/*
       <CollapsibleHeader onClick={() => setModulesOpen((o) => !o)}>
         <Title>Modules</Title>
         <Divider />
@@ -287,12 +343,27 @@ const CanSettings = () => {
           ))}
         </>
       )}
+        */}
       {/* Sensors — sortable flat list (collapsible) */}
       <CollapsibleHeader onClick={() => setSensorsOpen((o) => !o)}>
         <Title>Diagnostic</Title>
         <Divider />
         <Chevron>{sensorsOpen ? '▼' : '▶'}</Chevron>
       </CollapsibleHeader>
+      {[1, 2, 3].map((prio) => {
+        const value = [p1CycleMs, p2CycleMs, p3CycleMs][prio - 1];
+        return (
+          <Element key={`p${prio}_cycle_ms`}>
+            <Caption2>{`Priority ${prio}`}</Caption2>
+            <Divider />
+            <Spacer>
+              <Caption2 style={{ color: value !== undefined ? theme.colors.light : theme.colors.medium }}>
+                {value !== undefined ? `${value} ms` : '—'}
+              </Caption2>
+            </Spacer>
+          </Element>
+        );
+      })}
       {sensorsOpen && (
         <SensorTable>
           <thead>
@@ -306,7 +377,9 @@ const CanSettings = () => {
               <Th sortable active={sortCol === 'priority'} onClick={() => handleSort('priority')}>
                 PRIO{sortIndicator('priority')}
               </Th>
-              <Th style={{ width: '1%' }}></Th>
+              <Th sortable active={sortCol === 'enabled'} onClick={() => handleSort('enabled')}>
+                STATUS{sortIndicator('enabled')}
+              </Th>
             </tr>
           </thead>
           <tbody>
@@ -314,9 +387,18 @@ const CanSettings = () => {
               <Tr key={key}>
                 <Td>{sensor.label}</Td>
                 <Td>{sensor.unit ?? '—'}</Td>
-                <Td>{sensor.priority}</Td>
-                {/*<TdControl>{renderToggle(key, sensor)}</TdControl>*/}
-                <TdControl>{renderStatus(sensor.enabled)}</TdControl>
+                <Td>
+                  <PrioritySelect
+                    value={sensor.priority}
+                    onChange={(e) => changePriority(key, Number(e.target.value))}
+                  >
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                  </PrioritySelect>
+                </Td>
+                <TdControl>{renderToggle(key, sensor)}</TdControl>
+                {/*<TdControl>{renderStatus(sensor.enabled)}</TdControl>*/}
               </Tr>
             ))}
           </tbody>
@@ -349,7 +431,7 @@ const CanSettings = () => {
                 <Td>{signal.can_id}</Td>
                 <Td>{signal.byte_index}</Td>
                 <Td>{signal.bit_index}</Td>
-                {/*<TdControl>
+                <TdControl>
                   <ToggleSwitch
                     backgroundColor={theme.colors.medium}
                     defaultColor={theme.colors.theme[themeColor].default}
@@ -362,8 +444,8 @@ const CanSettings = () => {
                     />
                     <span className="slider"></span>
                   </ToggleSwitch>
-                </TdControl>*/}
-                <TdControl>{renderStatus(signal.enabled)}</TdControl>
+                </TdControl>
+                {/*<TdControl>{renderStatus(signal.enabled)}</TdControl>*/}
               </Tr>
             ))}
           </tbody>
