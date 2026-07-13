@@ -14,7 +14,7 @@ type DashChartsSettings = { resolution: { value: number } };
 interface WorkerResponse {
   type: string;
   data?: Record<string, any>;
-  timestamp?: number;
+  timestamp?: string;
   polling?: Record<string, number>;
 }
 
@@ -117,7 +117,7 @@ function Cardata() {
       />
       <Recorder
         data={data.data as Record<string, string | number>}
-        timestampe={data.timestamp as Record<string, number>}
+        timestamp={data.timestamp}
         resolution={resolution}
         recording={isRecording}
         settings={settings}

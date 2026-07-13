@@ -114,6 +114,34 @@ def _plain(capsys) -> str:
     return strip_ansi(_render(capsys))
 
 
+class TestBacklightCanData:
+    def test_reads_nested_sensor_data(self):
+        from backend.shared.backlight_helper import BacklightController
+
+        original_car_data = _vmod.shared_state.car_data
+        try:
+            _vmod.shared_state.car_data = {
+                'data': {'light': '0.80'},
+                'pollingrate': {},
+                'timestamp': None,
+            }
+
+            assert BacklightController()._mode_from_can() == 'night'
+        finally:
+            _vmod.shared_state.car_data = original_car_data
+
+    def test_supports_flat_sensor_data(self):
+        from backend.shared.backlight_helper import BacklightController
+
+        original_car_data = _vmod.shared_state.car_data
+        try:
+            _vmod.shared_state.car_data = {'light': 3.0}
+
+            assert BacklightController()._mode_from_can() == 'day'
+        finally:
+            _vmod.shared_state.car_data = original_car_data
+
+
 # ─── _RingBufferHandler ───────────────────────────────────────────────────────
 
 class TestRingBufferHandler:

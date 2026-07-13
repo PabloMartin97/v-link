@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver';
 
 interface RecorderProps {
     data: Record<string, string | number>;
-    timestamp: string;  // add this
+    timestamp: string;
     resolution: number;
     recording: boolean;
     settings: any;

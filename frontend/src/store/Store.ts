@@ -86,11 +86,11 @@ export interface ModuleState {
 export interface DataState {
   data: Record<string, unknown>;
   polling: Record<string, number>;
-  timestamp: Record<string, number>;
+  timestamp: string;
   updateData: (newData: Record<string, unknown>) => void;
   updatePolling: (newPolling: Record<string, number>) => void;
-  updateTimestamp: (newPolling: Record<string, number>) => void;
-}// Add this new store
+  updateTimestamp: (newTimestamp: string) => void;
+}
 
 
 const APP = create<AppState>()(
@@ -240,7 +240,7 @@ const DATA = create<DataState>()(
   immer((set) => ({
     data: {},
     polling: {},
-    timestamp: {},
+    timestamp: '',
     updateData: (newData) =>
       set((state) => {
         Object.assign(state.data, newData);
@@ -251,7 +251,7 @@ const DATA = create<DataState>()(
       }),
     updateTimestamp: (newTimestamp) =>
       set((state) => {
-        Object.assign(state.timestamp, newTimestamp);
+        state.timestamp = newTimestamp;
       }),
   }))
 );

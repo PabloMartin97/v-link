@@ -8,7 +8,7 @@ type LatestData = Record<string, unknown> | null;
 let settings: unknown;
 let latestData: LatestData = null;
 let latestPolling: Record<string, unknown> | null = null;
-let latestTimestamp: Record<string, unknown> | null = null;
+let latestTimestamp: string | null = null;
 // Function to handle incoming sensor settings
 const handleSensorSettings = (data: { sensors?: unknown }) => {
   settings = data.sensors;
@@ -20,7 +20,7 @@ socket.can.on("settings", handleSensorSettings);
 // Listen for adc settings
 socket.adc.on("settings", handleSensorSettings);
 
-socket.data.on("data", (data: { timestamp?: Record<string, unknown>; data?: Record<string, unknown>; pollingrate?: Record<string, unknown> }) => {
+socket.data.on("data", (data: { timestamp?: string; data?: Record<string, unknown>; pollingrate?: Record<string, unknown> }) => {
   if (data.data) {
     latestData = data.data;
   }

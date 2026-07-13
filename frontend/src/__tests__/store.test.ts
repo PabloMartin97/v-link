@@ -91,7 +91,7 @@ describe('CAN store', () => {
 // DATA store
 describe('DATA store', () => {
   beforeEach(() => {
-    dataStore.setState((s: any) => ({ ...s, data: {} }));
+    dataStore.setState((s: any) => ({ ...s, data: {}, timestamp: '' }));
   });
 
   it('initializes with an empty data object', () => {
@@ -117,5 +117,10 @@ describe('DATA store', () => {
     dataStore.getState().updateData({ rpm: 1000 });
     dataStore.getState().updateData({ rpm: 3500 });
     expect(dataStore.getState().data.rpm).toBe(3500);
+  });
+
+  it('updateTimestamp() replaces the scalar timestamp', () => {
+    dataStore.getState().updateTimestamp('1234,567');
+    expect(dataStore.getState().timestamp).toBe('1234,567');
   });
 });

@@ -209,7 +209,13 @@ class BacklightController:
         # Preferred path: CAN listeners publish sensors into shared_state.car_data
         try:
             with shared_state.car_data_lock:
-                raw = shared_state.car_data.get("light")
+                car_data = shared_state.car_data
+                sensor_data = car_data.get("data")
+                if isinstance(sensor_data, dict):
+                    raw = sensor_data.get("light")
+                else:
+                    # Support the previous flat shared-state layout.
+                    raw = car_data.get("light")
         except Exception:
             raw = None
 
