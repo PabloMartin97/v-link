@@ -29,6 +29,8 @@ const AppContainer = styled.div`
   background: linear-gradient(180deg, #0D0D0D, #1C1C1C);
 `;
 
+const BACKGROUND_MEDIA_COMMANDS = new Set(['next', 'prev']);
+
 function App() {
   // Subscribe to store slices
   const systemSettings = APP((state) => state.system);
@@ -69,40 +71,37 @@ function App() {
     };
   }, [systemSettings.view, systemSettings.switch, pauseKeyBinds]);
 
-const mmiKeyDown = (event: KeyboardEvent) => {
-  // Store last Keystroke in store to broadcast it
-  setKeyStroke(event.code);
+  const mmiKeyDown = (event: KeyboardEvent) => {
+    // Store last Keystroke in store to broadcast it
+    setKeyStroke(event.code);
 
-  // If keybinds are paused, do not process further
-  
-  if(pauseKeyBinds) return;
+    // If keybinds are paused, do not process further
+    if (pauseKeyBinds) return;
 
-  // Only process Carplay key commands when in Carplay view
-  if (systemSettings.view !== 'Carplay') return;
+    // If user is not switching the page, send control to CarPlay
+    if (!systemSettings.switch || event.code === systemSettings.switch || !dongleBindings) return;
 
-  // If user is not switching the page, send control to CarPlay
-  if (systemSettings.switch && event.code !== systemSettings.switch) {
-    if (dongleBindings) {
-      // Find the action whose .value matches the key event
-      const action = Object.keys(dongleBindings).find(
-        (key) => dongleBindings[key].value === event.code
-      );
-      socket.log.emit('debug', 'Emitting carplay key-command: ', action);
+    // Find the action whose .value matches the key event
+    const action = Object.keys(dongleBindings).find(
+      (key) => dongleBindings[key].value === event.code
+    );
 
-      if (action !== undefined) {
-          setKeyCommand(action);
-          setCommandCounter((c) => c + 1);
+    if (action === undefined) return;
 
-        if (action === "selectDown") {
-          setTimeout(() => {
-            setKeyCommand("selectUp");
-            setCommandCounter((c) => c + 1);
-          }, 200);
-        }
-      }
+    // Allow track controls
+    if (systemSettings.view !== 'Carplay' && !BACKGROUND_MEDIA_COMMANDS.has(action)) return;
+
+    socket.log.emit('debug', 'Emitting carplay key-command: ', action);
+    setKeyCommand(action);
+    setCommandCounter((c) => c + 1);
+
+    if (action === 'selectDown') {
+      setTimeout(() => {
+        setKeyCommand('selectUp');
+        setCommandCounter((c) => c + 1);
+      }, 200);
     }
-  }
-};
+  };
 
 
   // Dimensions of the container

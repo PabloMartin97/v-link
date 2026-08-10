@@ -4,8 +4,9 @@ export type Command =
 
 export type CardataMessage = MessageEvent<{
   type: string;
-  values?: Record<string, unknown>;
-  timestamp?: number;
+  data?: Record<string, unknown>;
+  polling?: Record<string, number>;
+  timestamp?: string;
 }>
 
 export interface CARWorker

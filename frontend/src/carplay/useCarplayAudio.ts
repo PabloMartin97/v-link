@@ -29,16 +29,23 @@ const useCarplayAudio = (
       const format = decodeTypeMap[decodeType]
       const audioKey = createAudioPlayerKey(decodeType, audioType)
       let player = audioPlayers.get(audioKey)
-      if (player) return player
-      player = new PcmPlayer(format.frequency, format.channel)
+      if (!format) {
+        throw new Error(`Unsupported CarPlay audio decode type: ${decodeType}`)
+      }
+      if (!player) {
+        player = new PcmPlayer(format.frequency, format.channel)
 
-      console.log(`(CarPlay) Player: ${player}`)
-      socket.log.emit('debug', `(CarPlay) Player: ${player}`)
+        console.log(`(CarPlay) Player: ${player}`)
+        socket.log.emit('debug', `(CarPlay) Player: ${player}`)
 
+        audioPlayers.set(audioKey, player)
+        player.volume(defaultAudioVolume)
+        player.start()
+      }
 
-      audioPlayers.set(audioKey, player)
-      player.volume(defaultAudioVolume)
-      player.start()
+      // Re-send the shared buffer even for an existing player. The projection
+      // worker clears its buffer references on session restart while the audio
+      // hook and players remain mounted.
       worker.postMessage({
         type: 'audioBuffer',
         payload: {

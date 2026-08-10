@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
 import type { ReactNode } from 'react'
+import type { ProjectionPhase, ProjectionTransport } from '@/carplay/sessionState'
 
 interface SizeState {
   width: number;
@@ -8,6 +9,9 @@ interface SizeState {
 }
 
 interface CarplayState {
+  phase: ProjectionPhase;
+  transport: ProjectionTransport;
+  error: string | null;
   dongle: boolean;
   phone: boolean;
   stream: boolean;
@@ -127,6 +131,9 @@ const APP = create<AppState>()(
       },
 
       carplay: {
+        phase: 'idle',
+        transport: null,
+        error: null,
         dongle: false,
         phone: false,
         stream: false,

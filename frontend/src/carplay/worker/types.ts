@@ -10,6 +10,9 @@ export type AudioPlayerKey = string & { __brand: 'AudioPlayerKey' }
 export type CarplayWorkerMessage =
   | { data: CarplayMessage }
   | { data: { type: 'requestBuffer'; message: AudioData } }
+  | { data: { type: 'workerStarted' } }
+  | { data: { type: 'failure'; message?: string } }
+  | { data: { type: 'videoStats'; count: number; bytes: number } }
 
 export type InitialisePayload = {
   videoPort: MessagePort
