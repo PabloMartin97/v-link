@@ -14,7 +14,9 @@ export function useNamespaces() {
       rti: io("ws://localhost:4001/rti"),
       sys: io("ws://localhost:4001/sys"),
       log: io("ws://localhost:4001/log"),
-      cam: io("ws://localhost:4001/cam"),
+      // Keep the frontend key as `cam`, but connect to the namespace exposed
+      // by the backend.
+      cam: io("ws://localhost:4001/rearcam"),
       
       data: io("ws://localhost:4001/data"),
     };

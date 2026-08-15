@@ -131,8 +131,12 @@ const Settings = () => {
   const [reset, setReset] = useState(false)
   const [currentSettings, setCurrentSettings] = useState<AppSettings>(structuredClone(settings) as AppSettings);
   const [cameraDevices, setCameraDevices] = useState<{ deviceId: string; label: string }[]>([]);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSettingsRef = useRef<AppSettings>(currentSettings);
+  const pendingCanSettingsRef = useRef(canSettings);
+  const pendingAppSaveRef = useRef(false);
+  const pendingCanSaveRef = useRef(false);
   const SAVE_DEBOUNCE_MS = 500;
 
   const setKeyStroke = APP((state) => state.setKeyStroke);
@@ -156,12 +160,24 @@ const Settings = () => {
     const updateDevices = async () => {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices
-          .filter((device) => device.kind === 'videoinput')
-          .map((device, index) => ({
-            deviceId: device.deviceId,
-            label: device.label || `Camera ${index + 1}`,
-          }));
+        const inputs = devices.filter((device) => device.kind === 'videoinput');
+        const labelCounts = inputs.reduce<Record<string, number>>((counts, device) => {
+          const label = device.label.trim();
+          if (label) counts[label] = (counts[label] ?? 0) + 1;
+          return counts;
+        }, {});
+        const labelIndexes: Record<string, number> = {};
+        const videoInputs = inputs.map((device, index) => {
+          const baseLabel = device.label.trim();
+          if (!baseLabel) {
+            return { deviceId: device.deviceId, label: `Camera ${index + 1}` };
+          }
+          labelIndexes[baseLabel] = (labelIndexes[baseLabel] ?? 0) + 1;
+          const label = labelCounts[baseLabel] > 1
+            ? `${baseLabel} (${labelIndexes[baseLabel]})`
+            : baseLabel;
+          return { deviceId: device.deviceId, label };
+        });
         setCameraDevices(videoInputs);
       } catch {
         setCameraDevices([]);
@@ -178,9 +194,22 @@ const Settings = () => {
   }, [currentSettings]);
 
   useEffect(() => {
+    pendingCanSettingsRef.current = canSettings;
+  }, [canSettings]);
+
+  useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
+      if (appSaveTimeoutRef.current) clearTimeout(appSaveTimeoutRef.current);
+      if (canSaveTimeoutRef.current) clearTimeout(canSaveTimeoutRef.current);
+
+      // Do not lose a debounced save when the user leaves Settings quickly.
+      if (pendingAppSaveRef.current) {
+        const pending = pendingSettingsRef.current;
+        appUpdate((state) => { state.settings = pending; });
+        socket.app.emit('save', pending);
+      }
+      if (pendingCanSaveRef.current) {
+        socket.can.emit('save', pendingCanSettingsRef.current);
       }
     };
   }, []);
@@ -203,9 +232,11 @@ const Settings = () => {
     prevCanSettingsRef.current = canSettings;
     setSave(false);
     if (autoSave) {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        socket.can.emit('save', canSettings);
+      if (canSaveTimeoutRef.current) clearTimeout(canSaveTimeoutRef.current);
+      pendingCanSaveRef.current = true;
+      canSaveTimeoutRef.current = setTimeout(() => {
+        pendingCanSaveRef.current = false;
+        socket.can.emit('save', pendingCanSettingsRef.current);
       }, SAVE_DEBOUNCE_MS);
     }
   }, [canSettings]);
@@ -232,7 +263,13 @@ const Settings = () => {
   const autoSave = (currentSettings?.general as Record<string, SettingContent>)?.autoSave?.value as boolean ?? false;
 
   const scheduleSave = (nextSettings: AppSettings) => {
-    if (!autoSave) {
+    const nextAutoSave = Boolean(
+      (nextSettings?.general as Record<string, SettingContent>)?.autoSave?.value
+    );
+
+    // Save both transitions: off -> on and on -> off. For ordinary changes,
+    // either the current or next value will be the same.
+    if (!autoSave && !nextAutoSave) {
       setSave(false);
       return;
     }
@@ -240,11 +277,13 @@ const Settings = () => {
     setSave(false);
     pendingSettingsRef.current = nextSettings;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
+    if (appSaveTimeoutRef.current) {
+      clearTimeout(appSaveTimeoutRef.current);
     }
 
-    saveTimeoutRef.current = setTimeout(() => {
+    pendingAppSaveRef.current = true;
+    appSaveTimeoutRef.current = setTimeout(() => {
+      pendingAppSaveRef.current = false;
       saveSettings(pendingSettingsRef.current);
     }, SAVE_DEBOUNCE_MS);
   };
@@ -354,7 +393,10 @@ const Settings = () => {
 
   // Save Settings
   function saveSettings(settingsToSave: AppSettings = currentSettings) {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (appSaveTimeoutRef.current) clearTimeout(appSaveTimeoutRef.current);
+    if (canSaveTimeoutRef.current) clearTimeout(canSaveTimeoutRef.current);
+    pendingAppSaveRef.current = false;
+    pendingCanSaveRef.current = false;
     setSave(true);
 
     const activeSensorKeys = new Set(
@@ -543,9 +585,17 @@ const Settings = () => {
       const isText = (content.type === 'text')
 
       const isRearcamDeviceId = key === 'reverseCam' && setting === 'deviceId';
+      const selectedDeviceMissing = isRearcamDeviceId
+        && typeof value === 'string'
+        && value !== ''
+        && value !== 'default'
+        && !cameraDevices.some((device) => device.deviceId === value);
       const rearcamDeviceOptions: DropdownOption[] | null = isRearcamDeviceId
         ? [
           { value: 'default', label: 'Default' },
+          ...(selectedDeviceMissing
+            ? [{ value: value as string, label: 'Saved camera (not currently available)' }]
+            : []),
           ...cameraDevices.map((device) => ({
             value: device.deviceId,
             label: device.label,

@@ -1,6 +1,7 @@
 import json
 import shutil
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 from backend.shared.shared_state import shared_state
@@ -24,8 +25,22 @@ def load_directory():
         return None
     
 
+def _merge_missing(defaults, user, prefix=''):
+    """Add missing default values without replacing any user value."""
+    added = []
+    for key, default_value in defaults.items():
+        path = f'{prefix}.{key}' if prefix else key
+        if key not in user:
+            user[key] = deepcopy(default_value)
+            added.append(path)
+        elif isinstance(default_value, dict) and isinstance(user[key], dict):
+            added.extend(_merge_missing(default_value, user[key], path))
+    return added
+
+
 def migrate_settings():
-    # Merge any top-level keys present in the default config but missing from the user config.
+    # Recursively add settings introduced by newer versions while preserving
+    # every value already chosen by the user.
     default_app = DEFAULT_CONFIG_DIR / 'app.json'
     user_app = USER_CONFIG_DIR / 'app.json'
     if not default_app.exists() or not user_app.exists():
@@ -35,11 +50,10 @@ def migrate_settings():
             defaults = json.load(f)
         with user_app.open('r', encoding='utf-8') as f:
             user = json.load(f)
-        missing = {k: v for k, v in defaults.items() if k not in user}
-        if missing:
-            user.update(missing)
+        added = _merge_missing(defaults, user)
+        if added:
             save_settings('app', user)
-            logger.info(f'[Settings] Migrated missing keys into user config: {list(missing.keys())}')
+            logger.info(f'[Settings] Migrated missing keys into user config: {added}')
     except Exception as e:
         logger.error(f'[Settings] Error during settings migration: {e}')
 

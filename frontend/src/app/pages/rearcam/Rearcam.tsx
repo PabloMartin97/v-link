@@ -104,7 +104,15 @@ export default function Rearcam() {
     if (Number.isFinite(fps) && fps > 0) constraints.frameRate = { ideal: fps };
 
     if (selectionMode === "deviceId" && deviceId && deviceId !== "default") {
-      constraints.deviceId = { exact: deviceId };
+      const devices = navigator?.mediaDevices?.enumerateDevices
+        ? await navigator.mediaDevices.enumerateDevices()
+        : [];
+      const deviceAvailable = devices.some(
+        (device) => device.kind === "videoinput" && device.deviceId === deviceId
+      );
+      // A saved ID can change after moving the grabber to another USB port.
+      // Fall back for this session without erasing the user's preference.
+      if (deviceAvailable) constraints.deviceId = { exact: deviceId };
     } else if (selectionMode === "label" && deviceLabel && navigator?.mediaDevices?.enumerateDevices) {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const match = devices.find(
