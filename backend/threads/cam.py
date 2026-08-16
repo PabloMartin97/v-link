@@ -156,7 +156,7 @@ class CameraGPIO:
 
         self._chip: Optional[int] = None         # handle dev /dev/gpiochipN
         self._claimed: bool = False              # if line is claimed as output
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._on: bool = False                   # logic state as requested
 
         # cleanup request at exit

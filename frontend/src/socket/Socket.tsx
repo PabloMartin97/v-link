@@ -75,7 +75,7 @@ export const Socket = () => {
   };
 
 
-  const handleReverse = () => (reverseStatus: boolean) => {
+  const handleReverse = (reverseStatus: boolean) => {
     socket.log.emit('info', `Reverse: ${reverseStatus}`);
     allStores['app'].update((state: any) => {
       state.system.reverse = reverseStatus;
@@ -153,11 +153,13 @@ export const Socket = () => {
       // Setup system listeners
       if (socket.sys) {
         socket.sys.on('ign', handleIgnition);
+        socket.sys.on('reverse', handleReverse);
         socket.sys.on('connect', handleConnect('sys'));
         socket.sys.on('disconnect', handleDisconnect('sys'));
         socket.sys.on('connect_error', handleError('sys'));
-        
+
         socket.sys.emit('systemTask', 'ign');
+        socket.sys.emit('systemTask', 'reverse');
       }
 
       // Setup log socket listeners if it exists
@@ -192,6 +194,7 @@ export const Socket = () => {
       
       if (socket.sys) {
         socket.sys.off('ign', handleIgnition);
+        socket.sys.off('reverse', handleReverse);
         socket.sys.off('connect', handleConnect('sys'));
         socket.sys.off('disconnect', handleDisconnect('sys'));
         socket.sys.off('connect_error', handleError('sys'));
