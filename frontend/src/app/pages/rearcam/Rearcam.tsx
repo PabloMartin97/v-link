@@ -123,7 +123,6 @@ const CenterMsg = styled.div`
 export default function Rearcam() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const openingRef = useRef(false);
   const requestIdRef = useRef(0);
   const socket = useNamespaces();
 
@@ -192,7 +191,6 @@ export default function Rearcam() {
 
   const openCamera = async () => {
     const requestId = ++requestIdRef.current;
-    openingRef.current = true;
     setStatus("opening"); setErr("");
     try {
       stopStream();
@@ -220,15 +218,13 @@ export default function Rearcam() {
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = stream;
-        try {
-          await video.play();
-        } catch (cause) {
+        const startPlayback = video.play().catch((cause) => {
           const detail = cause instanceof Error ? ` ${cause.message}` : "";
           const error = new Error(`The camera stream opened, but video playback could not start.${detail}`);
           error.name = "PlaybackError";
           throw error;
-        }
-        await waitForVideoData(video);
+        });
+        await Promise.all([startPlayback, waitForVideoData(video)]);
       }
 
       if (requestId !== requestIdRef.current) {
@@ -250,8 +246,6 @@ export default function Rearcam() {
       setStatus(e?.name === "NotAllowedError" ? "denied" : "error");
       setErr(getCameraErrorMessage(e));
       stopStream();
-    } finally {
-      if (requestId === requestIdRef.current) openingRef.current = false;
     }
   };
 
@@ -260,7 +254,6 @@ export default function Rearcam() {
     openCamera();
     return () => {
       requestIdRef.current += 1;
-      openingRef.current = false;
       stopStream();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -276,7 +269,7 @@ export default function Rearcam() {
   // Retry when the capture device connects/disconnects
   useEffect(() => {
     const h = async () => {
-      if (status !== "opening" && status !== "denied") await openCamera();
+      if (status !== "denied") await openCamera();
     };
     if (!navigator?.mediaDevices?.addEventListener) return;
     navigator.mediaDevices.addEventListener("devicechange", h);
