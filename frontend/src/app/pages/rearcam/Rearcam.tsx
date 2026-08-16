@@ -63,6 +63,7 @@ export default function Rearcam() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const openingRef = useRef(false);
+  const requestIdRef = useRef(0);
   const socket = useNamespaces();
 
   const Caption = Typography.Subtitle;
@@ -129,7 +130,7 @@ export default function Rearcam() {
   };
 
   const openCamera = async () => {
-    if (openingRef.current) return;
+    const requestId = ++requestIdRef.current;
     openingRef.current = true;
     setStatus("opening"); setErr("");
     try {
@@ -146,6 +147,14 @@ export default function Rearcam() {
         video: videoConstraint,
         audio: false,
       });
+
+      // The user may have left Rearcam or changed camera settings while the
+      // browser was still opening this device. Never keep an outdated stream.
+      if (requestId !== requestIdRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -153,17 +162,22 @@ export default function Rearcam() {
       }
       setStatus("playing");
     } catch (e: any) {
+      if (requestId !== requestIdRef.current) return;
       setStatus(e?.name === "NotAllowedError" ? "denied" : "error");
       setErr(e?.message || "Failed to open camera");
     } finally {
-      openingRef.current = false;
+      if (requestId === requestIdRef.current) openingRef.current = false;
     }
   };
 
   // Auto-start on enter
   useEffect(() => {
     openCamera();
-    return () => { stopStream(); };
+    return () => {
+      requestIdRef.current += 1;
+      openingRef.current = false;
+      stopStream();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     reverseCamSettings?.deviceSelectionMode?.value,

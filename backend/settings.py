@@ -51,9 +51,19 @@ def migrate_settings():
         with user_app.open('r', encoding='utf-8') as f:
             user = json.load(f)
         added = _merge_missing(defaults, user)
-        if added:
+        updated = []
+
+        # This setting controls only manual navigation visibility, not reverse
+        # activation. Update the old ambiguous built-in label while preserving
+        # any custom label and the user's selected value.
+        reverse_cam_enabled = user.get('reverseCam', {}).get('enabled', {})
+        if reverse_cam_enabled.get('label') == 'Enabled':
+            reverse_cam_enabled['label'] = 'Show in Navigation'
+            updated.append('reverseCam.enabled.label')
+
+        if added or updated:
             save_settings('app', user)
-            logger.info(f'[Settings] Migrated missing keys into user config: {added}')
+            logger.info(f'[Settings] Migrated app config; added={added}, updated={updated}')
     except Exception as e:
         logger.error(f'[Settings] Error during settings migration: {e}')
 

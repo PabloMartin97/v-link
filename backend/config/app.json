@@ -126,7 +126,7 @@
     "type": "system",
     "enabled": {
       "value": true,
-      "label": "Enabled"
+      "label": "Show in Navigation"
     },
     "delay": {
       "value": 7,
