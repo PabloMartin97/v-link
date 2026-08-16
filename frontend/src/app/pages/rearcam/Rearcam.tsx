@@ -13,6 +13,67 @@ type ReverseCamSettings = {
   videoFps?: { value: number };
 };
 
+const VIDEO_START_TIMEOUT_MS = 10_000;
+
+const getCameraErrorMessage = (error: unknown) => {
+  const mediaError = error as DOMException & { constraint?: string };
+
+  switch (mediaError?.name) {
+    case "NotAllowedError":
+      return "Camera access was denied. Allow camera access in Chromium permissions and try again.";
+    case "NotFoundError":
+      return "No video input device was found. Check that the camera or video grabber is connected and recognized by the system.";
+    case "NotReadableError":
+      return "The video device was found but could not be read. It may be disconnected, already in use, or unavailable to Chromium.";
+    case "OverconstrainedError":
+      return `The selected camera cannot satisfy the requested${mediaError.constraint ? ` ${mediaError.constraint}` : " video"} setting. Try another resolution, frame rate, or device.`;
+    case "SecurityError":
+      return "Camera access is blocked by the browser security policy for this page.";
+    case "AbortError":
+      return "The camera stopped while Chromium was opening it. Reconnect the device and try again.";
+    case "PlaybackError":
+    case "VideoTimeoutError":
+      return mediaError.message;
+    default:
+      return mediaError?.message
+        ? `Failed to open the video device: ${mediaError.message}`
+        : "Failed to open the video device for an unknown reason.";
+  }
+};
+
+const waitForVideoData = (video: HTMLVideoElement) => {
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const finish = (result: "ready" | "error" | "timeout") => {
+      window.clearTimeout(timeoutId);
+      video.removeEventListener("loadeddata", onLoadedData);
+      video.removeEventListener("error", onVideoError);
+
+      if (result === "ready") {
+        resolve();
+      } else {
+        const error = new Error(
+          result === "timeout"
+            ? "The video device opened, but no video frames were received within 10 seconds. Check the selected channel, cable, and video signal."
+            : "The camera stream opened, but Chromium reported a video decoding or playback error."
+        );
+        error.name = result === "timeout" ? "VideoTimeoutError" : "PlaybackError";
+        reject(error);
+      }
+    };
+
+    const onLoadedData = () => finish("ready");
+    const onVideoError = () => finish("error");
+    const timeoutId = window.setTimeout(() => finish("timeout"), VIDEO_START_TIMEOUT_MS);
+
+    video.addEventListener("loadeddata", onLoadedData, { once: true });
+    video.addEventListener("error", onVideoError, { once: true });
+  });
+};
+
 const Container = styled.div`
   position: relative;
   width: 100%;
@@ -157,14 +218,38 @@ export default function Rearcam() {
 
       streamRef.current = stream;
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
+        const video = videoRef.current;
+        video.srcObject = stream;
+        try {
+          await video.play();
+        } catch (cause) {
+          const detail = cause instanceof Error ? ` ${cause.message}` : "";
+          const error = new Error(`The camera stream opened, but video playback could not start.${detail}`);
+          error.name = "PlaybackError";
+          throw error;
+        }
+        await waitForVideoData(video);
       }
+
+      if (requestId !== requestIdRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      const videoTrack = stream.getVideoTracks()[0];
+      videoTrack?.addEventListener("ended", () => {
+        if (streamRef.current !== stream) return;
+        stopStream();
+        setStatus("error");
+        setErr("The video device stopped sending data or was disconnected. Check the USB connection and selected camera.");
+      }, { once: true });
+
       setStatus("playing");
     } catch (e: any) {
       if (requestId !== requestIdRef.current) return;
       setStatus(e?.name === "NotAllowedError" ? "denied" : "error");
-      setErr(e?.message || "Failed to open camera");
+      setErr(getCameraErrorMessage(e));
+      stopStream();
     } finally {
       if (requestId === requestIdRef.current) openingRef.current = false;
     }
@@ -215,7 +300,7 @@ export default function Rearcam() {
       {/* Error messages */}
       {status === "error" && <CenterMsg>Error: {err}</CenterMsg>}
       {status === "denied" && (
-        <CenterMsg>Camera access denied. Check browser permissions.</CenterMsg>
+        <CenterMsg>{err}</CenterMsg>
       )}
     </Container>
   );
