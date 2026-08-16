@@ -7,7 +7,6 @@ import { APP } from "@/store/Store";
 type ReverseCamSettings = {
   deviceSelectionMode?: { value: string };
   deviceId?: { value: string };
-  deviceLabel?: { value: string };
   videoWidth?: { value: number };
   videoHeight?: { value: number };
   videoFps?: { value: number };
@@ -155,7 +154,6 @@ export default function Rearcam() {
     const constraints: MediaTrackConstraints = {};
     const selectionMode = reverseCamSettings?.deviceSelectionMode?.value ?? "auto";
     const deviceId = reverseCamSettings?.deviceId?.value ?? "";
-    const deviceLabel = reverseCamSettings?.deviceLabel?.value ?? "";
     const width = Number(reverseCamSettings?.videoWidth?.value ?? 0);
     const height = Number(reverseCamSettings?.videoHeight?.value ?? 0);
     const fps = Number(reverseCamSettings?.videoFps?.value ?? 0);
@@ -174,16 +172,6 @@ export default function Rearcam() {
       // A saved ID can change after moving the grabber to another USB port.
       // Fall back for this session without erasing the user's preference.
       if (deviceAvailable) constraints.deviceId = { exact: deviceId };
-    } else if (selectionMode === "label" && deviceLabel && navigator?.mediaDevices?.enumerateDevices) {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const match = devices.find(
-        (device) =>
-          device.kind === "videoinput" &&
-          device.label.toLowerCase().includes(deviceLabel.toLowerCase())
-      );
-      if (match?.deviceId) {
-        constraints.deviceId = { exact: match.deviceId };
-      }
     }
 
     return constraints;
@@ -260,7 +248,6 @@ export default function Rearcam() {
   }, [
     reverseCamSettings?.deviceSelectionMode?.value,
     reverseCamSettings?.deviceId?.value,
-    reverseCamSettings?.deviceLabel?.value,
     reverseCamSettings?.videoWidth?.value,
     reverseCamSettings?.videoHeight?.value,
     reverseCamSettings?.videoFps?.value,

@@ -137,8 +137,7 @@
       "label": "Device Selection",
       "options": [
         "auto",
-        "deviceId",
-        "label"
+        "deviceId"
       ]
     },
     "deviceId": {
@@ -147,11 +146,6 @@
       "options": [
         "default"
       ]
-    },
-    "deviceLabel": {
-      "type": "text",
-      "value": "",
-      "label": "Device Label Contains"
     },
     "videoWidth": {
       "value": 1280,
