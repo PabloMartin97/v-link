@@ -1,17 +1,35 @@
+/**
+ * V-Link Rearcam
+ * Version: 2.0
+ * Created by: Pablo Martín
+ */
+
 import React, { useEffect, useRef, useState } from "react";
-import styled, { useTheme } from 'styled-components';
+import styled from 'styled-components';
 import { useNamespaces } from "@/socket/Namespaces";
 import { Typography } from "@/theme/styles/Typography";
-import { APP } from "@/store/Store";
+import { APP, DATA } from "@/store/Store";
 
+// Shape of the Rearcam settings read from the global app store.
 type ReverseCamSettings = {
   deviceSelectionMode?: { value: string };
   deviceId?: { value: string };
-  videoWidth?: { value: number };
-  videoHeight?: { value: number };
-  videoFps?: { value: number };
+  videoResolution?: { value: string };
+  videoFps?: { value: string };
+  guidelineMode?: { value: string };
+  guidelineNearWidth?: { value: number };
+  guidelineFarWidth?: { value: number };
+  guidelineLength?: { value: number };
+  guidelineVerticalPosition?: { value: number };
+  guidelineOpacity?: { value: number };
+  guidelineLineThickness?: { value: number };
+  guidelineSteeringSignal?: { value: string };
+  guidelineSteeringCenter?: { value: number };
+  guidelineSteeringDirection?: { value: number };
+  guidelineCurveStrength?: { value: number };
 };
 
+// Camera startup validation and user-facing media error messages.
 const VIDEO_START_TIMEOUT_MS = 10_000;
 
 const getCameraErrorMessage = (error: unknown) => {
@@ -73,6 +91,7 @@ const waitForVideoData = (video: HTMLVideoElement) => {
   });
 };
 
+// Full-screen video, guideline overlays, and camera status layout.
 const Container = styled.div`
   position: relative;
   width: 100%;
@@ -97,18 +116,32 @@ const OverlayImg = styled.img`
   pointer-events: none;
   z-index: 5;
 `;
-const BottomText = styled.div`
+const CustomGuidelinesSvg = styled.svg`
   position: absolute;
-  left: 0; right: 0; bottom: 0;
-  padding: 10px 14px;
-  text-align: center;
-  color: #fff;
-  font-size: 25px;
-  letter-spacing: .2px;
-  background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
-  user-select: none;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: auto;
+  aspect-ratio: 639.46 / 206.03;
+  overflow: visible;
   pointer-events: none;
   z-index: 5;
+`;
+const CalibrationControl = styled.label`
+  position: absolute;
+  left: 50%;
+  bottom: 38px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  color: #fff;
+  background: rgb(0 0 0 / 55%);
+  border-radius: 4px;
+  z-index: 6;
+  font-size: 12px;
 `;
 const CenterMsg = styled.div`
   position: absolute;
@@ -119,21 +152,148 @@ const CenterMsg = styled.div`
   z-index: 4;
 `;
 
+// Custom guideline dimensions and reusable geometry helpers.
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
+
+type CustomGuidelinesProps = {
+  nearWidth: number;
+  farWidth: number;
+  length: number;
+  verticalPosition: number;
+  opacity: number;
+  lineThickness: number;
+  steeringAngle?: number;
+  curveStrength?: number;
+};
+
+const ORIGINAL_GUIDELINE_WIDTH = 639.46;
+const ORIGINAL_GUIDELINE_HEIGHT = 206.03;
+const ORIGINAL_GUIDELINE_CENTER = ORIGINAL_GUIDELINE_WIDTH / 2;
+const DEFAULT_NEAR_WIDTH = 90;
+const DEFAULT_GUIDELINE_LENGTH = 50;
+const CROSSBAR_GAP = 0;
+const CROSSBAR_LENGTH = 50;
+
+const guidelineSideSegments = [
+  { color: '#00ff00', startY: 0, endY: 40},
+  { color: '#00ff00', startY: 50, endY: 90 },
+  { color: '#ffff00', startY: 100, endY: 120},
+  { color: '#ffff00', startY: 130, endY: 170 },
+  { color: '#ff0000', startY: 180, endY: 200 },
+  { color: '#ff0000', startY: 210, endY: 250 },
+] as const;
+
+const guidelineCrossbars = [
+  { color: '#00ff00', y: 20 },
+  { color: '#00ff00', y: 70 },
+  { color: '#ffff00', y: 150 },
+  { color: '#ff0000', y: 230 },
+] as const;
+
+// Build both sides of the configurable parking guide from simple SVG lines.
+const CustomGuidelines = ({ nearWidth, farWidth, length, verticalPosition, opacity, lineThickness, steeringAngle = 0, curveStrength = 0 }: CustomGuidelinesProps) => {
+  const targetNearWidth = clamp(nearWidth, 20, 100);
+  const targetFarWidth = Math.min(clamp(farWidth, 5, 90), targetNearWidth);
+  const lengthScale = clamp(length, 20, 100) / DEFAULT_GUIDELINE_LENGTH;
+  const thicknessScale = clamp(lineThickness, 50, 200) / 100;
+  const curve = clamp(steeringAngle, -90, 90) * clamp(curveStrength, 0, 300) / 100;
+
+  const transformY = (sourceY: number) => ORIGINAL_GUIDELINE_HEIGHT / 2
+    + (sourceY - ORIGINAL_GUIDELINE_HEIGHT / 2) * lengthScale;
+
+  const halfWidthAt = (sourceY: number, farWidth: number, nearWidth: number) => {
+    const progress = sourceY / ORIGINAL_GUIDELINE_HEIGHT;
+    const width = farWidth + (nearWidth - farWidth) * progress;
+    return ORIGINAL_GUIDELINE_CENTER * width / DEFAULT_NEAR_WIDTH;
+  };
+
+  // The displacement grows toward the distant (top) end of the guide. This is
+  // deliberately a calibrated visual cue rather than a vehicle-path model.
+  const curveOffsetAt = (sourceY: number) => {
+    const distance = 1 - sourceY / ORIGINAL_GUIDELINE_HEIGHT;
+    return curve * distance * distance;
+  };
+
+  return (
+    <CustomGuidelinesSvg
+      viewBox={`0 0 ${ORIGINAL_GUIDELINE_WIDTH} ${ORIGINAL_GUIDELINE_HEIGHT}`}
+      aria-label="Custom rear camera guidelines"
+      style={{
+        opacity: clamp(opacity, 10, 100) / 100,
+        top: `${clamp(verticalPosition, 0, 100)}%`,
+      }}
+    >
+      {([-1, 1] as const).flatMap((side) =>
+        guidelineSideSegments.map((segment, index) => (
+          <path
+            key={`side-${side}-${index}`}
+            d={`M ${ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt(segment.startY, targetFarWidth, targetNearWidth) + curveOffsetAt(segment.startY)} ${transformY(segment.startY)} Q ${ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt((segment.startY + segment.endY) / 2, targetFarWidth, targetNearWidth) + curveOffsetAt((segment.startY + segment.endY) / 2)} ${transformY((segment.startY + segment.endY) / 2)} ${ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt(segment.endY, targetFarWidth, targetNearWidth) + curveOffsetAt(segment.endY)} ${transformY(segment.endY)}`}
+            fill="none"
+            stroke={segment.color}
+            strokeWidth={5 * thicknessScale}
+            strokeLinecap="butt"
+          />
+        ))
+      )}
+      {([-1, 1] as const).flatMap((side) =>
+        guidelineCrossbars.map((bar, index) => {
+          const targetHalfWidth = halfWidthAt(bar.y, targetFarWidth, targetNearWidth);
+          const separatedOuterHalfWidth = Math.max(
+            0,
+            targetHalfWidth - CROSSBAR_GAP * thicknessScale
+          );
+          const innerHalfWidth = Math.max(0, separatedOuterHalfWidth - CROSSBAR_LENGTH);
+          return (
+            <line
+              key={`bar-${side}-${index}`}
+              x1={ORIGINAL_GUIDELINE_CENTER + curveOffsetAt(bar.y) + side * separatedOuterHalfWidth}
+              y1={transformY(bar.y)}
+              x2={ORIGINAL_GUIDELINE_CENTER + curveOffsetAt(bar.y) + side * innerHalfWidth}
+              y2={transformY(bar.y)}
+              stroke={bar.color}
+              strokeWidth={5 * thicknessScale}
+              strokeLinecap="butt"
+            />
+          );
+        })
+      )}
+    </CustomGuidelinesSvg>
+  );
+};
+
 export default function Rearcam() {
+  // Active stream references, Socket.IO namespace, and saved guide settings.
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const requestIdRef = useRef(0);
   const socket = useNamespaces();
 
   const Caption = Typography.Subtitle;
-  const theme = useTheme();
   const reverseCamSettings = APP((state) => state.settings.reverseCam as ReverseCamSettings | undefined);
+
+  const guidelineMode = reverseCamSettings?.guidelineMode?.value ?? "Custom";
+  const guidelineNearWidth = Number(reverseCamSettings?.guidelineNearWidth?.value ?? 80);
+  const guidelineFarWidth = Number(reverseCamSettings?.guidelineFarWidth?.value ?? 35);
+  const guidelineLength = Number(reverseCamSettings?.guidelineLength?.value ?? 55);
+  const guidelineVerticalPosition = Number(reverseCamSettings?.guidelineVerticalPosition?.value ?? 45);
+  const guidelineOpacity = Number(reverseCamSettings?.guidelineOpacity?.value ?? 100);
+  const guidelineLineThickness = Number(reverseCamSettings?.guidelineLineThickness?.value ?? 65);
+  const steeringSignal = reverseCamSettings?.guidelineSteeringSignal?.value ?? "steeringAngle";
+  const steeringCenter = Number(reverseCamSettings?.guidelineSteeringCenter?.value ?? 0);
+  const steeringDirection = Number(reverseCamSettings?.guidelineSteeringDirection?.value ?? 1);
+  const curveStrength = Number(reverseCamSettings?.guidelineCurveStrength?.value ?? 100);
+  const canSteeringAngle = DATA((state) => Number(state.data[steeringSignal]));
+  const [manualSteeringAngle, setManualSteeringAngle] = useState<number | null>(null);
+  const calibratedSteeringAngle = (
+    manualSteeringAngle ?? (Number.isFinite(canSteeringAngle) ? canSteeringAngle : steeringCenter)
+  ) - steeringCenter;
 
   const [status, setStatus] =
     useState<"idle" | "opening" | "playing" | "error" | "denied">("idle");
   const [err, setErr] = useState("");
 
-  // Turn GPIO on when entering and off when leaving
+  // Power the camera through GPIO while the Rearcam page is mounted.
   useEffect(() => {
     socket.cam.emit('mount');
     return () => {
@@ -141,7 +301,7 @@ export default function Rearcam() {
     };
   }, []);
 
-  // Configurable bottom text
+  // Overlay warning and media-stream cleanup shared by every exit path.
   const overlayText = "CHECK SURROUNDINGS";
 
   const stopStream = () => {
@@ -150,17 +310,22 @@ export default function Rearcam() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
+  // Translate saved device, resolution, and video-standard choices into
+  // non-strict browser constraints so unsupported modes can fall back safely.
   const buildVideoConstraints = async () => {
     const constraints: MediaTrackConstraints = {};
     const selectionMode = reverseCamSettings?.deviceSelectionMode?.value ?? "auto";
     const deviceId = reverseCamSettings?.deviceId?.value ?? "";
-    const width = Number(reverseCamSettings?.videoWidth?.value ?? 0);
-    const height = Number(reverseCamSettings?.videoHeight?.value ?? 0);
-    const fps = Number(reverseCamSettings?.videoFps?.value ?? 0);
+    const resolution = reverseCamSettings?.videoResolution?.value ?? "Auto";
+    const videoStandard = reverseCamSettings?.videoFps?.value ?? "Auto";
 
-    if (Number.isFinite(width) && width > 0) constraints.width = { ideal: width };
-    if (Number.isFinite(height) && height > 0) constraints.height = { ideal: height };
-    if (Number.isFinite(fps) && fps > 0) constraints.frameRate = { ideal: fps };
+    const resolutionMatch = resolution.match(/^(\d+)\s*[x×]\s*(\d+)$/i);
+    if (resolutionMatch) {
+      constraints.width = { ideal: Number(resolutionMatch[1]) };
+      constraints.height = { ideal: Number(resolutionMatch[2]) };
+    }
+    const frameRate = videoStandard === "PAL" ? 25 : videoStandard === "NTSC" ? 30 : 0;
+    if (frameRate > 0) constraints.frameRate = { ideal: frameRate };
 
     if (selectionMode === "deviceId" && deviceId && deviceId !== "default") {
       const devices = navigator?.mediaDevices?.enumerateDevices
@@ -177,6 +342,8 @@ export default function Rearcam() {
     return constraints;
   };
 
+  // Open the selected capture device, reject stale asynchronous requests, and
+  // confirm that Chromium receives a playable frame before reporting success.
   const openCamera = async () => {
     const requestId = ++requestIdRef.current;
     setStatus("opening"); setErr("");
@@ -237,7 +404,7 @@ export default function Rearcam() {
     }
   };
 
-  // Auto-start on enter
+  // Start on entry and reopen when a camera-related setting changes.
   useEffect(() => {
     openCamera();
     return () => {
@@ -248,12 +415,11 @@ export default function Rearcam() {
   }, [
     reverseCamSettings?.deviceSelectionMode?.value,
     reverseCamSettings?.deviceId?.value,
-    reverseCamSettings?.videoWidth?.value,
-    reverseCamSettings?.videoHeight?.value,
+    reverseCamSettings?.videoResolution?.value,
     reverseCamSettings?.videoFps?.value,
   ]);
 
-  // Retry when the capture device connects/disconnects
+  // Retry after USB capture devices are connected or disconnected.
   useEffect(() => {
     const h = async () => {
       if (status !== "denied") await openCamera();
@@ -264,15 +430,55 @@ export default function Rearcam() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  // Render the live video, selected guideline mode, warning, and any errors.
   return (
     <Container>
       <Video ref={videoRef} autoPlay playsInline muted />
 
-      {/* Overlay PNG transparente */}
-      <OverlayImg
-        src="/assets/svg/graphics/guidelines.svg"
-        alt="Rear camera guidelines"
-      />
+      {guidelineMode === "Standard" && (
+        <OverlayImg
+          src="/assets/svg/graphics/guidelines.svg"
+          alt="Rear camera guidelines"
+        />
+      )}
+      {guidelineMode === "Custom" && (
+        <CustomGuidelines
+          nearWidth={guidelineNearWidth}
+          farWidth={guidelineFarWidth}
+          length={guidelineLength}
+          verticalPosition={guidelineVerticalPosition}
+          opacity={guidelineOpacity}
+          lineThickness={guidelineLineThickness}
+        />
+      )}
+      {guidelineMode === "Dynamic" && (
+        <>
+          <CustomGuidelines
+            nearWidth={guidelineNearWidth}
+            farWidth={guidelineFarWidth}
+            length={guidelineLength}
+            verticalPosition={guidelineVerticalPosition}
+            opacity={guidelineOpacity}
+            lineThickness={guidelineLineThickness}
+            steeringAngle={calibratedSteeringAngle * (steeringDirection < 0 ? -1 : 1)}
+            curveStrength={curveStrength}
+          />
+          <CalibrationControl title="Visual aid only; not a precise trajectory prediction">
+            Steering {Math.round(calibratedSteeringAngle)}°
+            <input
+              aria-label="Manual steering angle calibration"
+              type="range"
+              min={-90}
+              max={90}
+              value={manualSteeringAngle ?? (Number.isFinite(canSteeringAngle) ? canSteeringAngle : steeringCenter)}
+              onChange={(event) => setManualSteeringAngle(Number(event.target.value))}
+            />
+            {manualSteeringAngle !== null && (
+              <button type="button" onClick={() => setManualSteeringAngle(null)}>CAN</button>
+            )}
+          </CalibrationControl>
+        </>
+      )}
 
       {/* Bottom text */}
       <Caption style= {{position:'absolute', bottom:'0', left:'0', right:'0', textAlign:'center', zIndex: 5}}>{overlayText}</Caption>

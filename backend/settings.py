@@ -50,8 +50,45 @@ def migrate_settings():
             defaults = json.load(f)
         with user_app.open('r', encoding='utf-8') as f:
             user = json.load(f)
+
+        reverse_cam = user.get('reverseCam', {})
+        had_video_resolution = 'videoResolution' in reverse_cam
+        legacy_width = reverse_cam.get('videoWidth', {}).get('value')
+        legacy_height = reverse_cam.get('videoHeight', {}).get('value')
+
         added = _merge_missing(defaults, user)
         updated = []
+
+        # Replace the two legacy number fields with one safe resolution preset.
+        # Preserve the previous choice when it matches one of the supported modes.
+        reverse_cam = user.get('reverseCam', {})
+        if not had_video_resolution:
+            legacy_presets = {
+                (640, 360): '640 × 360',
+                (854, 480): '854 × 480',
+                (1280, 720): '1280 × 720',
+            }
+            legacy_resolution = legacy_presets.get((legacy_width, legacy_height))
+            if legacy_resolution:
+                reverse_cam['videoResolution']['value'] = legacy_resolution
+                updated.append('reverseCam.videoResolution.value')
+
+        for legacy_key in ('videoWidth', 'videoHeight'):
+            if legacy_key in reverse_cam:
+                del reverse_cam[legacy_key]
+                updated.append(f'reverseCam.{legacy_key}')
+
+        # Convert the legacy numeric FPS value to the equivalent video standard.
+        video_fps = reverse_cam.get('videoFps', {})
+        legacy_fps = video_fps.get('value')
+        if isinstance(legacy_fps, (int, float)):
+            if 24 <= legacy_fps <= 26:
+                video_fps['value'] = 'PAL'
+            elif 29 <= legacy_fps <= 31:
+                video_fps['value'] = 'NTSC'
+            else:
+                video_fps['value'] = 'Auto'
+            updated.append('reverseCam.videoFps.value')
 
         # This setting controls only manual navigation visibility, not reverse
         # activation. Update the old ambiguous built-in label while preserving

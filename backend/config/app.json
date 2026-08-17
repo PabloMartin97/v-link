@@ -147,17 +147,75 @@
         "default"
       ]
     },
-    "videoWidth": {
-      "value": 1280,
-      "label": "Video Width"
-    },
-    "videoHeight": {
-      "value": 720,
-      "label": "Video Height"
+    "videoResolution": {
+      "value": "Auto",
+      "label": "Resolution",
+      "options": [
+        "Auto",
+        "640 × 360",
+        "854 × 480",
+        "1280 × 720"
+      ]
     },
     "videoFps": {
-      "value": 30,
-      "label": "Video FPS"
+      "value": "Auto",
+      "label": "Video FPS",
+      "options": [
+        "Auto",
+        "PAL",
+        "NTSC"
+      ]
+    },
+    "guidelineMode": {
+      "value": "Custom",
+      "label": "Guidelines",
+      "options": [
+        "Off",
+        "Standard",
+        "Custom"
+      ]
+    },
+    "guidelineNearWidth": {
+      "value": 80,
+      "label": "Near Width (%)",
+      "min": 20,
+      "max": 100,
+      "step": 1
+    },
+    "guidelineFarWidth": {
+      "value": 35,
+      "label": "Far Width (%)",
+      "min": 5,
+      "max": 90,
+      "step": 1
+    },
+    "guidelineLength": {
+      "value": 55,
+      "label": "Guide Length (%)",
+      "min": 20,
+      "max": 100,
+      "step": 1
+    },
+    "guidelineVerticalPosition": {
+      "value": 45,
+      "label": "Vertical Position (%)",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "guidelineOpacity": {
+      "value": 100,
+      "label": "Guide Opacity (%)",
+      "min": 10,
+      "max": 100,
+      "step": 1
+    },
+    "guidelineLineThickness": {
+      "value": 65,
+      "label": "Line Thickness (%)",
+      "min": 50,
+      "max": 200,
+      "step": 5
     }
   },
   "side_bars": {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, ReactNode } from 'react';
 import CanSettings from './CanSettings';
 
 import styled, { useTheme } from 'styled-components';
@@ -97,6 +97,12 @@ const Element = styled.div`
     width: 100%;
 
     margin-bottom: 12px;
+`
+
+const SectionDescription = styled(Typography.Body1)`
+    width: 100%;
+    margin: 4px 0 14px;
+    opacity: 0.7;
 `
 
 
@@ -555,6 +561,18 @@ const Settings = () => {
 
     const nestedElements = Object.entries(nestedSettings).map(([setting, rawContent]) => {
       const content = rawContent as SettingContent;
+      const guidelineMode = (block.guidelineMode as SettingContent | undefined)?.value ?? 'Custom';
+      const customGuidelineSettings = new Set([
+        'guidelineNearWidth',
+        'guidelineFarWidth',
+        'guidelineLength',
+        'guidelineVerticalPosition',
+        'guidelineOpacity',
+        'guidelineLineThickness',
+      ]);
+      if (key === 'reverseCam' && guidelineMode !== 'Custom' && customGuidelineSettings.has(setting)) {
+        return null;
+      }
       let value: string | number | boolean;
       let label: string | undefined;
       const dataOptions: Record<string, string> = {};
@@ -681,7 +699,13 @@ const Settings = () => {
 
 
       return (
-        <Element key={setting}>
+        <Fragment key={setting}>
+          {key === 'reverseCam' && setting === 'guidelineMode' && (
+            <SectionDescription>
+              Adjust the parking guides to match your vehicle and camera position.
+            </SectionDescription>
+          )}
+        <Element>
           <Caption2>{label}</Caption2>
           <Divider />
           <Spacer>
@@ -692,9 +716,11 @@ const Settings = () => {
                 onChange={handleChange}
                 value={value as string}
               >
-                <option value="">
-                  N/A
-                </option>
+                {!(key === 'reverseCam' && ['guidelineMode', 'videoResolution', 'videoFps'].includes(setting)) && (
+                  <option value="">
+                    N/A
+                  </option>
+                )}
                 {dropdown.map((option) => {
                   const optVal = typeof option === 'string' ? option : option.value;
                   const optLabel = typeof option === 'string' ? option : option.label;
@@ -715,10 +741,19 @@ const Settings = () => {
                   ? (<Button name={setting} onClick={() => { handleBinding(key, setting) }}>
                     {value as string}
                   </Button>)
-                  : <Input name={setting} type={isText ? 'text' : 'number'} value={value as string | number} onChange={handleChange} />
+                  : <Input
+                    name={setting}
+                    type={isText ? 'text' : 'number'}
+                    value={value as string | number}
+                    min={content.min}
+                    max={content.max}
+                    step={content.step}
+                    onChange={handleChange}
+                  />
               )}
           </Spacer>
         </Element>
+        </Fragment>
       );
     });
 
