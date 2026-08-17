@@ -12,6 +12,7 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 import { transitionProjectionSession } from './sessionState'
+import { createEmptyCarplayMedia, mergeCarplayMedia } from './mediaState'
 
 import { APP } from '@/store/Store';
 import hexToRGBA from '@/app/helper/HexToRGBA'
@@ -330,6 +331,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           appUpdate((state) => {
             transitionProjectionSession(state.system.carplay, { type: 'phoneDisconnected' })
             state.system.carplay.user = false;
+            state.system.carplay.media = createEmptyCarplayMedia()
 
             state.system.interface.content = true
           });
@@ -345,9 +347,20 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         case 'audio':
           processAudio(ev.data.message)
           break
-        case 'media':
-          //TODO: implement
+        case 'media': {
+          const payload = ev.data.message.payload
+
+          if (!payload) break
+
+          appUpdate((state) => {
+            state.system.carplay.media = mergeCarplayMedia(
+              state.system.carplay.media,
+              payload,
+            )
+          })
+
           break
+        }
         case 'command':
           const {
             message: { value },
