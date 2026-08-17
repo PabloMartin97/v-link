@@ -1,14 +1,22 @@
 /**
  * V-Link Rearcam
  * Version: 2.0
- * Created by: Pablo Martín
+ * Created by: Pablo Martín for BoostedMoose
  */
+
+// TO DO NEXT VERSION: Dynamic rear-camera guidelines
+// - Read the steering angle from a configurable CAN signal.
+// - Add center offset, direction, and curve-strength calibration.
+// - Render curved guidelines according to the steering input.
+// - Treat the guidelines as a visual aid, not a precise trajectory prediction.
+
 
 import React, { useEffect, useRef, useState } from "react";
 import styled from 'styled-components';
 import { useNamespaces } from "@/socket/Namespaces";
 import { Typography } from "@/theme/styles/Typography";
-import { APP, DATA } from "@/store/Store";
+import { APP } from "@/store/Store";
+
 
 // Shape of the Rearcam settings read from the global app store.
 type ReverseCamSettings = {
@@ -23,10 +31,6 @@ type ReverseCamSettings = {
   guidelineVerticalPosition?: { value: number };
   guidelineOpacity?: { value: number };
   guidelineLineThickness?: { value: number };
-  guidelineSteeringSignal?: { value: string };
-  guidelineSteeringCenter?: { value: number };
-  guidelineSteeringDirection?: { value: number };
-  guidelineCurveStrength?: { value: number };
 };
 
 // Camera startup validation and user-facing media error messages.
@@ -128,21 +132,6 @@ const CustomGuidelinesSvg = styled.svg`
   pointer-events: none;
   z-index: 5;
 `;
-const CalibrationControl = styled.label`
-  position: absolute;
-  left: 50%;
-  bottom: 38px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  color: #fff;
-  background: rgb(0 0 0 / 55%);
-  border-radius: 4px;
-  z-index: 6;
-  font-size: 12px;
-`;
 const CenterMsg = styled.div`
   position: absolute;
   inset: 0;
@@ -163,8 +152,6 @@ type CustomGuidelinesProps = {
   verticalPosition: number;
   opacity: number;
   lineThickness: number;
-  steeringAngle?: number;
-  curveStrength?: number;
 };
 
 const ORIGINAL_GUIDELINE_WIDTH = 639.46;
@@ -192,12 +179,11 @@ const guidelineCrossbars = [
 ] as const;
 
 // Build both sides of the configurable parking guide from simple SVG lines.
-const CustomGuidelines = ({ nearWidth, farWidth, length, verticalPosition, opacity, lineThickness, steeringAngle = 0, curveStrength = 0 }: CustomGuidelinesProps) => {
+const CustomGuidelines = ({ nearWidth, farWidth, length, verticalPosition, opacity, lineThickness }: CustomGuidelinesProps) => {
   const targetNearWidth = clamp(nearWidth, 20, 100);
   const targetFarWidth = Math.min(clamp(farWidth, 5, 90), targetNearWidth);
   const lengthScale = clamp(length, 20, 100) / DEFAULT_GUIDELINE_LENGTH;
   const thicknessScale = clamp(lineThickness, 50, 200) / 100;
-  const curve = clamp(steeringAngle, -90, 90) * clamp(curveStrength, 0, 300) / 100;
 
   const transformY = (sourceY: number) => ORIGINAL_GUIDELINE_HEIGHT / 2
     + (sourceY - ORIGINAL_GUIDELINE_HEIGHT / 2) * lengthScale;
@@ -206,13 +192,6 @@ const CustomGuidelines = ({ nearWidth, farWidth, length, verticalPosition, opaci
     const progress = sourceY / ORIGINAL_GUIDELINE_HEIGHT;
     const width = farWidth + (nearWidth - farWidth) * progress;
     return ORIGINAL_GUIDELINE_CENTER * width / DEFAULT_NEAR_WIDTH;
-  };
-
-  // The displacement grows toward the distant (top) end of the guide. This is
-  // deliberately a calibrated visual cue rather than a vehicle-path model.
-  const curveOffsetAt = (sourceY: number) => {
-    const distance = 1 - sourceY / ORIGINAL_GUIDELINE_HEIGHT;
-    return curve * distance * distance;
   };
 
   return (
@@ -226,10 +205,12 @@ const CustomGuidelines = ({ nearWidth, farWidth, length, verticalPosition, opaci
     >
       {([-1, 1] as const).flatMap((side) =>
         guidelineSideSegments.map((segment, index) => (
-          <path
+          <line
             key={`side-${side}-${index}`}
-            d={`M ${ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt(segment.startY, targetFarWidth, targetNearWidth) + curveOffsetAt(segment.startY)} ${transformY(segment.startY)} Q ${ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt((segment.startY + segment.endY) / 2, targetFarWidth, targetNearWidth) + curveOffsetAt((segment.startY + segment.endY) / 2)} ${transformY((segment.startY + segment.endY) / 2)} ${ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt(segment.endY, targetFarWidth, targetNearWidth) + curveOffsetAt(segment.endY)} ${transformY(segment.endY)}`}
-            fill="none"
+            x1={ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt(segment.startY, targetFarWidth, targetNearWidth)}
+            y1={transformY(segment.startY)}
+            x2={ORIGINAL_GUIDELINE_CENTER + side * halfWidthAt(segment.endY, targetFarWidth, targetNearWidth)}
+            y2={transformY(segment.endY)}
             stroke={segment.color}
             strokeWidth={5 * thicknessScale}
             strokeLinecap="butt"
@@ -247,9 +228,9 @@ const CustomGuidelines = ({ nearWidth, farWidth, length, verticalPosition, opaci
           return (
             <line
               key={`bar-${side}-${index}`}
-              x1={ORIGINAL_GUIDELINE_CENTER + curveOffsetAt(bar.y) + side * separatedOuterHalfWidth}
+              x1={ORIGINAL_GUIDELINE_CENTER + side * separatedOuterHalfWidth}
               y1={transformY(bar.y)}
-              x2={ORIGINAL_GUIDELINE_CENTER + curveOffsetAt(bar.y) + side * innerHalfWidth}
+              x2={ORIGINAL_GUIDELINE_CENTER + side * innerHalfWidth}
               y2={transformY(bar.y)}
               stroke={bar.color}
               strokeWidth={5 * thicknessScale}
@@ -279,15 +260,6 @@ export default function Rearcam() {
   const guidelineVerticalPosition = Number(reverseCamSettings?.guidelineVerticalPosition?.value ?? 45);
   const guidelineOpacity = Number(reverseCamSettings?.guidelineOpacity?.value ?? 100);
   const guidelineLineThickness = Number(reverseCamSettings?.guidelineLineThickness?.value ?? 65);
-  const steeringSignal = reverseCamSettings?.guidelineSteeringSignal?.value ?? "steeringAngle";
-  const steeringCenter = Number(reverseCamSettings?.guidelineSteeringCenter?.value ?? 0);
-  const steeringDirection = Number(reverseCamSettings?.guidelineSteeringDirection?.value ?? 1);
-  const curveStrength = Number(reverseCamSettings?.guidelineCurveStrength?.value ?? 100);
-  const canSteeringAngle = DATA((state) => Number(state.data[steeringSignal]));
-  const [manualSteeringAngle, setManualSteeringAngle] = useState<number | null>(null);
-  const calibratedSteeringAngle = (
-    manualSteeringAngle ?? (Number.isFinite(canSteeringAngle) ? canSteeringAngle : steeringCenter)
-  ) - steeringCenter;
 
   const [status, setStatus] =
     useState<"idle" | "opening" | "playing" | "error" | "denied">("idle");
@@ -450,34 +422,6 @@ export default function Rearcam() {
           opacity={guidelineOpacity}
           lineThickness={guidelineLineThickness}
         />
-      )}
-      {guidelineMode === "Dynamic" && (
-        <>
-          <CustomGuidelines
-            nearWidth={guidelineNearWidth}
-            farWidth={guidelineFarWidth}
-            length={guidelineLength}
-            verticalPosition={guidelineVerticalPosition}
-            opacity={guidelineOpacity}
-            lineThickness={guidelineLineThickness}
-            steeringAngle={calibratedSteeringAngle * (steeringDirection < 0 ? -1 : 1)}
-            curveStrength={curveStrength}
-          />
-          <CalibrationControl title="Visual aid only; not a precise trajectory prediction">
-            Steering {Math.round(calibratedSteeringAngle)}°
-            <input
-              aria-label="Manual steering angle calibration"
-              type="range"
-              min={-90}
-              max={90}
-              value={manualSteeringAngle ?? (Number.isFinite(canSteeringAngle) ? canSteeringAngle : steeringCenter)}
-              onChange={(event) => setManualSteeringAngle(Number(event.target.value))}
-            />
-            {manualSteeringAngle !== null && (
-              <button type="button" onClick={() => setManualSteeringAngle(null)}>CAN</button>
-            )}
-          </CalibrationControl>
-        </>
       )}
 
       {/* Bottom text */}
