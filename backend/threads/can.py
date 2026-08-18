@@ -341,6 +341,8 @@ class CANScheduler(threading.Thread):
                     if not replied:
                         self.logger.warning(f'[CAN] No reply for "{sensor["label"]}" within {self.REPLY_TIMEOUT * 1000:.0f}ms, moving on.')
 
+                time.sleep(0.01)
+
             except Exception as e:
                 self.logger.error(f'[CAN] Failed to send message for "{sensor["label"]}": {e}')
                 self.logger.error(f'[CAN] Bus not available, stopping scheduler.')
