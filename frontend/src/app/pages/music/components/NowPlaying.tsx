@@ -1,7 +1,7 @@
 import type { CarplayMediaState, ProjectionSource } from '@/carplay/mediaState';
 import { sendCarplayMediaCommand } from '@/carplay/mediaCommands';
-import { useThemeColor } from '@/store/Store';
-import { useState } from 'react';
+import { APP, useThemeColor } from '@/store/Store';
+import { useEffect, useRef, useState } from 'react';
 import { useTheme } from 'styled-components';
 
 import {
@@ -44,6 +44,19 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const [usbBrowserOpen, setUsbBrowserOpen] = useState(false);
   const localMedia = useLocalMedia();
   const localTrack = localMedia.currentTrack == null ? null : localMedia.tracks[localMedia.currentTrack];
+  const keyStroke = APP((state) => state.keyStroke);
+  const bindings = APP((state) => state.settings.dongle_bindings as Record<string, { value?: string }> | undefined);
+  const handledStrokeRef = useRef(false);
+
+  useEffect(() => {
+    if (!keyStroke) {
+      handledStrokeRef.current = false;
+      return;
+    }
+    if (handledStrokeRef.current || phoneConnected || usbBrowserOpen || localTrack) return;
+    handledStrokeRef.current = true;
+    if (keyStroke === bindings?.selectDown?.value) setUsbBrowserOpen(true);
+  }, [bindings, keyStroke, localTrack, phoneConnected, usbBrowserOpen]);
 
   if (!phoneConnected) {
     if (usbBrowserOpen) {
@@ -79,7 +92,7 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
               <span>Connect CarPlay or Android Auto to control playback.</span>
             </EmptyCopy>
           </EmptyOptionRow>
-          <UsbMediaOption type="button" onClick={() => setUsbBrowserOpen(true)}>
+          <UsbMediaOption type="button" $focused onClick={() => setUsbBrowserOpen(true)}>
             <UsbMediaTile aria-hidden="true"><FolderIcon /></UsbMediaTile>
             <EmptyCopy>
               <strong>Local Media</strong>

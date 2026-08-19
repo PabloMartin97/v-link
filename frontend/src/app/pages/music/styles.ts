@@ -71,14 +71,16 @@ export const Controls = styled.div`
   display: flex; align-items: center; justify-content: center;
   gap: clamp(18px, 4vw, 36px); margin-top: clamp(14px, 3vh, 24px);
 `;
-export const ControlButton = styled.button<{ $primary?: boolean; $active?: boolean; $color?: string }>`
-  width: ${({ $primary }) => ($primary ? '58px' : '46px')};
-  height: ${({ $primary }) => ($primary ? '58px' : '46px')};
+export const ControlButton = styled.button<{ $primary?: boolean; $active?: boolean; $focused?: boolean; $color?: string }>`
+  width: ${({ $primary }) => ($primary ? '68px' : '54px')};
+  height: ${({ $primary }) => ($primary ? '68px' : '54px')};
   display: grid; place-items: center; padding: 0;
   border: ${({ $primary, $color }) => ($primary ? `1px solid ${$color}` : '1px solid transparent')};
   border-radius: 50%; color: ${({ theme, $primary, $active, $color }) => ($primary ? theme.colors.bg1 : $active ? $color : theme.colors.light)};
   background: ${({ $primary, $color }) => ($primary ? $color : 'transparent')}; cursor: pointer;
-  svg { width: ${({ $primary }) => ($primary ? '28px' : '25px')}; height: ${({ $primary }) => ($primary ? '28px' : '25px')}; fill: currentColor; stroke: currentColor; stroke-width: 1.5; }
+  outline: ${({ $focused, $color }) => $focused ? `2px solid ${$color}` : 'none'};
+  outline-offset: 3px;
+  svg { width: ${({ $primary }) => ($primary ? '33px' : '29px')}; height: ${({ $primary }) => ($primary ? '33px' : '29px')}; fill: currentColor; stroke: currentColor; stroke-width: 1.5; }
   text { fill: currentColor; stroke: none; font: 700 10px sans-serif; }
   &:active { transform: scale(.94); }
 `;
@@ -97,9 +99,11 @@ export const EmptyCopy = styled.div`
   strong { font-size: clamp(20px, 4vw, 34px); }
   span { max-width: 360px; color: ${({ theme }) => theme.colors.medium}; font-size: 14px; }
 `;
-export const UsbMediaOption = styled.button`
+export const UsbMediaOption = styled.button<{ $focused?: boolean }>`
   display: grid; grid-template-columns: 130px minmax(0, 360px); align-items: center; gap: 24px;
   padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer;
+  outline: ${({ $focused, theme }) => $focused ? `2px solid ${theme.colors.medium}` : 'none'};
+  outline-offset: 6px; border-radius: 18px;
   &:active { transform: scale(.985); }
 `;
 export const UsbMediaTile = styled.div`
@@ -130,11 +134,13 @@ export const UsbBrowserButton = styled.button<{ $accent?: string }>`
 export const UsbTrackList = styled.div`
   min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto;
 `;
-export const UsbTrackButton = styled.button<{ $active: boolean; $accent: string }>`
+export const UsbTrackButton = styled.button<{ $active: boolean; $focused: boolean; $accent: string }>`
   width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center;
   gap: 10px; padding: 12px 14px; border: 0; border-radius: 10px; text-align: left;
   color: ${({ $active, $accent, theme }) => $active ? $accent : theme.colors.text};
   background: ${({ $active, theme }) => $active ? theme.colors.dark : 'transparent'}; cursor: pointer;
+  outline: ${({ $focused, $accent }) => $focused ? `2px solid ${$accent}` : 'none'};
+  outline-offset: -2px;
   span { text-align: center; }
   strong { overflow: hidden; font: ${({ theme }) => `${theme.fontWeights.semiBold} 14px ${theme.fonts.inter}`}; text-overflow: ellipsis; white-space: nowrap; }
 `;
