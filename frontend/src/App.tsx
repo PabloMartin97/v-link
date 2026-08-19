@@ -13,6 +13,7 @@ import Init from './app/Init';
 import Splash from './app/Splash';
 import Content from './app/Content';
 import { Modal } from './app/components/Modal';
+import { LocalMediaProvider } from './app/pages/music/LocalMediaProvider';
 
 
 import Carplay from './carplay/Carplay';
@@ -145,6 +146,7 @@ function App() {
         <Socket />
 
         <ThemeProvider theme={scaledTheme}>
+          <LocalMediaProvider>
 
           <Splash />
           <Init />
@@ -163,6 +165,7 @@ function App() {
           ) : (
             <></>
           )}
+          </LocalMediaProvider>
         </ThemeProvider>
 
       </AppContainer>
