@@ -1,5 +1,6 @@
-// TODO: Use AudioMediaStart/AudioMediaStop as a secondary source when the dongle does not provide MediaPlayStatus.
-import type { MediaData } from 'node-carplay/web'
+import { AudioCommand, type MediaData } from 'node-carplay/web'
+
+export type ProjectionSource = 'CarPlay' | 'Android Auto' | null
 
 export interface CarplayMediaState {
   title: string
@@ -24,6 +25,22 @@ export const createEmptyCarplayMedia = (): CarplayMediaState => ({
   playbackStatus: 0,
   artworkBase64: null,
 })
+
+export const playbackStatusFromAudioCommand = (
+  currentStatus: number,
+  command?: AudioCommand,
+): number => {
+  switch (command) {
+    case AudioCommand.AudioMediaStart:
+    case AudioCommand.AudioOutputStart:
+      return 1
+    case AudioCommand.AudioMediaStop:
+    case AudioCommand.AudioOutputStop:
+      return 0
+    default:
+      return currentStatus
+  }
+}
 
 export const mergeCarplayMedia = (
   current: CarplayMediaState,

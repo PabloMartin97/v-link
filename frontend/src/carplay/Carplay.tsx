@@ -12,7 +12,7 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 import { transitionProjectionSession } from './sessionState'
-import { createEmptyCarplayMedia, mergeCarplayMedia } from './mediaState'
+import { createEmptyCarplayMedia, mergeCarplayMedia, playbackStatusFromAudioCommand } from './mediaState'
 import { CARPLAY_MEDIA_COMMAND_EVENT, type MediaCommand } from './mediaCommands'
 
 import { APP } from '@/store/Store';
@@ -332,6 +332,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           appUpdate((state) => {
             transitionProjectionSession(state.system.carplay, { type: 'phoneDisconnected' })
             state.system.carplay.user = false;
+            state.system.carplay.source = null
             state.system.carplay.media = createEmptyCarplayMedia()
 
             state.system.interface.content = true
@@ -345,9 +346,27 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           console.log(`(CarPlay) Video message ${ev.data.count}: ${ev.data.bytes} bytes`)
           socket.log.emit('info', `(CarPlay) Video message ${ev.data.count}: ${ev.data.bytes} bytes`)
           break
-        case 'audio':
-          processAudio(ev.data.message)
+        case 'diagnostic':
+          console.info(ev.data.message)
           break
+        case 'projectionSource': {
+          const source = ev.data.source
+          appUpdate((state) => {
+            state.system.carplay.source = source
+          })
+          break
+        }
+        case 'audio': {
+          const audio = ev.data.message
+          appUpdate((state) => {
+            state.system.carplay.media.playbackStatus = playbackStatusFromAudioCommand(
+              state.system.carplay.media.playbackStatus,
+              audio.command,
+            )
+          })
+          processAudio(audio)
+          break
+        }
         case 'media': {
           const payload = ev.data.message.payload
 
@@ -430,6 +449,12 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   useEffect(() => {
     const handleMediaCommand = (event: Event) => {
       const command = (event as CustomEvent<MediaCommand>).detail
+      if (command === 'playOrPause') {
+        appUpdate((state) => {
+          const media = state.system.carplay.media
+          media.playbackStatus = media.playbackStatus > 0 ? 0 : 1
+        })
+      }
       carplayWorker.postMessage({ type: 'keyCommand', command })
       socket.log.emit('debug', `(CarPlay) Media command: ${command}`)
     }
@@ -512,6 +537,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
         appUpdate((state) => {
           transitionProjectionSession(state.system.carplay, { type: 'dongleDisconnected' })
           state.system.carplay.user = false;
+          state.system.carplay.source = null
         });
       }, USB_DETACH_DEBOUNCE_MS)
     }

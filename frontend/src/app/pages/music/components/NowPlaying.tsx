@@ -1,4 +1,4 @@
-import type { CarplayMediaState } from '@/carplay/mediaState';
+import type { CarplayMediaState, ProjectionSource } from '@/carplay/mediaState';
 import { sendCarplayMediaCommand } from '@/carplay/mediaCommands';
 import { useThemeColor } from '@/store/Store';
 import { useTheme } from 'styled-components';
@@ -13,6 +13,7 @@ import { clampProgress, formatTime, getArtworkSource } from '../utils';
 interface NowPlayingProps {
   media: CarplayMediaState;
   phoneConnected: boolean;
+  source: ProjectionSource;
 }
 
 const PreviousIcon = () => <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 7v18M25 8 11 16l14 8V8Z" /></svg>;
@@ -23,7 +24,7 @@ const PlayPauseIcon = ({ playing }: { playing: boolean }) => (
   </svg>
 );
 
-const NowPlaying = ({ media, phoneConnected }: NowPlayingProps) => {
+const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const theme = useTheme();
   const themeColor = useThemeColor();
   const accent = theme.colors.theme[themeColor].active;
@@ -31,17 +32,13 @@ const NowPlaying = ({ media, phoneConnected }: NowPlayingProps) => {
   const artworkSource = getArtworkSource(media.artworkBase64);
   const playing = media.playbackStatus > 0;
 
-  if (!hasMedia) {
+  if (!phoneConnected) {
     return (
       <EmptyState>
         <AlbumPlaceholder $compact aria-hidden="true">♪</AlbumPlaceholder>
         <EmptyCopy>
-          <strong>{phoneConnected ? 'Waiting for media' : 'Nothing playing'}</strong>
-          <span>
-            {phoneConnected
-              ? 'The phone is connected, but the dongle has not sent any metadata yet.'
-              : 'Connect CarPlay or Android Auto to see what is playing.'}
-          </span>
+          <strong>Nothing playing</strong>
+          <span>Connect CarPlay or Android Auto to control playback.</span>
         </EmptyCopy>
       </EmptyState>
     );
@@ -53,16 +50,18 @@ const NowPlaying = ({ media, phoneConnected }: NowPlayingProps) => {
         {artworkSource ? <img src={artworkSource} alt="" /> : <AlbumPlaceholder aria-hidden="true">♪</AlbumPlaceholder>}
       </AlbumArt>
       <Details>
-        <AppName style={{ color: accent }}>{media.appName || 'CarPlay / Android Auto'}</AppName>
-        <Title>{media.title || 'Título desconocido'}</Title>
-        <Artist>{media.artist || 'Artista desconocido'}</Artist>
+        <AppName style={{ color: accent }}>{media.appName || source || 'Phone projection'}</AppName>
+        <Title>{media.title || 'Now Playing'}</Title>
+        <Artist>{media.artist || (hasMedia ? 'Unknown artist' : 'Metadata unavailable')}</Artist>
         {media.album && <Album>{media.album}</Album>}
-        <Progress>
-          <ProgressTrack>
-            <ProgressFill $progress={clampProgress(media.positionMs, media.durationMs)} $color={accent} />
-          </ProgressTrack>
-          <TimeRow><Time>{formatTime(media.positionMs)}</Time><Time>{formatTime(media.durationMs)}</Time></TimeRow>
-        </Progress>
+        {hasMedia && (
+          <Progress>
+            <ProgressTrack>
+              <ProgressFill $progress={clampProgress(media.positionMs, media.durationMs)} $color={accent} />
+            </ProgressTrack>
+            <TimeRow><Time>{formatTime(media.positionMs)}</Time><Time>{formatTime(media.durationMs)}</Time></TimeRow>
+          </Progress>
+        )}
         <Controls>
           <ControlButton type="button" aria-label="Anterior" onClick={() => sendCarplayMediaCommand('prev')}><PreviousIcon /></ControlButton>
           <ControlButton type="button" $primary $color={accent} aria-label={playing ? 'Pausar' : 'Reproducir'} onClick={() => sendCarplayMediaCommand('playOrPause')}>

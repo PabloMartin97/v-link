@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   createEmptyCarplayMedia,
   mergeCarplayMedia,
+  playbackStatusFromAudioCommand,
   type CarplayMediaPayload,
 } from './mediaState'
+import { AudioCommand } from 'node-carplay/web'
 
 describe('CarPlay media state', () => {
   it('merges partial metadata without clearing existing values', () => {
@@ -38,5 +40,13 @@ describe('CarPlay media state', () => {
       ...current,
       artworkBase64: 'new-cover',
     })
+  })
+
+  it('derives playback state from media audio commands', () => {
+    expect(playbackStatusFromAudioCommand(0, AudioCommand.AudioMediaStart)).toBe(1)
+    expect(playbackStatusFromAudioCommand(1, AudioCommand.AudioMediaStop)).toBe(0)
+    expect(playbackStatusFromAudioCommand(0, AudioCommand.AudioOutputStart)).toBe(1)
+    expect(playbackStatusFromAudioCommand(1, AudioCommand.AudioOutputStop)).toBe(0)
+    expect(playbackStatusFromAudioCommand(1, AudioCommand.AudioNaviStart)).toBe(1)
   })
 })

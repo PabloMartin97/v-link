@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {immer} from 'zustand/middleware/immer'
 import type { ReactNode } from 'react'
 import type { ProjectionPhase, ProjectionTransport } from '@/carplay/sessionState'
-import { createEmptyCarplayMedia, type CarplayMediaState } from '@/carplay/mediaState'
+import { createEmptyCarplayMedia, type CarplayMediaState, type ProjectionSource } from '@/carplay/mediaState'
 
 interface SizeState {
   width: number;
@@ -22,6 +22,7 @@ interface CarplayState {
   paired: boolean;
   connected: boolean;
   pair?: boolean;
+  source: ProjectionSource;
   media: CarplayMediaState;
 }
 
@@ -144,6 +145,7 @@ const APP = create<AppState>()(
         fullscreen: false,
         paired: false,
         connected: false,
+        source: null,
         media: createEmptyCarplayMedia(),
       },
 
