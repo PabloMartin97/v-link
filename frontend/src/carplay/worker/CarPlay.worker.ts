@@ -173,6 +173,7 @@ const handleMessage = (message: CarplayMessage) => {
       try {
         audioBuffers[audioKey].push(payload.data)
       } catch {
+        // A full ring buffer may reject a frame; dropping it keeps A/V live.
       }
     } else {
       if (!pendingAudio[audioKey]) {

@@ -142,6 +142,14 @@ class VLINK:
             self.start_thread('vcan', logger)
             time.sleep(.05)
 
+        if not shared_state.hardware:
+            logger.info('[V-Link] Hardware threads are disabled.')
+            return
+
+        can_ready = True
+        if not shared_state.vCan:
+            can_ready = self.configure_can_bitrates(settings)
+
         self.start_thread('cam', logger)
         time.sleep(.05)
 
@@ -149,9 +157,11 @@ class VLINK:
             self.start_thread('mst', logger)
             time.sleep(.05)
 
-        if shared_state.canModule:
+        if shared_state.canModule and can_ready:
             self.start_thread('can', logger)
             time.sleep(.05)
+        elif shared_state.canModule:
+            logger.error('[CAN] CAN thread not started because the physical bitrate is unverified.')
         if shared_state.rtiModule:
             self.start_thread('rti', logger)
             time.sleep(.05)
@@ -159,10 +169,57 @@ class VLINK:
             self.start_thread('adc', logger)
             time.sleep(.05)
         if shared_state.swcModule:
-            self.start_thread('swc', logger)
-            time.sleep(.05)
+            swc_settings = settings.load_settings('swc') or {}
+            swc_interface = swc_settings.get('controls', {}).get('interface', {}).get('name', '')
+            if swc_interface.startswith('can') and not can_ready:
+                logger.error('[SWC] CAN steering controls not started because the bitrate is unverified.')
+            else:
+                self.start_thread('swc', logger)
+                time.sleep(.05)
 
         vlink.start_thread('ign', logger)
+
+    def configure_can_bitrates(self, settings):
+        helper = '/usr/local/sbin/v-link-can-set'
+        if not os.path.isfile(helper):
+            if os.environ.get('VLINK_MANAGED_CAN') == '1':
+                logger.error(f'[CAN] Required bitrate helper is unavailable: {helper}')
+                return False
+            logger.warning('[CAN] Managed bitrate helper is unavailable; preserving legacy CAN setup.')
+            return True
+
+        try:
+            can_settings = settings.load_settings('can')
+            can2 = next(
+                interface for interface in can_settings.get('interfaces', [])
+                if interface.get('channel') == 'can2'
+            )
+            can2_bitrate = int(can2['bitrate'])
+            if can2_bitrate not in {250000, 500000}:
+                raise ValueError(f'unsupported can2 bitrate {can2_bitrate}')
+
+            subprocess.run(
+                [
+                    'sudo', '-n', helper,
+                    'can1', '125000',
+                    'can2', str(can2_bitrate),
+                ],
+                check=True,
+                timeout=45,
+            )
+            logger.info(f'[CAN] Configured can1=125000 and can2={can2_bitrate}.')
+            return True
+        except (
+            OSError,
+            AttributeError,
+            KeyError,
+            StopIteration,
+            TypeError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as error:
+            logger.error(f'[CAN] Could not apply profile bitrates: {error}')
+            return False
 
     def start_thread(self, thread_name, logger):
         if thread_name in shared_state.THREADS:
@@ -200,6 +257,10 @@ class VLINK:
 
 
     def toggle_thread(self, thread_name):
+        if not shared_state.hardware and thread_name not in {'app', 'server', 'vcan'}:
+            logger.warning(f'[V-Link] "{thread_name}" is unavailable in no-hardware mode.')
+            return
+
         thread = shared_state.THREADS.get(thread_name)
         is_alive = isinstance(thread, threading.Thread) and thread.is_alive()
         if is_alive:
@@ -355,8 +416,9 @@ def setup_arguments():
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--vcan', action='store_true', help='Simulate CAN-Bus')
     parser.add_argument('--vlin', action='store_true', help='Simulate LIN-Bus')
-    parser.add_argument('--vite', action='store_false', help='Start on Vite-Port 5173')
+    parser.add_argument('--vite', action='store_true', help='Use the Vite development server on port 5173')
     parser.add_argument('--nokiosk', action='store_false', help='Start in windowed mode')
+    parser.add_argument('--no-hardware', action='store_true', help='Disable physical GPIO, CAN, UART and HAT threads')
     parser.add_argument('--dev', action='store_true', help='Development mode')
 
     return parser.parse_args()
@@ -438,19 +500,19 @@ if __name__ == '__main__':
     if not args.verbose:
         logging.getLogger('vlink').addHandler(_log_handler)
 
-
-    vlink = VLINK()
-    vlink.start_thread('server', logger)
-    vlink.detect_rpi()
-
-
-    # Update shared_state based on arguments
+    # Apply runtime restrictions before any server or browser thread can
+    # accept events from a previously running kiosk process.
     shared_state.verbose = args.verbose
     shared_state.vCan = args.vcan
     shared_state.vLin = args.vlin
     shared_state.vite = args.vite
     shared_state.isKiosk = args.nokiosk
+    shared_state.hardware = not args.no_hardware
     shared_state.dev = args.dev
+
+    vlink = VLINK()
+    vlink.start_thread('server', logger)
+    vlink.detect_rpi()
 
     #Set ignition signal HIGH initially
     shared_state.ignStatus.set()
@@ -498,16 +560,22 @@ if __name__ == '__main__':
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 script_path = os.path.join(current_dir, 'Update.sh')
 
-                # Launch updater in a new terminal window
+                # Run the updater in an independent transient unit so it
+                # survives this service stopping.
                 try:
                     logger.info('Starting update...')
-                    subprocess.Popen([
-                        'lxterminal',
-                        f'--title=V-Link Updater',
-                        '--command',
-                        f"sh -c 'sh \"{script_path}\"; exec bash'"
-                    ])
+                    subprocess.run([
+                        'systemd-run',
+                        '--user',
+                        '--collect',
+                        f'--unit=v-link-update-{os.getpid()}',
+                        script_path,
+                    ], check=True)
                 except Exception as e:
                     logger.error(f'Update failed: {e}')
+                    # Exit unsuccessfully and let Restart=on-failure recover
+                    # this service; restarting it from inside its own cgroup
+                    # can deadlock or terminate this process mid-cleanup.
+                    sys.exit(1)
 
             sys.exit(0)

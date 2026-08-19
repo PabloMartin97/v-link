@@ -443,7 +443,7 @@ const Settings = () => {
   }
 
   const checkUpdate = async () => {
-    const githubRepo = "BoostedMoose/v-link"; // Replace with your GitHub repository
+    const githubRepo = "PabloMartin97/v-link";
 
     try {
       const response = await fetch(
@@ -455,10 +455,22 @@ const Settings = () => {
       }
 
       const data = await response.json();
-      const latestVersion = data.tag_name; // This is the version (e.g., "v1.2.0")
+      const latestVersion = String(data.tag_name ?? "");
+      const versionParts = (value: string) =>
+        value.trim().replace(/^v/i, "").split("-", 1)[0]
+          .split(".").map((part) => Number.parseInt(part, 10) || 0);
+      const compareVersions = (left: string, right: string) => {
+        const leftParts = versionParts(left);
+        const rightParts = versionParts(right);
+        const length = Math.max(leftParts.length, rightParts.length);
+        for (let index = 0; index < length; index += 1) {
+          const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+          if (difference !== 0) return difference;
+        }
+        return 0;
+      };
 
-
-      if (latestVersion === versionNumber)
+      if (!latestVersion || compareVersions(latestVersion, versionNumber) <= 0)
         openModal("No Updates available.", "Check back again later :)", undefined, undefined)
       else {
         openModal("New update available!", `Current: ${versionNumber} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))

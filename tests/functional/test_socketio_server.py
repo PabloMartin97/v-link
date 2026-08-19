@@ -33,6 +33,33 @@ def test_client_connects_to_root_namespace(sio_client):
     assert sio_client.is_connected()
 
 
+def test_socketio_rejects_untrusted_browser_origin():
+    """A remote web page must not be able to drive the localhost system socket."""
+    from backend.server import server
+
+    client = server.test_client()
+    allowed = client.get(
+        '/socket.io/?EIO=4&transport=polling',
+        headers={'Origin': 'http://localhost:4001'},
+    )
+    blocked = client.get(
+        '/socket.io/?EIO=4&transport=polling',
+        headers={'Origin': 'https://attacker.invalid'},
+    )
+
+    assert allowed.status_code == 200
+    assert blocked.status_code in {400, 403}
+
+
+def test_index_has_cross_origin_isolation_headers():
+    """SharedArrayBuffer audio requires COOP and COEP on the main document."""
+    from backend.server import server
+
+    response = server.test_client().get('/')
+    assert response.headers['Cross-Origin-Opener-Policy'] == 'same-origin'
+    assert response.headers['Cross-Origin-Embedder-Policy'] == 'require-corp'
+
+
 def test_sys_connect_emits_ign_and_reverse(seeded_config_dir):
     """
     Connecting to /sys must immediately receive 'ign' and 'reverse' events
@@ -212,6 +239,49 @@ def test_can_toggle_sets_shared_state_event(seeded_config_dir):
     finally:
         shared_state.toggle_can.clear()
         client.disconnect(namespace='/can')
+
+
+def test_can_toggle_is_blocked_in_no_hardware_mode(seeded_config_dir):
+    """UI-only mode must not start physical CAN/GPIO/UART threads."""
+    from backend.server import server, socketio
+    from backend.shared.shared_state import shared_state
+
+    server.config['TESTING'] = True
+    previous_hardware = shared_state.hardware
+    shared_state.hardware = False
+    shared_state.toggle_can.clear()
+    client = socketio.test_client(server, namespace='/can')
+    try:
+        client.get_received('/can')
+        client.emit('toggle', namespace='/can')
+        assert not shared_state.toggle_can.is_set()
+        states = [event for event in client.get_received('/can') if event['name'] == 'state']
+        assert states[-1]['args'][0] is False
+    finally:
+        shared_state.hardware = previous_hardware
+        shared_state.toggle_can.clear()
+        client.disconnect(namespace='/can')
+
+
+def test_rearcam_namespace_rejects_gpio_in_no_hardware_mode(seeded_config_dir):
+    """The frontend's /rearcam namespace must stay GPIO-free in UI-only mode."""
+    from backend.server import server, socketio
+    from backend.shared.shared_state import shared_state
+
+    server.config['TESTING'] = True
+    previous_hardware = shared_state.hardware
+    shared_state.hardware = False
+    client = socketio.test_client(server, namespace='/rearcam')
+    try:
+        client.get_received('/rearcam')
+        client.emit('status', namespace='/rearcam')
+        received = client.get_received('/rearcam')
+        status_events = [event for event in received if event['name'] == 'camera/status']
+        assert status_events[-1]['args'][0]['on'] is False
+        assert status_events[-1]['args'][0]['error'] == 'Hardware is disabled'
+    finally:
+        shared_state.hardware = previous_hardware
+        client.disconnect(namespace='/rearcam')
 
 
 def test_can_load_returns_settings(seeded_config_dir):

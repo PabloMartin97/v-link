@@ -30,6 +30,7 @@ class SharedState:
 
         #Display
         self.isKiosk = True
+        self.hardware = True
         self.rtiStatus = False
         self.hdmiStatus = False
 

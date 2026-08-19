@@ -335,6 +335,18 @@ class CAN(SWCInterface):
             logger.info(f'[SWC] CAN initialized on "{channel}"')
             
         except Exception as e:
+            if self.notifier:
+                try:
+                    self.notifier.stop()
+                except Exception as cleanup_error:
+                    logger.warning(f'[SWC] CAN notifier cleanup failed: {cleanup_error}')
+                self.notifier = None
+            if self.can_bus:
+                try:
+                    self.can_bus.shutdown()
+                except Exception as cleanup_error:
+                    logger.warning(f'[SWC] CAN bus cleanup failed: {cleanup_error}')
+                self.can_bus = None
             logger.error(f'[SWC] CAN init failed: {e}')
             raise
     
@@ -400,7 +412,9 @@ class LIN(SWCInterface):
     def start(self):
         try:
             if not shared_state.vLin:
-                port = '/dev/ttyAMA0' if shared_state.rpiModel == 5 else '/dev/ttyS0'
+                default_port = '/dev/ttyAMA0' if shared_state.rpiModel == 5 else '/dev/ttyS0'
+                port = os.environ.get('VLINK_LIN_PORT') or \
+                    self.config.get('interface', {}).get('port') or default_port
                 self.lin_serial = serial.Serial(port=port, baudrate=9600, timeout=1)
                 logger.info(f'[SWC] LIN SWC initialized on {port}')
             else:
@@ -542,16 +556,24 @@ class SWCThread(threading.Thread):
         if not self.interface:
             return
             
+        started = False
         try:
-            self.interface.start()
-            
             while not self._stop_event.is_set():
-                time.sleep(1)
+                try:
+                    self.interface.start()
+                    started = True
+                    break
+                except Exception:
+                    logger.warning('[SWC] Interface is not ready; retrying in 2 seconds.')
+                    self._stop_event.wait(2)
+
+            while not self._stop_event.is_set():
+                self._stop_event.wait(1)
                 
         except Exception as e:
             logger.error(f'[SWC] Runtime error: {e}')
         finally:
-            if self.interface:
+            if self.interface and started:
                 self.interface.stop()
     
     def stop_thread(self):

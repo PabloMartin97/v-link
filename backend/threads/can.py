@@ -141,16 +141,21 @@ class CANThread(threading.Thread):
 
         
     def run(self):
-        self.initialize_can()
-        
+        while not self._stop_event.is_set():
+            if self.initialize_can():
+                break
+            self.logger.warning('[CAN] Interfaces are not ready; retrying in 2 seconds.')
+            self._stop_event.wait(2)
+
         try:
             while not self._stop_event.is_set():
-                time.sleep(1)
+                self._stop_event.wait(1)
         except KeyboardInterrupt:
             pass
 
     def initialize_can(self):
         interfaces_to_process = []
+        all_initialized = True
 
         if shared_state.vCan:
             self.logger.debug('[CAN] vCAN mode is enabled. Overriding CAN settings to use vcan0.')
@@ -186,10 +191,15 @@ class CANThread(threading.Thread):
 
         for iface_cfg in interfaces_to_process:
             channel = iface_cfg['channel']
+            if channel in self.can_buses:
+                continue
             sensors = iface_cfg['sensors']
             signal_sensors = iface_cfg.get('signal_sensors', [])
             is_extended = iface_cfg['is_extended']
             wait_for_ecu = iface_cfg['wait_for_ecu']
+            bus = None
+            notifier = None
+            canScheduler = None
 
             try:
                 bus = can.interface.Bus(
@@ -197,7 +207,6 @@ class CANThread(threading.Thread):
                     bustype=iface_cfg['bustype'],
                     bitrate=iface_cfg['bitrate']
                 )
-                self.can_buses[channel] = bus
 
                 rep_ids = {s['rep_id'][0] for s in sensors}
                 signal_ids = {s['can_id'] for s in signal_sensors}
@@ -238,7 +247,6 @@ class CANThread(threading.Thread):
                         reply_event=reply_event if wait_for_ecu else None,
                         wait_for_ecu=wait_for_ecu,
                     )
-                    self.broadcast_tasks.append(canScheduler)
 
                 listener = CANListener(
                     sensors_by_id,
@@ -247,13 +255,35 @@ class CANThread(threading.Thread):
                     reply_event=reply_event if wait_for_ecu else None,
                 )
                 notifier = can.Notifier(bus, [listener])
-                self.notifiers[channel] = notifier
 
                 if sensors:
                     canScheduler.start()
 
+                self.can_buses[channel] = bus
+                self.notifiers[channel] = notifier
+                if canScheduler:
+                    self.broadcast_tasks.append(canScheduler)
+
             except Exception as e:
+                all_initialized = False
+                if canScheduler and canScheduler.is_alive():
+                    try:
+                        canScheduler.stop()
+                    except Exception as cleanup_error:
+                        self.logger.warning(f'[CAN] Scheduler cleanup failed: {cleanup_error}')
+                if notifier:
+                    try:
+                        notifier.stop()
+                    except Exception as cleanup_error:
+                        self.logger.warning(f'[CAN] Notifier cleanup failed: {cleanup_error}')
+                if bus:
+                    try:
+                        bus.shutdown()
+                    except Exception as cleanup_error:
+                        self.logger.warning(f'[CAN] Bus cleanup failed: {cleanup_error}')
                 self.logger.error(f'[CAN] Failed to initialize CAN interface "{channel}": {e}')
+
+        return all_initialized
 
 
     def stop_thread(self):

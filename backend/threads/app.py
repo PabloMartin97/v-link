@@ -5,6 +5,8 @@ import os
 import subprocess
 import signal
 import shutil
+import urllib.error
+import urllib.request
 from ..shared.shared_state import shared_state
 
 class APPThread(threading.Thread):
@@ -12,18 +14,48 @@ class APPThread(threading.Thread):
         super().__init__()
         self.logger = logger
 
-        self.url = f'http://localhost:{4001 if shared_state.vite else 5173}'
+        self.url = f'http://localhost:{5173 if shared_state.vite else 4001}'
         self.browser = None
         self._stop_event = threading.Event()
 
 
     def run(self):
-        self.start_browser()
-
         while not self._stop_event.is_set():
             if(shared_state.toggle_app.is_set()):
                 self.stop_thread()
-            time.sleep(.1)
+                break
+
+            if self.browser is None:
+                try:
+                    self.wait_for_frontend()
+                    self.start_browser()
+                except (OSError, subprocess.SubprocessError) as error:
+                    self.logger.error(f'[Browser] Could not start Chromium: {error}')
+                    self._stop_event.wait(3)
+                continue
+
+            exit_code = self.browser.poll()
+            if exit_code is not None:
+                self.logger.warning(f'[Browser] Chromium exited with code {exit_code}; restarting.')
+                self.browser = None
+                self._stop_event.wait(2)
+                continue
+
+            self._stop_event.wait(.1)
+
+    def wait_for_frontend(self, timeout=30):
+        deadline = time.monotonic() + timeout
+        while not self._stop_event.is_set() and time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(self.url, timeout=1) as response:
+                    if response.status < 500:
+                        return
+            except (urllib.error.URLError, TimeoutError):
+                self._stop_event.wait(.25)
+
+        if self._stop_event.is_set():
+            raise OSError('browser startup cancelled')
+        raise OSError(f'frontend did not become ready at {self.url} within {timeout}s')
 
     def stop_thread(self):
         self._stop_event.set()
@@ -31,18 +63,8 @@ class APPThread(threading.Thread):
         shared_state.toggle_app.clear()
 
     def _browser_executable(self):
-        codename = None
-        try:
-            with open('/etc/os-release', encoding='utf-8') as os_release:
-                for line in os_release:
-                    if line.startswith('VERSION_CODENAME='):
-                        codename = line.split('=', 1)[1].strip().strip('"').lower()
-                        break
-        except OSError as error:
-            self.logger.warning(f'[Browser] Could not read /etc/os-release: {error}')
-
-        preferred = 'chromium' if codename == 'trixie' else 'chromium-browser'
-        fallback = 'chromium-browser' if preferred == 'chromium' else 'chromium'
+        preferred = 'chromium'
+        fallback = 'chromium-browser'
 
         if shutil.which(preferred):
             return preferred
@@ -62,10 +84,11 @@ class APPThread(threading.Thread):
             '--enable-features=SharedArrayBuffer',
             '--autoplay-policy=no-user-gesture-required',
             '--use-fake-ui-for-media-stream',
-            '--disable-logging',
-            '--log-level=3',
-            '--disable-gpu',
-            f'--user-data-dir={profile_dir}', 
+            '--noerrdialogs',
+            '--disable-session-crashed-bubble',
+            '--password-store=basic',
+            '--log-level=1',
+            f'--user-data-dir={profile_dir}',
             '--no-first-run',
             '--no-default-browser-check',
             '--allow-insecure-localhost',
@@ -91,8 +114,9 @@ class APPThread(threading.Thread):
 
         self.browser = subprocess.Popen(
             command,
-            stdout=subprocess.DEVNULL,  # or subprocess.PIPE if you want logs
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            # Keep Chromium errors in the systemd journal for diagnosis.
+            stderr=None,
             stdin=subprocess.DEVNULL
         )
         #self.browser = subprocess.Popen(command)

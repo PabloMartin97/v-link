@@ -47,6 +47,53 @@ python /home/$USER/v-link/V-Link.py
 python /home/$USER/v-link/V-Link.py -h
 ```
 
+### Raspberry Pi OS Lite (Bookworm)
+
+The Lite installer adds a minimal Wayland session, Chromium kiosk, mouse/touch
+input, PipeWire audio and optional V-Link HAT support. It targets Raspberry Pi
+OS **Bookworm Lite** on Pi 3, 4 or 5.
+
+For the fastest installation, publish `Install-Lite.sh`, `V-Link.zip` and
+`V-Link.zip.sha256` as assets of a release in `PabloMartin97/v-link`, then run:
+
+```sh
+curl -fLO https://github.com/PabloMartin97/v-link/releases/latest/download/Install-Lite.sh
+chmod +x Install-Lite.sh
+sudo ./Install-Lite.sh --yes
+```
+
+Until a release is published, the test branch can be installed directly after
+that branch has been pushed to GitHub:
+
+```sh
+curl -fLO https://raw.githubusercontent.com/PabloMartin97/v-link/little-os-test/Install-Lite.sh
+chmod +x Install-Lite.sh
+sudo ./Install-Lite.sh --ref little-os-test --yes
+```
+
+The branch path builds the frontend on the Pi and is therefore slower. When the
+script is run inside a local checkout it detects it automatically, keeps the
+Git checkout intact and deploys the kiosk to `~/v-link-runtime`. Use
+`--no-hardware` for a UI-only kiosk, or `--no-reboot` to inspect the result
+before the first reboot. See every option with `./Install-Lite.sh --help`.
+
+After reboot, validate the complete installation:
+
+```sh
+sudo "$HOME/v-link/Check-Lite.sh" --user "$(id -un)"
+journalctl --user -u v-link.service -b --no-pager
+wpctl status
+speaker-test -c 2 -t wav
+```
+
+On a Pi 3, the HAT setup assigns the good PL011 UART to RTI and disables the
+integrated Bluetooth controller. HDMI, analog and USB audio remain available;
+Bluetooth requires a USB adapter. Simultaneous RTI plus the LIN steering-wheel
+profile (P1/T5) also needs an external USB-UART on Pi 3. Give the installer its
+stable device path, for example `sudo ./Install-Lite.sh --lin-port
+/dev/serial/by-id/usb-YOUR_ADAPTER --yes`. The CAN steering-wheel profiles do
+not have that UART conflict.
+
 ## Wiki
 
 Detailed instructions on all the functions and features can be found in the [Documentation](https://www.boostedmoose.de/docs) of this repository. In there you will find schematics, instructions to set up the HAT or your custom circuit and more. Definitely check it out!

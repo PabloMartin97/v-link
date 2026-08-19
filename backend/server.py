@@ -22,10 +22,16 @@ logger = logging.getLogger('vlink')
 # Flask configuration
 server = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist'), static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist', 'assets'), static_url_path='/assets')
 server.config['SECRET_KEY'] = 'v-link'
-CORS(server, resources={r'/*': {'origins': '*'}})
+ALLOWED_ORIGINS = [
+    'http://localhost:4001',
+    'http://127.0.0.1:4001',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
+CORS(server, resources={r'/*': {'origins': ALLOWED_ORIGINS}})
 
 # Socket.io configuration
-socketio = SocketIO(server, cors_allowed_origins='*', async_mode='eventlet')
+socketio = SocketIO(server, cors_allowed_origins=ALLOWED_ORIGINS, async_mode='eventlet')
 
 # List of supported modules
 modules = ['app', 'mmi', 'can', 'swc', 'adc', 'rti', 'mst', 'rearcam']
@@ -37,7 +43,7 @@ class ServerThread(threading.Thread):
         self.daemon = True  # Ensure thread stops when main program exits
         self.app = server
         self.stop_event = threading.Event()
-        self.server_socket = eventlet.listen(('0.0.0.0', 4001))        
+        self.server_socket = eventlet.listen(('127.0.0.1', 4001))
 
     def run(self):
         try:
@@ -116,6 +122,8 @@ class ServerThread(threading.Thread):
     # Add custom headers to all responses
     @server.after_request
     def after_request(response):
+        response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+        response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
         return response
 
     # Route to serve the index.html file
@@ -149,6 +157,14 @@ class ServerThread(threading.Thread):
 
         # rearcam: instancia perezosa del driver
         rearcam = {"drv": None}
+
+        def reject_rearcam_without_hardware():
+            if module != "rearcam" or shared_state.hardware:
+                return False
+            payload = {'on': False, 'error': 'Hardware is disabled'}
+            socketio.emit('state', False, namespace=namespace)
+            socketio.emit('camera/status', payload, namespace=namespace)
+            return True
 
         # Emit module Data
         def emit_data(data):
@@ -189,8 +205,17 @@ class ServerThread(threading.Thread):
 
         # Toggle module status
         def toggle_state():
+            if not shared_state.hardware and module != "app":
+                if module == "rearcam":
+                    reject_rearcam_without_hardware()
+                else:
+                    socketio.emit('state', False, namespace=namespace)
+                return
+
             # rearcam: toggle = invertir GPIO
             if module == "rearcam":
+                if reject_rearcam_without_hardware():
+                    return
                 try:
                     if rearcam["drv"] is None:
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
@@ -248,6 +273,8 @@ class ServerThread(threading.Thread):
         # ------- Eventos específicos para rearcam -------
         if module == "rearcam":
             def rearcam_mount(_payload=None):
+                if reject_rearcam_without_hardware():
+                    return
                 try:
                     if rearcam["drv"] is None:
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
@@ -261,6 +288,8 @@ class ServerThread(threading.Thread):
                     socketio.emit('camera/status', {'on': False, 'error': str(e)}, namespace=namespace)
 
             def rearcam_unmount(_payload=None):
+                if reject_rearcam_without_hardware():
+                    return
                 try:
                     if rearcam["drv"] is None:
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
@@ -274,6 +303,8 @@ class ServerThread(threading.Thread):
                     socketio.emit('camera/status', {'on': False, 'error': str(e)}, namespace=namespace)
 
             def rearcam_status(_payload=None):
+                if reject_rearcam_without_hardware():
+                    return
                 try:
                     if rearcam["drv"] is None:
                         rearcam["drv"] = CameraGPIO(line=26, chip=0, active_high=True, logger=logger)
@@ -347,12 +378,12 @@ class ServerThread(threading.Thread):
         elif args == 'reboot':
             # Reboots the system
             logger.info(f'[Server] Reboot system')
-            subprocess.run('sudo reboot -h now', shell=True)
+            subprocess.run(['sudo', '/usr/sbin/reboot'], check=False)
 
         elif args == 'shutdown':
             # Shuts down the system
             logger.info(f'[Server] Shutdown system')
-            subprocess.run('sudo shutdown -h now', shell=True)
+            subprocess.run(['sudo', '/usr/sbin/shutdown', '-h', 'now'], check=False)
 
         elif args == 'reset':
             # Resets settings to default and restarts the application

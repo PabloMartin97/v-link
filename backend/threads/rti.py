@@ -24,7 +24,7 @@ class RTIThread(threading.Thread):
             elif (shared_state.rpiModel == 4):
                 self.rti_serial = serial.Serial('/dev/ttyAMA3', baudrate = 2400, timeout = 1)
             elif (shared_state.rpiModel == 3):
-                self.rti_serial = serial.Serial('/dev/ttyS0', baudrate = 2400, timeout = 1)
+                self.rti_serial = serial.Serial('/dev/serial0', baudrate = 2400, timeout = 1)
         except serial.SerialException as e:
             self.logger.error(f'[RTI] Error initializing Serial port: {e}')
             self.rti_serial = None
