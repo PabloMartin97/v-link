@@ -137,7 +137,7 @@ const NavBar = ({ isHovering }: NavBarProps) => {
         </GlowLarge>
       </Indicator>
       <Navbar navBarHeight={navBarHeight} isActive={isActive}>
-        {['Dashboard', 'Carplay', 'Rearcam', 'Settings'].filter((view) => viewEnabled[view] !== false).map((view) => (
+        {['Dashboard','Music', 'Carplay', 'Rearcam', 'Settings'].filter((view) => viewEnabled[view] !== false).map((view) => (
           <div className="column" key={view} style={{ position: 'relative', width: '100%'}}>
             <NavButton onClick={() => {
               appUpdate((state) => { state.system.view = view })

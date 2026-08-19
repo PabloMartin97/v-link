@@ -13,6 +13,7 @@ import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 import { transitionProjectionSession } from './sessionState'
 import { createEmptyCarplayMedia, mergeCarplayMedia } from './mediaState'
+import { CARPLAY_MEDIA_COMMAND_EVENT, type MediaCommand } from './mediaCommands'
 
 import { APP } from '@/store/Store';
 import hexToRGBA from '@/app/helper/HexToRGBA'
@@ -352,6 +353,8 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
           if (!payload) break
 
+          console.info('(CarPlay) Media metadata received:', payload)
+
           appUpdate((state) => {
             state.system.carplay.media = mergeCarplayMedia(
               state.system.carplay.media,
@@ -423,6 +426,17 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   useEffect(() => {
     carplayWorker.postMessage({ type: 'keyCommand', command: command })
   }, [commandCounter]);
+
+  useEffect(() => {
+    const handleMediaCommand = (event: Event) => {
+      const command = (event as CustomEvent<MediaCommand>).detail
+      carplayWorker.postMessage({ type: 'keyCommand', command })
+      socket.log.emit('debug', `(CarPlay) Media command: ${command}`)
+    }
+
+    eventEmitter.addEventListener(CARPLAY_MEDIA_COMMAND_EVENT, handleMediaCommand)
+    return () => eventEmitter.removeEventListener(CARPLAY_MEDIA_COMMAND_EVENT, handleMediaCommand)
+  }, [carplayWorker, socket.log]);
 
   // Request a new frame when re-entering the CarPlay view so key commands resume
   useEffect(() => {
