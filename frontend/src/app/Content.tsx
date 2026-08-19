@@ -7,6 +7,7 @@ const Fade = FadeBase as React.ComponentType<{ className?: string; fadeLength?: 
 import { APP } from '@/store/Store';
 
 import Dashboard from './pages/dashboard/Dashboard';
+import Music from './pages/music/Music';
 import Carplay from './pages/carplay/Carplay';
 import Rearcam from './pages/rearcam/Rearcam';
 import Settings from './pages/settings/Settings';
@@ -131,7 +132,7 @@ const NavBlocker = styled.div<NavBlockerProps>`
 `;
 
 const Content = () => {
-  const viewMap = { Dashboard, Carplay, Rearcam, Settings };
+  const viewMap = { Dashboard, Music, Carplay, Rearcam, Settings };
 
   const appUpdate         = APP((state) => state.update);
   const keyStroke         = APP((state) => state.keyStroke);

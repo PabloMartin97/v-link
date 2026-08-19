@@ -121,6 +121,14 @@
     "max": 10,
     "step": 1
   },
+  "dashboard": {
+    "title": "Dashboard Settings",
+    "type": "system",
+    "enabled": {
+      "value": true,
+      "label": "Show in Navbar"
+    }
+  },
   "reverseCam": {
     "title": "Reverse Camera Settings",
     "type": "system",

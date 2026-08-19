@@ -814,6 +814,7 @@ const Settings = () => {
 
         {settingPage === 'dashboard' &&
           <>
+            {renderSetting("dashboard", currentSettings)}
             {renderSetting("dash_topbar", currentSettings)}
             {renderSetting("dash_classic", currentSettings)}
             {renderSetting("dash_race", currentSettings)}
