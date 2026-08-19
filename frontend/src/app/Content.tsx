@@ -363,11 +363,11 @@ const Content = () => {
 
   // Listen for key strokes to switch views
   useEffect(() => {
-    if ( !pauseKeyBinds && keyStroke === switchPage ) {
+    if (view !== 'Music' && !pauseKeyBinds && keyStroke === switchPage) {
       console.log(pauseKeyBinds, keyStroke, switchPage)
       cycleView();
     }
-  }, [keyStroke, pauseKeyBinds, switchPage]);
+  }, [keyStroke, pauseKeyBinds, switchPage, view]);
 
   return (
     <>

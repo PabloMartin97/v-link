@@ -1,14 +1,19 @@
 import type { CarplayMediaState, ProjectionSource } from '@/carplay/mediaState';
 import { sendCarplayMediaCommand } from '@/carplay/mediaCommands';
-import { useThemeColor } from '@/store/Store';
+import { APP, useThemeColor } from '@/store/Store';
+import { useEffect, useRef, useState } from 'react';
 import { useTheme } from 'styled-components';
 
 import {
   Album, AlbumArt, AlbumPlaceholder, AppName, Artist, ControlButton, Controls,
   Details, EmptyCopy, EmptyState, MusicPage, Progress, ProgressFill,
-  ProgressTrack, Time, TimeRow, Title,
+  ProgressTrack, Time, TimeRow, Title, EmptyOptionRow, EmptyOptions,
+  UsbMediaOption, UsbMediaTile,
 } from '../styles';
 import { clampProgress, formatTime, getArtworkSource } from '../utils';
+import UsbMediaBrowser from './UsbMediaBrowser';
+import NativePlayer from './NativePlayer';
+import { useLocalMedia } from '../LocalMediaProvider';
 
 interface NowPlayingProps {
   media: CarplayMediaState;
@@ -23,6 +28,11 @@ const PlayPauseIcon = ({ playing }: { playing: boolean }) => (
     {playing ? <path d="M10 8h4v16h-4zM18 8h4v16h-4z" /> : <path d="m11 7 14 9-14 9V7Z" />}
   </svg>
 );
+const FolderIcon = () => (
+  <svg viewBox="0 0 32 32" aria-hidden="true">
+    <path d="M4.5 9.5A2.5 2.5 0 0 1 7 7h6l3 3h9a2.5 2.5 0 0 1 2.5 2.5v11A2.5 2.5 0 0 1 25 26H7a2.5 2.5 0 0 1-2.5-2.5v-14Z" />
+  </svg>
+);
 
 const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const theme = useTheme();
@@ -31,15 +41,65 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const hasMedia = Boolean(media.title || media.artist || media.album || media.artworkBase64);
   const artworkSource = getArtworkSource(media.artworkBase64);
   const playing = media.playbackStatus > 0;
+  const [usbBrowserOpen, setUsbBrowserOpen] = useState(false);
+  const localMedia = useLocalMedia();
+  const localTrack = localMedia.currentTrack == null ? null : localMedia.tracks[localMedia.currentTrack];
+  const keyStroke = APP((state) => state.keyStroke);
+  const bindings = APP((state) => state.settings.dongle_bindings as Record<string, { value?: string }> | undefined);
+  const handledStrokeRef = useRef(false);
+
+  useEffect(() => {
+    if (!keyStroke) {
+      handledStrokeRef.current = false;
+      return;
+    }
+    if (handledStrokeRef.current || phoneConnected || usbBrowserOpen || localTrack) return;
+    handledStrokeRef.current = true;
+    if (keyStroke === bindings?.selectDown?.value) setUsbBrowserOpen(true);
+  }, [bindings, keyStroke, localTrack, phoneConnected, usbBrowserOpen]);
 
   if (!phoneConnected) {
+    if (usbBrowserOpen) {
+      return <UsbMediaBrowser onClose={() => setUsbBrowserOpen(false)} onTrackSelected={() => setUsbBrowserOpen(false)} />;
+    }
+    if (localTrack) {
+      return (
+        <NativePlayer
+          title={localTrack.file.name.replace(/\.[^.]+$/, '')}
+          folderName={localMedia.folderName}
+          playing={localMedia.playing}
+          position={localMedia.position}
+          duration={localMedia.duration}
+          shuffle={localMedia.shuffle}
+          repeatMode={localMedia.repeatMode}
+          onBrowse={() => setUsbBrowserOpen(true)}
+          onToggleShuffle={localMedia.toggleShuffle}
+          onCycleRepeat={localMedia.cycleRepeat}
+          onPrevious={localMedia.playPrevious}
+          onPlayPause={() => void localMedia.togglePlayback()}
+          onNext={() => localMedia.playNext(false)}
+        />
+      );
+    }
+
     return (
       <EmptyState>
-        <AlbumPlaceholder $compact aria-hidden="true">♪</AlbumPlaceholder>
-        <EmptyCopy>
-          <strong>Nothing playing</strong>
-          <span>Connect CarPlay or Android Auto to control playback.</span>
-        </EmptyCopy>
+        <EmptyOptions>
+          <EmptyOptionRow>
+            <AlbumPlaceholder $compact aria-hidden="true">♪</AlbumPlaceholder>
+            <EmptyCopy>
+              <strong>Nothing playing</strong>
+              <span>Connect CarPlay or Android Auto to control playback.</span>
+            </EmptyCopy>
+          </EmptyOptionRow>
+          <UsbMediaOption type="button" $focused onClick={() => setUsbBrowserOpen(true)}>
+            <UsbMediaTile aria-hidden="true"><FolderIcon /></UsbMediaTile>
+            <EmptyCopy>
+              <strong>Local Media</strong>
+              <span>Browse a folder and play music stored on this device.</span>
+            </EmptyCopy>
+          </UsbMediaOption>
+        </EmptyOptions>
       </EmptyState>
     );
   }

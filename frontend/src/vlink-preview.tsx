@@ -9,6 +9,7 @@ import { Modal } from '@/app/components/Modal';
 import Carplay from '@/carplay/Carplay';
 import { APP } from '@/store/Store';
 import { theme } from '@/theme/Theme';
+import { LocalMediaProvider } from '@/app/pages/music/LocalMediaProvider';
 
 import '@/App.css';
 import '@/theme/fonts.module.css';
@@ -53,6 +54,7 @@ const Preview = () => {
   return (
     <StyleSheetManager shouldForwardProp={isPropValid}>
       <ThemeProvider theme={theme}>
+        <LocalMediaProvider>
         <main
           style={{
             position: 'fixed',
@@ -65,6 +67,7 @@ const Preview = () => {
           <Modal />
           <Content />
         </main>
+        </LocalMediaProvider>
       </ThemeProvider>
     </StyleSheetManager>
   );
