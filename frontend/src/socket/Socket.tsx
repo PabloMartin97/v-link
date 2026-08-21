@@ -8,7 +8,6 @@ export const Socket = () => {
   const [activeModules, setActiveModules] = useState<Record<string, unknown>>({});
   const [loadedModules, setLoadedModules] = useState(0);
   const loadedModuleSet = useRef(new Set());
-  const listenersSetup = useRef(false);
 
   // Get sockets using the global function
   const socket = useNamespaces();
@@ -75,7 +74,7 @@ export const Socket = () => {
   };
 
 
-  const handleReverse = (reverseStatus: boolean) => {
+  const handleReverse = () => (reverseStatus: boolean) => {
     socket.log.emit('info', `Reverse: ${reverseStatus}`);
     allStores['app'].update((state: any) => {
       state.system.reverse = reverseStatus;
@@ -97,31 +96,29 @@ export const Socket = () => {
 
   /* Step 1: Load App Settings First */
   useEffect(() => {
-    if (!socket.app || listenersSetup.current) return;
+    const appSocket = socket.app;
+    if (!appSocket) return;
 
-    // Setup app-specific listeners first
-    const setupAppListeners = () => {
-      socket.app.on('settings', handleSettings('app'));
-      socket.app.on('connect', handleConnect('app'));
-      socket.app.on('disconnect', handleDisconnect('app'));
-      socket.app.on('connect_error', handleError('app'));
+    const onSettings = handleSettings('app');
+    const onConnect = handleConnect('app');
+    const onDisconnect = handleDisconnect('app');
+    const onError = handleError('app');
 
-      // Request app settings
-      socket.app.emit('ping');
-      socket.app.emit('load');
-    };
+    appSocket.on('settings', onSettings);
+    appSocket.on('connect', onConnect);
+    appSocket.on('disconnect', onDisconnect);
+    appSocket.on('connect_error', onError);
 
-    setupAppListeners();
-    listenersSetup.current = true;
+    // Request app settings
+    appSocket.emit('ping');
+    appSocket.emit('load');
 
     // Cleanup function for app listeners
     return () => {
-      if (socket.app) {
-        socket.app.off('settings', handleSettings('app'));
-        socket.app.off('connect', handleConnect('app'));
-        socket.app.off('disconnect', handleDisconnect('app'));
-        socket.app.off('connect_error', handleError('app'));
-      }
+      appSocket.off('settings', onSettings);
+      appSocket.off('connect', onConnect);
+      appSocket.off('disconnect', onDisconnect);
+      appSocket.off('connect_error', onError);
     };
   }, [socket.app]);
 
@@ -129,87 +126,101 @@ export const Socket = () => {
   useEffect(() => {
     if (!appConfigLoaded || Object.keys(activeModules).length === 0) return;
 
-    const setupModuleListeners = () => {
-      // Setup listeners for all active modules (except app, which is already set up)
-      Object.keys(activeModules).forEach(module => {
-        if (module === 'app') return; // Skip app as it's already set up
-        
-        if (socket[module]) {
-          // Data listeners
-          socket[module].on('state', handleState(module));
-          socket[module].on('settings', handleSettings(module));
-          
-          // Connection listeners
-          socket[module].on('connect', handleConnect(module));
-          socket[module].on('disconnect', handleDisconnect(module));
-          socket[module].on('connect_error', handleError(module));
+    const cleanupListeners: Array<() => void> = [];
 
-          // Initial requests
-          socket[module].emit('ping');
-          socket[module].emit('load');
-        }
+    // Setup listeners for all active modules (except app, which is already set up)
+    Object.keys(activeModules).forEach(module => {
+      if (module === 'app') return;
+
+      const moduleSocket = socket[module];
+      if (!moduleSocket) return;
+
+      const onState = handleState(module);
+      const onSettings = handleSettings(module);
+      const onConnect = handleConnect(module);
+      const onDisconnect = handleDisconnect(module);
+      const onError = handleError(module);
+
+      moduleSocket.on('state', onState);
+      moduleSocket.on('settings', onSettings);
+      moduleSocket.on('connect', onConnect);
+      moduleSocket.on('disconnect', onDisconnect);
+      moduleSocket.on('connect_error', onError);
+
+      cleanupListeners.push(() => {
+        moduleSocket.off('state', onState);
+        moduleSocket.off('settings', onSettings);
+        moduleSocket.off('connect', onConnect);
+        moduleSocket.off('disconnect', onDisconnect);
+        moduleSocket.off('connect_error', onError);
       });
 
-      // Setup system listeners
-      if (socket.sys) {
-        socket.sys.on('ign', handleIgnition);
-        socket.sys.on('reverse', handleReverse);
-        socket.sys.on('connect', handleConnect('sys'));
-        socket.sys.on('disconnect', handleDisconnect('sys'));
-        socket.sys.on('connect_error', handleError('sys'));
+      // Initial requests
+      moduleSocket.emit('ping');
+      moduleSocket.emit('load');
+    });
 
-        socket.sys.emit('systemTask', 'ign');
-        socket.sys.emit('systemTask', 'reverse');
-      }
+    // Setup system listeners
+    const sysSocket = socket.sys;
+    if (sysSocket) {
+      const onConnect = handleConnect('sys');
+      const onDisconnect = handleDisconnect('sys');
+      const onError = handleError('sys');
+      const onReverse = handleReverse();
 
-      // Setup log socket listeners if it exists
-      if (socket.log) {
-        socket.log.on('connect', handleConnect('log'));
-        socket.log.on('disconnect', handleDisconnect('log'));
-        socket.log.on('connect_error', handleError('log'));
-      }
+      sysSocket.on('ign', handleIgnition);
+      sysSocket.on('reverse', onReverse);
+      sysSocket.on('connect', onConnect);
+      sysSocket.on('disconnect', onDisconnect);
+      sysSocket.on('connect_error', onError);
 
-      // Setup cam socket listeners if it exists
-      if (socket.cam) {
-        socket.cam.on('camera/status', handleRearcamCameraStatus);
-        socket.cam.on('state', handleRearcamState);
+      cleanupListeners.push(() => {
+        sysSocket.off('ign', handleIgnition);
+        sysSocket.off('reverse', onReverse);
+        sysSocket.off('connect', onConnect);
+        sysSocket.off('disconnect', onDisconnect);
+        sysSocket.off('connect_error', onError);
+      });
 
-        socket.cam.emit('status');
-      }
-    };
+      sysSocket.emit('systemTask', 'ign');
+      sysSocket.emit('systemTask', 'reverse');
+    }
 
-    setupModuleListeners();
+    // Setup log socket listeners if it exists
+    const logSocket = socket.log;
+    if (logSocket) {
+      const onConnect = handleConnect('log');
+      const onDisconnect = handleDisconnect('log');
+      const onError = handleError('log');
+
+      logSocket.on('connect', onConnect);
+      logSocket.on('disconnect', onDisconnect);
+      logSocket.on('connect_error', onError);
+
+      cleanupListeners.push(() => {
+        logSocket.off('connect', onConnect);
+        logSocket.off('disconnect', onDisconnect);
+        logSocket.off('connect_error', onError);
+      });
+    }
+
+    // Setup cam socket listeners if it exists
+    const camSocket = socket.cam;
+    if (camSocket) {
+      camSocket.on('camera/status', handleRearcamCameraStatus);
+      camSocket.on('state', handleRearcamState);
+
+      cleanupListeners.push(() => {
+        camSocket.off('camera/status', handleRearcamCameraStatus);
+        camSocket.off('state', handleRearcamState);
+      });
+
+      camSocket.emit('status');
+    }
 
     // Cleanup function for module listeners
     return () => {
-      Object.keys(activeModules).forEach(module => {
-        if (module === 'app' || !socket[module]) return;
-        
-        socket[module].off('settings', handleSettings(module));
-        socket[module].off('state', handleState(module));
-        socket[module].off('connect', handleConnect(module));
-        socket[module].off('disconnect', handleDisconnect(module));
-        socket[module].off('connect_error', handleError(module));
-      });
-      
-      if (socket.sys) {
-        socket.sys.off('ign', handleIgnition);
-        socket.sys.off('reverse', handleReverse);
-        socket.sys.off('connect', handleConnect('sys'));
-        socket.sys.off('disconnect', handleDisconnect('sys'));
-        socket.sys.off('connect_error', handleError('sys'));
-      }
-
-      if (socket.log) {
-        socket.log.off('connect', handleConnect('log'));
-        socket.log.off('disconnect', handleDisconnect('log'));
-        socket.log.off('connect_error', handleError('log'));
-      }
-
-      if (socket.cam) {
-        socket.cam.off('camera/status', handleRearcamCameraStatus);
-        socket.cam.off('state', handleRearcamState);
-      }
+      cleanupListeners.forEach(cleanup => cleanup());
     };
   }, [appConfigLoaded, activeModules, socket]);
 
