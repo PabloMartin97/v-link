@@ -67,7 +67,7 @@ class APPThread(threading.Thread):
             '--disable-gpu',
             f'--user-data-dir={profile_dir}', 
             '--no-first-run',
-            '--no-default-browser-check'
+            '--no-default-browser-check',
             '--allow-insecure-localhost',
             '--ozone-platform=wayland',
             '--unsafely-treat-insecure-origin-as-secure=http://localhost:4001,http://localhost:5173'
