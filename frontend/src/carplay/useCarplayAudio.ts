@@ -10,7 +10,7 @@ import { AudioPlayerKey, CarPlayWorker } from './worker/types'
 import { createAudioPlayerKey } from './worker/utils'
 import { useNamespaces } from '@/socket/Namespaces'
 import { APP } from '@/store/Store'
-import { setNavigationDucking, useAudioSettings } from '@/app/pages/settings/audioSettingsState'
+import { duckingOutputLevel, setNavigationDucking, useAudioSettings } from '@/app/pages/settings/audioSettingsState'
 
 //TODO: allow to configure
 const defaultAudioVolume = 1
@@ -22,6 +22,11 @@ const useCarplayAudio = (
   const [mic, setMic] = useState<WebMicrophone | null>(null)
   const [audioPlayers] = useState(new Map<AudioPlayerKey, PcmPlayer>())
   const mediaPlayerKeys = useRef(new Set<AudioPlayerKey>())
+  const navigationPlayerKeys = useRef(new Set<AudioPlayerKey>())
+  const callPlayerKeys = useRef(new Set<AudioPlayerKey>())
+  const priorityPlayerKeys = useRef(new Set<AudioPlayerKey>())
+  const playerVolumes = useRef(new Map<AudioPlayerKey, number>())
+  const volumeAnimations = useRef(new Map<AudioPlayerKey, number>())
   const navigationActiveRef = useRef(false)
   const microphoneGainRef = useRef<GainNode | null>(null)
   const microphoneContextRef = useRef<AudioContext | null>(null)
@@ -48,6 +53,7 @@ const useCarplayAudio = (
 
         audioPlayers.set(audioKey, player)
         player.volume(defaultAudioVolume)
+        playerVolumes.current.set(audioKey, defaultAudioVolume)
         player.start()
       }
 
@@ -67,6 +73,29 @@ const useCarplayAudio = (
     [audioPlayers, worker],
   )
 
+  const rampPlayerVolume = useCallback((key: AudioPlayerKey, player: PcmPlayer, target: number, durationMs: number) => {
+    const previousAnimation = volumeAnimations.current.get(key)
+    if (previousAnimation != null) cancelAnimationFrame(previousAnimation)
+    const start = playerVolumes.current.get(key) ?? defaultAudioVolume
+    const startedAt = performance.now()
+    const safeTarget = Math.min(Math.max(target, 0), 1)
+    const applyStep = (now: number) => {
+      const progress = durationMs > 0 ? Math.min((now - startedAt) / durationMs, 1) : 1
+      const eased = progress * progress * (3 - 2 * progress)
+      const value = start + (safeTarget - start) * eased
+      // PcmPlayer's duration parameter is seconds and delays the automation.
+      // A tiny value makes each V-Link-controlled ramp step effectively immediate.
+      player.volume(value, 0.001)
+      playerVolumes.current.set(key, value)
+      if (progress < 1) {
+        volumeAnimations.current.set(key, requestAnimationFrame(applyStep))
+      } else {
+        volumeAnimations.current.delete(key)
+      }
+    }
+    volumeAnimations.current.set(key, requestAnimationFrame(applyStep))
+  }, [])
+
   const processAudio = useCallback(
     (audio: AudioData) => {
       if (audio.volumeDuration) {
@@ -74,54 +103,104 @@ const useCarplayAudio = (
         const player = getAudioPlayer(audio)
         const audioKey = createAudioPlayerKey(audio.decodeType, audio.audioType)
         const isMediaPlayer = mediaPlayerKeys.current.has(audioKey)
-        const targetVolume = localAudioActive && isMediaPlayer
-          ? 0
-          : navigationActiveRef.current && isMediaPlayer
-            ? audioSettings.navigationDucking / 100
-            : volume
-        player.volume(targetVolume, volumeDuration)
+        const targetVolume = navigationPlayerKeys.current.has(audioKey)
+          ? audioSettings.navigationVolume / 100
+          : callPlayerKeys.current.has(audioKey)
+            ? audioSettings.callVolume / 100
+            : priorityPlayerKeys.current.has(audioKey)
+              ? defaultAudioVolume
+              : localAudioActive && isMediaPlayer
+                ? 0
+                : navigationActiveRef.current && isMediaPlayer
+                  ? duckingOutputLevel(audioSettings.navigationDuckingAmount)
+                  : volume
+        rampPlayerVolume(audioKey, player, targetVolume, Math.max(volumeDuration * 1000, 0))
       } else if (audio.command) {
+        const audioKey = createAudioPlayerKey(audio.decodeType, audio.audioType)
+        const routeMessage = `(CarPlay) Audio route: command=${AudioCommand[audio.command]} audioType=${audio.audioType} decodeType=${audio.decodeType} key=${audioKey}`
+        console.info(routeMessage)
+        socket.log.emit(
+          'debug',
+          routeMessage,
+        )
         switch (audio.command) {
           case AudioCommand.AudioNaviStart:
+            const navigationSharesMediaRoute = mediaPlayerKeys.current.has(audioKey)
+            mediaPlayerKeys.current.delete(audioKey)
+            callPlayerKeys.current.delete(audioKey)
+            priorityPlayerKeys.current.delete(audioKey)
+            navigationPlayerKeys.current.add(audioKey)
             const navPlayer = getAudioPlayer(audio)
-            navPlayer.volume(audioSettings.navigationVolume / 100, 350)
+            rampPlayerVolume(audioKey, navPlayer, audioSettings.navigationVolume / 100, 200)
+            if (navigationSharesMediaRoute) {
+              const sharedRouteMessage = `(CarPlay) Navigation and media share PCM route ${audioKey}; projected-media ducking is controlled by the phone`
+              console.warn(sharedRouteMessage)
+              socket.log.emit(
+                'info',
+                sharedRouteMessage,
+              )
+            }
             navigationActiveRef.current = true
             mediaPlayerKeys.current.forEach((key) => {
-              audioPlayers.get(key)?.volume(localAudioActive ? 0 : audioSettings.navigationDucking / 100, 350)
+              const player = audioPlayers.get(key)
+              if (player) rampPlayerVolume(key, player, localAudioActive ? 0 : duckingOutputLevel(audioSettings.navigationDuckingAmount), 200)
             })
             setNavigationDucking(true)
             break
           case AudioCommand.AudioNaviStop:
             navigationActiveRef.current = false
             mediaPlayerKeys.current.forEach((key) => {
-              audioPlayers.get(key)?.volume(localAudioActive ? 0 : defaultAudioVolume, 700)
+              const player = audioPlayers.get(key)
+              if (player) rampPlayerVolume(key, player, localAudioActive ? 0 : defaultAudioVolume, 650)
             })
             setNavigationDucking(false)
             break
           case AudioCommand.AudioPhonecallStart:
-            getAudioPlayer(audio).volume(audioSettings.callVolume / 100, 350)
+            mediaPlayerKeys.current.delete(audioKey)
+            navigationPlayerKeys.current.delete(audioKey)
+            priorityPlayerKeys.current.delete(audioKey)
+            callPlayerKeys.current.add(audioKey)
+            rampPlayerVolume(audioKey, getAudioPlayer(audio), audioSettings.callVolume / 100, 350)
+            break
+          case AudioCommand.AudioSiriStart:
+          case AudioCommand.AudioAlertStart:
+            mediaPlayerKeys.current.delete(audioKey)
+            navigationPlayerKeys.current.delete(audioKey)
+            callPlayerKeys.current.delete(audioKey)
+            priorityPlayerKeys.current.add(audioKey)
+            rampPlayerVolume(audioKey, getAudioPlayer(audio), defaultAudioVolume, 350)
             break
           case AudioCommand.AudioMediaStart:
+            APP.getState().update((state) => { state.system.audioSource = 'carplay' })
+            navigationPlayerKeys.current.delete(audioKey)
+            callPlayerKeys.current.delete(audioKey)
+            priorityPlayerKeys.current.delete(audioKey)
+            mediaPlayerKeys.current.add(audioKey)
+            rampPlayerVolume(audioKey, getAudioPlayer(audio), defaultAudioVolume, 350)
+            break
           case AudioCommand.AudioOutputStart:
 
             console.log(`(CarPlay) Audio: ${audio}`)
             socket.log.emit('debug', `(CarPlay) Audio: ${audio}`)
 
-            const mediaPlayer = getAudioPlayer(audio)
-            mediaPlayerKeys.current.add(createAudioPlayerKey(audio.decodeType, audio.audioType))
-            mediaPlayer.volume(localAudioActive ? 0 : defaultAudioVolume)
+            const outputPlayer = getAudioPlayer(audio)
+            if (!navigationPlayerKeys.current.has(audioKey) && !callPlayerKeys.current.has(audioKey) && !priorityPlayerKeys.current.has(audioKey)) {
+              mediaPlayerKeys.current.add(audioKey)
+              rampPlayerVolume(audioKey, outputPlayer, localAudioActive ? 0 : defaultAudioVolume, 200)
+            }
             break
         }
       }
     },
-    [audioPlayers, audioSettings.callVolume, audioSettings.navigationDucking, audioSettings.navigationVolume, getAudioPlayer, localAudioActive],
+    [audioPlayers, audioSettings.callVolume, audioSettings.navigationDuckingAmount, audioSettings.navigationVolume, getAudioPlayer, localAudioActive, rampPlayerVolume],
   )
 
   useEffect(() => {
     mediaPlayerKeys.current.forEach((key) => {
-      audioPlayers.get(key)?.volume(localAudioActive ? 0 : defaultAudioVolume)
+      const player = audioPlayers.get(key)
+      if (player) rampPlayerVolume(key, player, localAudioActive ? 0 : defaultAudioVolume, 200)
     })
-  }, [audioPlayers, localAudioActive])
+  }, [audioPlayers, localAudioActive, rampPlayerVolume])
 
   useEffect(() => {
     microphoneGainRef.current?.gain.setTargetAtTime(
@@ -159,6 +238,8 @@ const useCarplayAudio = (
 
     return () => {
       audioPlayers.forEach(p => p.stop())
+      volumeAnimations.current.forEach(animation => cancelAnimationFrame(animation))
+      volumeAnimations.current.clear()
       microphoneStreamRef.current?.getTracks().forEach(track => track.stop())
       microphoneGainRef.current = null
       void microphoneContextRef.current?.close()

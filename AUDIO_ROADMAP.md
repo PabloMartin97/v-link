@@ -13,34 +13,32 @@
 ## Página de ajustes de audio
 
 - Añadir una página de audio dentro de Ajustes.
-- Configurar de forma independiente el volumen multimedia local.
-- Configurar el volumen de la música de CarPlay y Android Auto.
+- El volumen multimedia local, el volumen de la música de CarPlay y Android Auto, el volumen de Siri y otros asistentes de voz y el volumen de las alertas deberan mantenerse al máximo excepto cuando haya ducking.
+
 - Configurar el volumen de las indicaciones de navegación.
 - Configurar el volumen de las llamadas.
-- Configurar el volumen de Siri y otros asistentes de voz.
-- Configurar el volumen de las alertas.
+
 - Configurar el porcentaje de atenuación aplicado a la música durante la navegación.
-- Configurar la velocidad de bajada y recuperación del volumen durante el *ducking*.
-- Configurar el volumen o ganancia del micrófono durante las llamadas.
+- La velocidad de bajada y recuperación del volumen durante el *ducking* deberá ser suave, con tiempos agradables.
+
+- Configurar el volumen o ganancia del micrófono de las llamadas.
 - Añadir una prueba de micrófono y un indicador de nivel para evitar saturación.
-- Permitir restaurar todos los valores de audio a sus ajustes predeterminados.
+
+- utilizar sliders como los del control de la retroiluminación.
 
 ## Reproductor local
 
-- Reanudar una canción desde el segundo exacto después de reiniciar V-Link.
 - Conservar el historial aleatorio entre arranques para que `Anterior` mantenga la secuencia real.
 - Leer etiquetas ID3 y mostrar título, artista, álbum y carátula.
-- Añadir normalización de volumen entre canciones.
 - Añadir favoritos y listas de reproducción.
 - Permitir búsqueda alfabética en bibliotecas grandes.
 - Explorar e indexar recursivamente la música por carpeta, artista y álbum.
-- Mostrar el estado del escaneo y actualizar la biblioteca cuando cambie el contenido del dispositivo.
+
 
 ## Dispositivos y recuperación
 
 - Detectar cuándo se conecta o retira una unidad USB.
 - Mostrar un aviso no intrusivo si desaparece el dispositivo que contiene la pista actual.
-- Conservar la biblioteca y la última selección recordadas cuando el USB no esté disponible.
 - Restaurar automáticamente la carpeta, pista y posición cuando se vuelva a conectar el mismo dispositivo.
 - Identificar unidades por UUID o etiqueta para evitar confundir dispositivos montados en rutas diferentes.
 

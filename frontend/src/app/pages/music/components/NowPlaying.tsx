@@ -44,6 +44,7 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const [usbBrowserOpen, setUsbBrowserOpen] = useState(false);
   const localMedia = useLocalMedia();
   const localTrack = localMedia.currentTrack == null ? null : localMedia.tracks[localMedia.currentTrack];
+  const localAudioActive = APP((state) => state.system.audioSource === 'local');
   const keyStroke = APP((state) => state.keyStroke);
   const bindings = APP((state) => state.settings.dongle_bindings as Record<string, { value?: string }> | undefined);
   const handledStrokeRef = useRef(false);
@@ -53,15 +54,15 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
       handledStrokeRef.current = false;
       return;
     }
-    if (handledStrokeRef.current || usbBrowserOpen || localTrack) return;
+    if (handledStrokeRef.current || usbBrowserOpen || (localAudioActive && localTrack)) return;
     handledStrokeRef.current = true;
     if (keyStroke === bindings?.selectDown?.value) setUsbBrowserOpen(true);
-  }, [bindings, keyStroke, localTrack, usbBrowserOpen]);
+  }, [bindings, keyStroke, localAudioActive, localTrack, usbBrowserOpen]);
 
   if (usbBrowserOpen) {
     return <UsbMediaBrowser onClose={() => setUsbBrowserOpen(false)} onTrackSelected={() => setUsbBrowserOpen(false)} />;
   }
-  if (localTrack) {
+  if (localAudioActive && localTrack) {
     return (
       <NativePlayer
           title={localTrack.name.replace(/\.[^.]+$/, '')}

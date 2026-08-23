@@ -96,7 +96,7 @@ const AudioSettings = () => {
       </Section>
       <Section>
         <SectionTitle>Ducking</SectionTitle>
-        {slider('Media level during navigation', 'navigationDucking', 10, 80)}
+        {slider('Navigation ducking intensity', 'navigationDuckingAmount', 0, 100)}
       </Section>
       <Section>
         <SectionTitle>Call microphone</SectionTitle>

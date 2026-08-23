@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { APP } from '@/store/Store';
 import { eventEmitter } from '@/app/helper/EventEmitter';
 import { LOCAL_MEDIA_COMMAND_EVENT, type LocalMediaCommand } from './localMediaCommands';
-import { getAudioSettings, NAVIGATION_DUCKING_EVENT } from '../settings/audioSettingsState';
+import { duckingOutputLevel, getAudioSettings, NAVIGATION_DUCKING_EVENT } from '../settings/audioSettingsState';
+import { sendCarplayMediaCommand } from '@/carplay/mediaCommands';
 
 const AUDIO_EXTENSIONS = ['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.webm'];
 
@@ -150,6 +151,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
   const restoredAudioRef = useRef<HTMLAudioElement | null>(null);
   const projectionDetectionComplete = APP((state) => state.system.carplay.detectionComplete);
   const dongleConnected = APP((state) => state.system.carplay.dongle || state.system.carplay.phone);
+  const audioSource = APP((state) => state.system.audioSource);
   const [folderName, setFolderName] = useState('Local Media');
   const [tracks, setTracks] = useState<LocalTrack[]>([]);
   const [currentTrack, setCurrentTrack] = useState<number | null>(null);
@@ -189,14 +191,18 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => releaseUrls, []);
 
   useEffect(() => {
+    if (audioSource === 'carplay' && !audioRef.current?.paused) audioRef.current?.pause();
+  }, [audioSource]);
+
+  useEffect(() => {
     const handleDucking = (event: Event) => {
       const audio = audioRef.current;
       if (!audio) return;
       const active = (event as CustomEvent<boolean>).detail;
-      const target = active ? getAudioSettings().navigationDucking / 100 : 1;
+      const target = active ? duckingOutputLevel(getAudioSettings().navigationDuckingAmount) : 1;
       const start = audio.volume;
       const startedAt = performance.now();
-      const duration = active ? 350 : 700;
+      const duration = active ? 200 : 650;
       const ramp = (now: number) => {
         const progress = Math.min((now - startedAt) / duration, 1);
         const eased = progress * progress * (3 - 2 * progress);
@@ -322,6 +328,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
 
     // Claim media focus before starting the HTML player so projected music is
     // muted before the first local sample reaches the speakers.
+    if (APP.getState().system.carplay.phone) sendCarplayMediaCommand('pause');
     APP.getState().update((state) => { state.system.audioSource = 'local'; });
     if (addToShuffleHistory) {
       if (shuffleHistoryRef.current.at(-1) !== index) shuffleHistoryRef.current.push(index);
@@ -360,6 +367,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     const audio = audioRef.current;
     const track = nextTracks[index];
     if (!audio || !track) return;
+    if (APP.getState().system.carplay.phone) sendCarplayMediaCommand('pause');
     APP.getState().update((state) => { state.system.audioSource = 'local'; });
     shuffleHistoryRef.current = [index];
     setCurrentTrack(index);
