@@ -14,6 +14,7 @@ USER_CONFIG_DIR = Path.home() / '.config' / 'v-link'
 
 DEFAULT_PROFILES_DIR = APP_ROOT / 'backend' / 'config' / 'profiles'
 DEFAULT_CONFIG_DIR = APP_ROOT / 'backend' / 'config'
+REARCAM_SETTINGS_VERSION = 1
 
 def load_directory():
     # Ensure user config directory exists.
@@ -25,22 +26,54 @@ def load_directory():
         return None
     
 
-def _merge_missing(defaults, user, prefix=''):
-    """Add missing default values without replacing any user value."""
-    added = []
-    for key, default_value in defaults.items():
-        path = f'{prefix}.{key}' if prefix else key
-        if key not in user:
-            user[key] = deepcopy(default_value)
-            added.append(path)
-        elif isinstance(default_value, dict) and isinstance(user[key], dict):
-            added.extend(_merge_missing(default_value, user[key], path))
-    return added
+def _rearcam_schema_is_current(defaults, user):
+    """Return True only when rearcam uses the exact current settings structure."""
+    if not isinstance(defaults, dict) or not isinstance(user, dict):
+        return False
+    if set(user) != set(defaults):
+        return False
+
+    for setting_name, default_setting in defaults.items():
+        user_setting = user.get(setting_name)
+
+        # Block metadata is part of the schema and must match exactly.
+        if not isinstance(default_setting, dict):
+            if user_setting != default_setting:
+                return False
+            continue
+
+        if not isinstance(user_setting, dict) or set(user_setting) != set(default_setting):
+            return False
+
+        for field, default_value in default_setting.items():
+            user_value = user_setting.get(field)
+            if field != 'value':
+                if user_value != default_value:
+                    return False
+                continue
+
+            # User-selected values may differ, but their type and enumerated
+            # values must remain compatible with the current schema.
+            if isinstance(default_value, bool):
+                if not isinstance(user_value, bool):
+                    return False
+            elif isinstance(default_value, (int, float)):
+                if isinstance(user_value, bool) or not isinstance(user_value, (int, float)):
+                    return False
+            elif not isinstance(user_value, type(default_value)):
+                return False
+
+            options = default_setting.get('options')
+            allows_empty = setting_name == 'deviceSelectionMode' and user_value == ''
+            if options and setting_name != 'deviceId' and user_value not in options and not allows_empty:
+                return False
+
+    return True
 
 
 def migrate_settings():
-    # Recursively add settings introduced by newer versions while preserving
-    # every value already chosen by the user.
+    # Add only entirely new top-level sections. Nested schemas must be migrated
+    # explicitly so obsolete fields cannot survive indefinitely.
     default_app = DEFAULT_CONFIG_DIR / 'app.json'
     user_app = USER_CONFIG_DIR / 'app.json'
     if not default_app.exists() or not user_app.exists():
@@ -51,52 +84,33 @@ def migrate_settings():
         with user_app.open('r', encoding='utf-8') as f:
             user = json.load(f)
 
-        reverse_cam = user.get('reverseCam', {})
-        had_video_resolution = 'videoResolution' in reverse_cam
-        legacy_width = reverse_cam.get('videoWidth', {}).get('value')
-        legacy_height = reverse_cam.get('videoHeight', {}).get('value')
+        added = []
+        for key, default_value in defaults.items():
+            if key not in user:
+                user[key] = deepcopy(default_value)
+                added.append(key)
 
-        added = _merge_missing(defaults, user)
         updated = []
 
-        # Replace the two legacy number fields with one safe resolution preset.
-        # Preserve the previous choice when it matches one of the supported modes.
-        reverse_cam = user.get('reverseCam', {})
-        if not had_video_resolution:
-            legacy_presets = {
-                (640, 360): '640 × 360',
-                (854, 480): '854 × 480',
-                (1280, 720): '1280 × 720',
-            }
-            legacy_resolution = legacy_presets.get((legacy_width, legacy_height))
-            if legacy_resolution:
-                reverse_cam['videoResolution']['value'] = legacy_resolution
-                updated.append('reverseCam.videoResolution.value')
+        default_reverse_cam = defaults.get('reverseCam')
+        if isinstance(default_reverse_cam, dict):
+            user_constants = user.get('constants')
+            if not isinstance(user_constants, dict):
+                user_constants = {}
+                user['constants'] = user_constants
 
-        for legacy_key in ('videoWidth', 'videoHeight'):
-            if legacy_key in reverse_cam:
-                del reverse_cam[legacy_key]
-                updated.append(f'reverseCam.{legacy_key}')
+            saved_version = user_constants.get('rearcam_settings_version')
+            reverse_cam_is_current = _rearcam_schema_is_current(
+                default_reverse_cam,
+                user.get('reverseCam'),
+            )
 
-        # Convert the legacy numeric FPS value to the equivalent video standard.
-        video_fps = reverse_cam.get('videoFps', {})
-        legacy_fps = video_fps.get('value')
-        if isinstance(legacy_fps, (int, float)):
-            if 24 <= legacy_fps <= 26:
-                video_fps['value'] = 'PAL'
-            elif 29 <= legacy_fps <= 31:
-                video_fps['value'] = 'NTSC'
-            else:
-                video_fps['value'] = 'Auto'
-            updated.append('reverseCam.videoFps.value')
-
-        # This setting controls only manual navigation visibility, not reverse
-        # activation. Update the old ambiguous built-in label while preserving
-        # any custom label and the user's selected value.
-        reverse_cam_enabled = user.get('reverseCam', {}).get('enabled', {})
-        if reverse_cam_enabled.get('label') == 'Enabled':
-            reverse_cam_enabled['label'] = 'Show in Navigation'
-            updated.append('reverseCam.enabled.label')
+            # Rearcam intentionally uses a clean format boundary. Reset only
+            # this block when its version or structure is old/incompatible.
+            if saved_version != REARCAM_SETTINGS_VERSION or not reverse_cam_is_current:
+                user['reverseCam'] = deepcopy(default_reverse_cam)
+                user_constants['rearcam_settings_version'] = REARCAM_SETTINGS_VERSION
+                updated.append('reverseCam (reset to current schema)')
 
         if added or updated:
             save_settings('app', user)

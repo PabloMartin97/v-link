@@ -5,6 +5,7 @@
     "padding": 30,
     "chart_input_max": 6,
     "chart_input_current": 4,
+    "rearcam_settings_version": 1,
     "profile": null,
     "keymap": {
       "options": [
@@ -167,7 +168,7 @@
       ]
     },
     "guidelineMode": {
-      "value": "Custom",
+      "value": "Standard",
       "label": "Guidelines",
       "options": [
         "Off",

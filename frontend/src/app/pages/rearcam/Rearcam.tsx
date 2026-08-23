@@ -253,7 +253,7 @@ export default function Rearcam() {
   const Caption = Typography.Subtitle;
   const reverseCamSettings = APP((state) => state.settings.reverseCam as ReverseCamSettings | undefined);
 
-  const guidelineMode = reverseCamSettings?.guidelineMode?.value ?? "Custom";
+  const guidelineMode = reverseCamSettings?.guidelineMode?.value ?? "Standard";
   const guidelineNearWidth = Number(reverseCamSettings?.guidelineNearWidth?.value ?? 80);
   const guidelineFarWidth = Number(reverseCamSettings?.guidelineFarWidth?.value ?? 35);
   const guidelineLength = Number(reverseCamSettings?.guidelineLength?.value ?? 55);

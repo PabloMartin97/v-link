@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useRef, ReactNode } from 'react';
 import CanSettings from './CanSettings';
+import RearcamSettings from './RearcamSettings';
 
 import styled, { useTheme } from 'styled-components';
 import ScrollContainer from 'react-indiana-drag-scroll'
@@ -44,7 +45,6 @@ type AppSettings = {
 
 type DataStoreMap = Record<string, Record<string, { label: string }>>;
 type ModuleSelectorFn = (select: (s: ModuleState) => ModuleState) => ModuleState;
-type DropdownOption = string | { value: string; label: string };
 
 const Container = styled.div`
     flex: 1;
@@ -99,17 +99,9 @@ const Element = styled.div`
     margin-bottom: 12px;
 `
 
-const SectionDescription = styled(Typography.Body1)`
-    width: 100%;
-    margin: 4px 0 14px;
-    opacity: 0.7;
-`
-
-
 const Settings = () => {
 
   /* Load Types */
-  const Body1 = Typography.Body1
   const Title = Typography.Title
   const Caption2 = Typography.Caption2
 
@@ -136,7 +128,6 @@ const Settings = () => {
   const [save, setSave] = useState(true)
   const [reset, setReset] = useState(false)
   const [currentSettings, setCurrentSettings] = useState<AppSettings>(structuredClone(settings) as AppSettings);
-  const [cameraDevices, setCameraDevices] = useState<{ deviceId: string; label: string }[]>([]);
   const appSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSettingsRef = useRef<AppSettings>(currentSettings);
@@ -145,8 +136,6 @@ const Settings = () => {
   const pendingCanSaveRef = useRef(false);
   const SAVE_DEBOUNCE_MS = 500;
 
-  const setKeyStroke = APP((state) => state.setKeyStroke);
-  const setSwitchPage = APP((state) => state.setSwitchPage);
   const setPauseKeyBinds = APP((state) => state.setPauseKeyBinds);
 
 
@@ -159,41 +148,6 @@ const Settings = () => {
       }
     });
   }, [modules]);
-
-  useEffect(() => {
-    if (!navigator?.mediaDevices?.enumerateDevices) return;
-
-    const updateDevices = async () => {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const inputs = devices.filter((device) => device.kind === 'videoinput');
-        const labelCounts = inputs.reduce<Record<string, number>>((counts, device) => {
-          const label = device.label.trim();
-          if (label) counts[label] = (counts[label] ?? 0) + 1;
-          return counts;
-        }, {});
-        const labelIndexes: Record<string, number> = {};
-        const videoInputs = inputs.map((device, index) => {
-          const baseLabel = device.label.trim();
-          if (!baseLabel) {
-            return { deviceId: device.deviceId, label: `Camera ${index + 1}` };
-          }
-          labelIndexes[baseLabel] = (labelIndexes[baseLabel] ?? 0) + 1;
-          const label = labelCounts[baseLabel] > 1
-            ? `${baseLabel} (${labelIndexes[baseLabel]})`
-            : baseLabel;
-          return { deviceId: device.deviceId, label };
-        });
-        setCameraDevices(videoInputs);
-      } catch {
-        setCameraDevices([]);
-      }
-    };
-
-    updateDevices();
-    navigator.mediaDevices.addEventListener('devicechange', updateDevices);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', updateDevices);
-  }, []);
 
   useEffect(() => {
     pendingSettingsRef.current = currentSettings;
@@ -367,6 +321,15 @@ const Settings = () => {
 
     setCurrentSettings(newSettings);
     scheduleSave(newSettings);
+  };
+
+  const handleRearcamChange = (reverseCam: SettingsGroup) => {
+    const nextSettings: AppSettings = {
+      ...currentSettings,
+      reverseCam,
+    };
+    setCurrentSettings(nextSettings);
+    scheduleSave(nextSettings);
   };
 
   // Clean Dashboard Entries when sensors are removed to prevent ghost entries and crashes
@@ -561,18 +524,6 @@ const Settings = () => {
 
     const nestedElements = Object.entries(nestedSettings).map(([setting, rawContent]) => {
       const content = rawContent as SettingContent;
-      const guidelineMode = (block.guidelineMode as SettingContent | undefined)?.value ?? 'Custom';
-      const customGuidelineSettings = new Set([
-        'guidelineNearWidth',
-        'guidelineFarWidth',
-        'guidelineLength',
-        'guidelineVerticalPosition',
-        'guidelineOpacity',
-        'guidelineLineThickness',
-      ]);
-      if (key === 'reverseCam' && guidelineMode !== 'Custom' && customGuidelineSettings.has(setting)) {
-        return null;
-      }
       let value: string | number | boolean;
       let label: string | undefined;
       const dataOptions: Record<string, string> = {};
@@ -602,30 +553,9 @@ const Settings = () => {
       //Check if value is a number or boolean
       const isText = (content.type === 'text')
 
-      const isRearcamDeviceId = key === 'reverseCam' && setting === 'deviceId';
-      const selectedDeviceMissing = isRearcamDeviceId
-        && typeof value === 'string'
-        && value !== ''
-        && value !== 'default'
-        && !cameraDevices.some((device) => device.deviceId === value);
-      const rearcamDeviceOptions: DropdownOption[] | null = isRearcamDeviceId
-        ? [
-          { value: 'default', label: 'Default' },
-          ...(selectedDeviceMissing
-            ? [{ value: value as string, label: 'Saved camera (not currently available)' }]
-            : []),
-          ...cameraDevices.map((device) => ({
-            value: device.deviceId,
-            label: device.label,
-          })),
-        ]
-        : null;
-
-      const dropdown: DropdownOption[] | null = (isText || typeof value === 'number' || typeof value === 'boolean' || key.includes('bindings'))
+      const dropdown: string[] | null = (isText || typeof value === 'number' || typeof value === 'boolean' || key.includes('bindings'))
         ? null                                                                    //Yes? Return null
-        : ((rearcamDeviceOptions && rearcamDeviceOptions.length > 0)
-          ? rearcamDeviceOptions
-          : (content.options || Object.keys(dataOptions).map((k) => k)))
+        : (content.options || Object.keys(dataOptions).map((k) => k))
 
       // Check for boolean setting
       const isBoolean = typeof value === 'boolean';                               // Checks if the setting is a boolean.
@@ -700,11 +630,6 @@ const Settings = () => {
 
       return (
         <Fragment key={setting}>
-          {key === 'reverseCam' && setting === 'guidelineMode' && (
-            <SectionDescription>
-              Adjust the parking guides to match your vehicle and camera position.
-            </SectionDescription>
-          )}
         <Element>
           <Caption2>{label}</Caption2>
           <Divider />
@@ -716,18 +641,12 @@ const Settings = () => {
                 onChange={handleChange}
                 value={value as string}
               >
-                {!(key === 'reverseCam' && ['guidelineMode', 'videoResolution', 'videoFps'].includes(setting)) && (
-                  <option value="">
-                    N/A
-                  </option>
-                )}
-                {dropdown.map((option) => {
-                  const optVal = typeof option === 'string' ? option : option.value;
-                  const optLabel = typeof option === 'string' ? option : option.label;
-                  return (
-                    <option key={optVal} value={optVal}>{optLabel}</option>
-                  );
-                })}
+                <option value="">
+                  N/A
+                </option>
+                {dropdown.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
               </Select>)
               : (isBoolean
                 ? (<ToggleSwitch
@@ -895,7 +814,10 @@ const Settings = () => {
 
         {settingPage === 'rearcam' &&
           <>
-            {renderSetting("reverseCam", currentSettings)}
+            <RearcamSettings
+              settings={currentSettings.reverseCam as SettingsGroup | undefined}
+              onChange={handleRearcamChange}
+            />
             <p />
           </>
         }
