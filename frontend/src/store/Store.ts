@@ -10,6 +10,7 @@ interface SizeState {
 }
 
 interface CarplayState {
+  detectionComplete: boolean;
   phase: ProjectionPhase;
   transport: ProjectionTransport;
   error: string | null;
@@ -56,6 +57,7 @@ interface SystemState {
   contentSize: SizeState;
   carplaySize: SizeState;
   carplay: CarplayState;
+  audioSource: 'carplay' | 'local';
   interface: InterfaceState;
   modal: ModalState;
   wifiState: boolean;
@@ -134,6 +136,7 @@ const APP = create<AppState>()(
       },
 
       carplay: {
+        detectionComplete: false,
         phase: 'idle',
         transport: null,
         error: null,
@@ -148,6 +151,7 @@ const APP = create<AppState>()(
         source: null,
         media: createEmptyCarplayMedia(),
       },
+      audioSource: 'carplay',
 
       interface: {
         topBar: true,

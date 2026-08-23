@@ -472,6 +472,9 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const checkDevice = useCallback(
     async (request: boolean = false) => {
       const device = request ? await requestDevice() : await findDevice()
+      appUpdate((state) => {
+        state.system.carplay.detectionComplete = true
+      })
       if (device) {
         const phase = APP.getState().system.carplay.phase
         appUpdate((state) => {

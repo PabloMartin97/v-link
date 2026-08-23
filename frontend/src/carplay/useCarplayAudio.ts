@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AudioCommand,
   AudioData,
@@ -9,10 +9,11 @@ import { PcmPlayer } from 'pcm-ringbuf-player'
 import { AudioPlayerKey, CarPlayWorker } from './worker/types'
 import { createAudioPlayerKey } from './worker/utils'
 import { useNamespaces } from '@/socket/Namespaces'
+import { APP } from '@/store/Store'
+import { setNavigationDucking, useAudioSettings } from '@/app/pages/settings/audioSettingsState'
 
 //TODO: allow to configure
 const defaultAudioVolume = 1
-const defaultNavVolume = 1
 
 const useCarplayAudio = (
   worker: CarPlayWorker,
@@ -20,6 +21,13 @@ const useCarplayAudio = (
 ) => {
   const [mic, setMic] = useState<WebMicrophone | null>(null)
   const [audioPlayers] = useState(new Map<AudioPlayerKey, PcmPlayer>())
+  const mediaPlayerKeys = useRef(new Set<AudioPlayerKey>())
+  const navigationActiveRef = useRef(false)
+  const microphoneGainRef = useRef<GainNode | null>(null)
+  const microphoneContextRef = useRef<AudioContext | null>(null)
+  const microphoneStreamRef = useRef<MediaStream | null>(null)
+  const localAudioActive = APP((state) => state.system.audioSource === 'local')
+  const audioSettings = useAudioSettings()
 
   const socket = useNamespaces();
 
@@ -64,12 +72,34 @@ const useCarplayAudio = (
       if (audio.volumeDuration) {
         const { volume, volumeDuration } = audio
         const player = getAudioPlayer(audio)
-        player.volume(volume, volumeDuration)
+        const audioKey = createAudioPlayerKey(audio.decodeType, audio.audioType)
+        const isMediaPlayer = mediaPlayerKeys.current.has(audioKey)
+        const targetVolume = localAudioActive && isMediaPlayer
+          ? 0
+          : navigationActiveRef.current && isMediaPlayer
+            ? audioSettings.navigationDucking / 100
+            : volume
+        player.volume(targetVolume, volumeDuration)
       } else if (audio.command) {
         switch (audio.command) {
           case AudioCommand.AudioNaviStart:
             const navPlayer = getAudioPlayer(audio)
-            navPlayer.volume(defaultNavVolume)
+            navPlayer.volume(audioSettings.navigationVolume / 100, 350)
+            navigationActiveRef.current = true
+            mediaPlayerKeys.current.forEach((key) => {
+              audioPlayers.get(key)?.volume(localAudioActive ? 0 : audioSettings.navigationDucking / 100, 350)
+            })
+            setNavigationDucking(true)
+            break
+          case AudioCommand.AudioNaviStop:
+            navigationActiveRef.current = false
+            mediaPlayerKeys.current.forEach((key) => {
+              audioPlayers.get(key)?.volume(localAudioActive ? 0 : defaultAudioVolume, 700)
+            })
+            setNavigationDucking(false)
+            break
+          case AudioCommand.AudioPhonecallStart:
+            getAudioPlayer(audio).volume(audioSettings.callVolume / 100, 350)
             break
           case AudioCommand.AudioMediaStart:
           case AudioCommand.AudioOutputStart:
@@ -78,13 +108,28 @@ const useCarplayAudio = (
             socket.log.emit('debug', `(CarPlay) Audio: ${audio}`)
 
             const mediaPlayer = getAudioPlayer(audio)
-            mediaPlayer.volume(defaultAudioVolume)
+            mediaPlayerKeys.current.add(createAudioPlayerKey(audio.decodeType, audio.audioType))
+            mediaPlayer.volume(localAudioActive ? 0 : defaultAudioVolume)
             break
         }
       }
     },
-    [getAudioPlayer],
+    [audioPlayers, audioSettings.callVolume, audioSettings.navigationDucking, audioSettings.navigationVolume, getAudioPlayer, localAudioActive],
   )
+
+  useEffect(() => {
+    mediaPlayerKeys.current.forEach((key) => {
+      audioPlayers.get(key)?.volume(localAudioActive ? 0 : defaultAudioVolume)
+    })
+  }, [audioPlayers, localAudioActive])
+
+  useEffect(() => {
+    microphoneGainRef.current?.gain.setTargetAtTime(
+      10 ** (audioSettings.microphoneGainDb / 20),
+      microphoneContextRef.current?.currentTime ?? 0,
+      0.05,
+    )
+  }, [audioSettings.microphoneGainDb])
 
   // audio init
   useEffect(() => {
@@ -93,7 +138,16 @@ const useCarplayAudio = (
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         })
-        const mic = new WebMicrophone(mediaStream, microphonePort)
+        const microphoneContext = new AudioContext()
+        const microphoneSource = microphoneContext.createMediaStreamSource(mediaStream)
+        const microphoneGain = microphoneContext.createGain()
+        const microphoneOutput = microphoneContext.createMediaStreamDestination()
+        microphoneGain.gain.value = 10 ** (audioSettings.microphoneGainDb / 20)
+        microphoneSource.connect(microphoneGain).connect(microphoneOutput)
+        microphoneGainRef.current = microphoneGain
+        microphoneContextRef.current = microphoneContext
+        microphoneStreamRef.current = mediaStream
+        const mic = new WebMicrophone(microphoneOutput.stream, microphonePort)
         setMic(mic)
       } catch (err) {
         console.warn('Failed to init microphone', err)
@@ -105,6 +159,10 @@ const useCarplayAudio = (
 
     return () => {
       audioPlayers.forEach(p => p.stop())
+      microphoneStreamRef.current?.getTracks().forEach(track => track.stop())
+      microphoneGainRef.current = null
+      void microphoneContextRef.current?.close()
+      microphoneContextRef.current = null
     }
   }, [audioPlayers, worker, microphonePort])
 

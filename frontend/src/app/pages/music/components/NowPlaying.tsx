@@ -8,7 +8,7 @@ import {
   Album, AlbumArt, AlbumPlaceholder, AppName, Artist, ControlButton, Controls,
   Details, EmptyCopy, EmptyState, MusicPage, Progress, ProgressFill,
   ProgressTrack, Time, TimeRow, Title, EmptyOptionRow, EmptyOptions,
-  UsbMediaOption, UsbMediaTile,
+  UsbMediaOption, UsbMediaTile, UsbPlayerBackButton, UsbPlayerSourceRow,
 } from '../styles';
 import { clampProgress, formatTime, getArtworkSource } from '../utils';
 import UsbMediaBrowser from './UsbMediaBrowser';
@@ -53,19 +53,18 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
       handledStrokeRef.current = false;
       return;
     }
-    if (handledStrokeRef.current || phoneConnected || usbBrowserOpen || localTrack) return;
+    if (handledStrokeRef.current || usbBrowserOpen || localTrack) return;
     handledStrokeRef.current = true;
     if (keyStroke === bindings?.selectDown?.value) setUsbBrowserOpen(true);
-  }, [bindings, keyStroke, localTrack, phoneConnected, usbBrowserOpen]);
+  }, [bindings, keyStroke, localTrack, usbBrowserOpen]);
 
-  if (!phoneConnected) {
-    if (usbBrowserOpen) {
-      return <UsbMediaBrowser onClose={() => setUsbBrowserOpen(false)} onTrackSelected={() => setUsbBrowserOpen(false)} />;
-    }
-    if (localTrack) {
-      return (
-        <NativePlayer
-          title={localTrack.file.name.replace(/\.[^.]+$/, '')}
+  if (usbBrowserOpen) {
+    return <UsbMediaBrowser onClose={() => setUsbBrowserOpen(false)} onTrackSelected={() => setUsbBrowserOpen(false)} />;
+  }
+  if (localTrack) {
+    return (
+      <NativePlayer
+          title={localTrack.name.replace(/\.[^.]+$/, '')}
           folderName={localMedia.folderName}
           playing={localMedia.playing}
           position={localMedia.position}
@@ -78,10 +77,11 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
           onPrevious={localMedia.playPrevious}
           onPlayPause={() => void localMedia.togglePlayback()}
           onNext={() => localMedia.playNext(false)}
-        />
-      );
-    }
+      />
+    );
+  }
 
+  if (!phoneConnected) {
     return (
       <EmptyState>
         <EmptyOptions>
@@ -110,7 +110,10 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
         {artworkSource ? <img src={artworkSource} alt="" /> : <AlbumPlaceholder aria-hidden="true">♪</AlbumPlaceholder>}
       </AlbumArt>
       <Details>
-        <AppName style={{ color: accent }}>{media.appName || source || 'Phone projection'}</AppName>
+        <UsbPlayerSourceRow>
+          <AppName style={{ color: accent }}>{media.appName || source || 'Phone projection'}</AppName>
+          <UsbPlayerBackButton type="button" onClick={() => setUsbBrowserOpen(true)}>Local media</UsbPlayerBackButton>
+        </UsbPlayerSourceRow>
         <Title>{media.title || 'Now Playing'}</Title>
         <Artist>{media.artist || (hasMedia ? 'Unknown artist' : 'Metadata unavailable')}</Artist>
         {media.album && <Album>{media.album}</Album>}

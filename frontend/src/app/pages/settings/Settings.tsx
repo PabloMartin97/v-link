@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, ReactNode } from 'react';
 import CanSettings from './CanSettings';
+import AudioSettings from './AudioSettings';
 
 import styled, { useTheme } from 'styled-components';
 import ScrollContainer from 'react-indiana-drag-scroll'
@@ -808,6 +809,8 @@ const Settings = () => {
             <p />
           </>
         }
+
+        {settingPage === 'audio' && <AudioSettings />}
 
         {settingPage === 'rearcam' &&
           <>

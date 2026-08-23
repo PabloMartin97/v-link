@@ -14,6 +14,7 @@ import Splash from './app/Splash';
 import Content from './app/Content';
 import { Modal } from './app/components/Modal';
 import { LocalMediaProvider } from './app/pages/music/LocalMediaProvider';
+import { sendLocalMediaCommand, type LocalMediaCommand } from './app/pages/music/localMediaCommands';
 
 
 import Carplay from './carplay/Carplay';
@@ -31,6 +32,7 @@ const AppContainer = styled.div`
 `;
 
 const BACKGROUND_MEDIA_COMMANDS = new Set(['next', 'prev']);
+const LOCAL_MEDIA_COMMANDS = new Set<LocalMediaCommand>(['next', 'prev', 'playOrPause']);
 
 function App() {
   // Subscribe to store slices
@@ -42,6 +44,7 @@ function App() {
   const keyStroke = APP((state) => state.keyStroke);
   const switchPage = APP((state) => state.switchPage);
   const pauseKeyBinds = APP((state) => state.pauseKeyBinds);
+  const audioSource = APP((state) => state.system.audioSource);
 
   const socket = useNamespaces();
 
@@ -70,7 +73,7 @@ function App() {
     return () => {
       document.removeEventListener('keydown', mmiKeyDown);
     };
-  }, [systemSettings.view, systemSettings.switch, pauseKeyBinds]);
+  }, [systemSettings.view, systemSettings.switch, pauseKeyBinds, audioSource]);
 
   const mmiKeyDown = (event: KeyboardEvent) => {
     // Store last Keystroke in store to broadcast it
@@ -91,6 +94,13 @@ function App() {
 
     // Allow track controls
     if (systemSettings.view !== 'Carplay' && !BACKGROUND_MEDIA_COMMANDS.has(action)) return;
+
+    // NativePlayer consumes media keys through keyStroke while it owns audio
+    // focus. Do not mirror those commands into the projection session.
+    if (audioSource === 'local' && LOCAL_MEDIA_COMMANDS.has(action as LocalMediaCommand)) {
+      sendLocalMediaCommand(action as LocalMediaCommand);
+      return;
+    }
 
     socket.log.emit('debug', 'Emitting carplay key-command: ', action);
     setKeyCommand(action);

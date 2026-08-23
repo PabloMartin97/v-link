@@ -12,31 +12,84 @@ import {
   UsbTrackButton,
   UsbTrackList,
 } from '../styles';
-import { useLocalMedia } from '../LocalMediaProvider';
+import { type BackendMediaEntry, useLocalMedia } from '../LocalMediaProvider';
 
 interface UsbMediaBrowserProps {
   onClose: () => void;
   onTrackSelected: () => void;
 }
 
+const MEDIA_API = 'http://localhost:4001/api/media';
+
 const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => {
   const theme = useTheme();
   const themeColor = useThemeColor();
   const accent = theme.colors.theme[themeColor].active;
-  const { folderName, tracks, currentTrack, error, playing, chooseFolder, playTrack } = useLocalMedia();
+  const { folderName, tracks, currentTrack, error, playing, chooseFolder, loadBackendTracks, playTrack } = useLocalMedia();
+  const [backendEntries, setBackendEntries] = useState<BackendMediaEntry[] | null>(null);
+  const [browserTitle, setBrowserTitle] = useState('Media locations');
+  const [pathHistory, setPathHistory] = useState<string[]>([]);
+  const [browserError, setBrowserError] = useState<string | null>(null);
   const keyStroke = APP((state) => state.keyStroke);
   const bindings = APP((state) => state.settings.dongle_bindings as Record<string, { value?: string }> | undefined);
   const [selectedTrack, setSelectedTrack] = useState(currentTrack ?? 0);
   const trackRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handledStrokeRef = useRef(false);
 
+  const openBackendDirectory = async (path: string, addToHistory = true) => {
+    try {
+      const response = await fetch(`${MEDIA_API}/browse?path=${encodeURIComponent(path)}`);
+      if (!response.ok) throw new Error();
+      const payload = await response.json() as { name: string; path: string; entries: BackendMediaEntry[] };
+      if (addToHistory) setPathHistory((current) => [...current, payload.path]);
+      setBrowserTitle(payload.name);
+      setBackendEntries(payload.entries);
+      setSelectedTrack(0);
+      setBrowserError(null);
+    } catch {
+      setBrowserError('V-Link could not open this location.');
+    }
+  };
+
   useEffect(() => {
-    if (!tracks.length) {
+    void fetch(`${MEDIA_API}/roots`).then(async (response) => {
+      if (!response.ok) throw new Error();
+      const roots = await response.json() as Array<{ name: string; path: string }>;
+      setBackendEntries(roots.map((root) => ({ ...root, kind: 'directory' })));
+      setBrowserError(roots.length ? null : 'No media locations are mounted.');
+    }).catch(() => {
+      // Development browsers can keep using the native directory picker.
+      setBackendEntries(null);
+    });
+  }, []);
+
+  const goBack = () => {
+    if (!backendEntries || pathHistory.length === 0) {
+      onClose();
+      return;
+    }
+    if (pathHistory.length === 1) {
+      setPathHistory([]);
+      setBrowserTitle('Media locations');
+      void fetch(`${MEDIA_API}/roots`).then(async (response) => {
+        const roots = await response.json() as Array<{ name: string; path: string }>;
+        setBackendEntries(roots.map((root) => ({ ...root, kind: 'directory' })));
+      });
+      return;
+    }
+    const previous = pathHistory[pathHistory.length - 2];
+    setPathHistory((current) => current.slice(0, -1));
+    void openBackendDirectory(previous, false);
+  };
+
+  useEffect(() => {
+    const itemCount = backendEntries?.length ?? tracks.length;
+    if (!itemCount) {
       setSelectedTrack(0);
       return;
     }
-    setSelectedTrack((current) => Math.min(current, tracks.length - 1));
-  }, [tracks.length]);
+    setSelectedTrack((current) => Math.min(current, itemCount - 1));
+  }, [backendEntries?.length, tracks.length]);
 
   useEffect(() => {
     trackRefs.current[selectedTrack]?.scrollIntoView({ block: 'nearest' });
@@ -50,42 +103,77 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
     if (handledStrokeRef.current) return;
     handledStrokeRef.current = true;
     if (keyStroke === bindings?.back?.value) {
-      onClose();
-    } else if (!tracks.length && keyStroke === bindings?.selectDown?.value) {
+      goBack();
+    } else if (!backendEntries && !tracks.length && keyStroke === bindings?.selectDown?.value) {
       void chooseFolder();
-    } else if (!tracks.length) {
+    } else if (!(backendEntries?.length ?? tracks.length)) {
       return;
     } else if (keyStroke === bindings?.up?.value) {
-      setSelectedTrack((current) => (current - 1 + tracks.length) % tracks.length);
+      const count = backendEntries?.length ?? tracks.length;
+      setSelectedTrack((current) => (current - 1 + count) % count);
     } else if (keyStroke === bindings?.down?.value) {
-      setSelectedTrack((current) => (current + 1) % tracks.length);
+      const count = backendEntries?.length ?? tracks.length;
+      setSelectedTrack((current) => (current + 1) % count);
     } else if (keyStroke === bindings?.selectDown?.value) {
-      void playTrack(selectedTrack);
-      onTrackSelected();
+      const entry = backendEntries?.[selectedTrack];
+      if (!entry) {
+        void playTrack(selectedTrack);
+        onTrackSelected();
+      } else if (entry.kind === 'directory') {
+        void openBackendDirectory(entry.path);
+      } else {
+        const files = backendEntries.filter((item) => item.kind === 'file');
+        void loadBackendTracks(browserTitle, files, files.findIndex((item) => item.path === entry.path));
+        onTrackSelected();
+      }
     }
-  }, [bindings, chooseFolder, keyStroke, onClose, onTrackSelected, playTrack, selectedTrack, tracks.length]);
+  }, [backendEntries, bindings, browserTitle, chooseFolder, keyStroke, loadBackendTracks, onClose, onTrackSelected, playTrack, selectedTrack, tracks.length]);
+
+  const visibleEntries = backendEntries;
 
   return (
     <UsbBrowserPage>
       <UsbBrowserHeader>
         <div>
-          <strong>{folderName}</strong>
-          <span>{tracks.length ? `${tracks.length} audio files` : 'Choose a local media folder'}</span>
+          <strong>{visibleEntries ? browserTitle : folderName}</strong>
+          <span>{visibleEntries ? `${visibleEntries.length} items` : tracks.length ? `${tracks.length} audio files` : 'Choose a local media folder'}</span>
         </div>
         <UsbBrowserActions>
-          <UsbBrowserButton type="button" onClick={onClose}>Back</UsbBrowserButton>
+          <UsbBrowserButton type="button" onClick={goBack}>Back</UsbBrowserButton>
           <UsbBrowserButton type="button" $accent={accent} onClick={() => void chooseFolder()}>Choose folder</UsbBrowserButton>
         </UsbBrowserActions>
       </UsbBrowserHeader>
 
-      {error && <UsbEmptyMessage>{error}</UsbEmptyMessage>}
+      {(browserError || error) && <UsbEmptyMessage>{browserError || error}</UsbEmptyMessage>}
       {!error && tracks.length === 0 && <UsbEmptyMessage>Select a folder to view its music.</UsbEmptyMessage>}
 
       <UsbTrackList>
-        {tracks.map((track, index) => (
+        {visibleEntries?.map((entry, index) => (
+          <UsbTrackButton
+            key={entry.path}
+            type="button"
+            $active={false}
+            $focused={selectedTrack === index}
+            $accent={accent}
+            onClick={() => {
+              if (entry.kind === 'directory') {
+                void openBackendDirectory(entry.path);
+                return;
+              }
+              const files = visibleEntries.filter((item) => item.kind === 'file');
+              const index = files.findIndex((item) => item.path === entry.path);
+              void loadBackendTracks(browserTitle, files, index);
+              onTrackSelected();
+            }}
+          >
+            <span>{entry.kind === 'directory' ? '▸' : '♪'}</span>
+            <strong>{entry.name.replace(/\.[^.]+$/, '')}</strong>
+          </UsbTrackButton>
+        ))}
+        {!visibleEntries && tracks.map((track, index) => (
           <UsbTrackButton
             ref={(element) => { trackRefs.current[index] = element; }}
-            key={`${track.file.name}-${track.file.lastModified}`}
+            key={`${track.name}-${track.file?.lastModified ?? track.url}`}
             type="button"
             $active={currentTrack === index}
             $focused={selectedTrack === index}
@@ -97,7 +185,7 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
             }}
           >
             <span>{currentTrack === index && playing ? '▶' : '♪'}</span>
-            <strong>{track.file.name.replace(/\.[^.]+$/, '')}</strong>
+            <strong>{track.name.replace(/\.[^.]+$/, '')}</strong>
           </UsbTrackButton>
         ))}
       </UsbTrackList>
