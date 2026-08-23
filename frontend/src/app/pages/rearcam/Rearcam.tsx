@@ -140,6 +140,23 @@ const CenterMsg = styled.div`
   color: #fff;
   z-index: 4;
 `;
+const SettingsResetNotice = styled.div`
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: min(90%, 680px);
+  box-sizing: border-box;
+  padding: 12px 18px;
+  border: 2px solid #ff4d4d;
+  border-radius: 6px;
+  background: rgba(120, 0, 0, 0.92);
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+`;
 
 // Custom guideline dimensions and reusable geometry helpers.
 const clamp = (value: number, min: number, max: number) =>
@@ -249,9 +266,14 @@ export default function Rearcam() {
   const streamRef = useRef<MediaStream | null>(null);
   const requestIdRef = useRef(0);
   const socket = useNamespaces();
+  const appUpdate = APP((state) => state.update);
 
   const Caption = Typography.Subtitle;
   const reverseCamSettings = APP((state) => state.settings.reverseCam as ReverseCamSettings | undefined);
+  const resetNoticePending = APP((state) => (
+    state.settings.constants as { rearcam_settings_reset_notice?: boolean } | undefined
+  )?.rearcam_settings_reset_notice ?? false);
+  const [showSettingsResetNotice] = useState(resetNoticePending);
 
   const guidelineMode = reverseCamSettings?.guidelineMode?.value ?? "Standard";
   const guidelineNearWidth = Number(reverseCamSettings?.guidelineNearWidth?.value ?? 80);
@@ -264,6 +286,20 @@ export default function Rearcam() {
   const [status, setStatus] =
     useState<"idle" | "opening" | "playing" | "error" | "denied">("idle");
   const [err, setErr] = useState("");
+
+  // Persistently acknowledge the migration warning as soon as its first
+  // Rearcam visit starts, while keeping it visible for this mounted view.
+  useEffect(() => {
+    if (!showSettingsResetNotice) return;
+
+    const nextSettings = structuredClone(APP.getState().settings);
+    const constants = nextSettings.constants as Record<string, unknown> | undefined;
+    if (!constants) return;
+
+    constants.rearcam_settings_reset_notice = false;
+    appUpdate((state) => { state.settings = nextSettings; });
+    socket.app.emit('save', nextSettings);
+  }, [appUpdate, showSettingsResetNotice, socket.app]);
 
   // Power the camera through GPIO while the Rearcam page is mounted.
   useEffect(() => {
@@ -406,6 +442,12 @@ export default function Rearcam() {
   return (
     <Container>
       <Video ref={videoRef} autoPlay playsInline muted />
+
+      {showSettingsResetNotice && (
+        <SettingsResetNotice role="alert">
+          Rear camera settings were incompatible and have been reset to defaults. Please review and save your camera preferences.
+        </SettingsResetNotice>
+      )}
 
       {guidelineMode === "Standard" && (
         <OverlayImg

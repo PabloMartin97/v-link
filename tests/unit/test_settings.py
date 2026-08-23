@@ -255,6 +255,7 @@ def test_migrate_settings_replaces_legacy_rearcam_without_touching_other_setting
     assert 'videoWidth' not in result['reverseCam']
     assert 'videoHeight' not in result['reverseCam']
     assert result['constants']['rearcam_settings_version'] == settings.REARCAM_SETTINGS_VERSION
+    assert result['constants']['rearcam_settings_reset_notice'] is True
     assert result['general']['colorTheme']['value'] == 'Red'
 
 
@@ -274,6 +275,7 @@ def test_migrate_settings_preserves_current_versioned_rearcam_values(tmp_path, m
     user_app['reverseCam']['deviceId']['value'] = 'saved-camera-id'
     user_app['reverseCam']['delay']['value'] = 9
     user_app['reverseCam']['guidelineMode']['value'] = 'Custom'
+    user_app['constants']['rearcam_settings_reset_notice'] = False
 
     (default_dir / 'app.json').write_text(json.dumps(default_app))
     (user_dir / 'app.json').write_text(json.dumps(user_app))

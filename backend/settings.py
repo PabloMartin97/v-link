@@ -108,8 +108,15 @@ def migrate_settings():
             # Rearcam intentionally uses a clean format boundary. Reset only
             # this block when its version or structure is old/incompatible.
             if saved_version != REARCAM_SETTINGS_VERSION or not reverse_cam_is_current:
+                logger.error(
+                    '[Settings] Incompatible rearcam settings detected '
+                    f'(saved version={saved_version!r}, expected={REARCAM_SETTINGS_VERSION}, '
+                    f'schema_current={reverse_cam_is_current}). '
+                    'Resetting only reverseCam to the current defaults.'
+                )
                 user['reverseCam'] = deepcopy(default_reverse_cam)
                 user_constants['rearcam_settings_version'] = REARCAM_SETTINGS_VERSION
+                user_constants['rearcam_settings_reset_notice'] = True
                 updated.append('reverseCam (reset to current schema)')
 
         if added or updated:

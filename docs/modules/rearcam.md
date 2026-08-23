@@ -61,6 +61,8 @@ Rear-camera preferences are not stored in a separate `rearcam.json` file. They a
 
 The default configuration lives in `backend/config/app.json` under `reverseCam`. The schema version is stored at `constants.rearcam_settings_version`.
 
+`constants.rearcam_settings_reset_notice` records whether the one-time migration warning still needs to be shown. It is set to `true` only when an incompatible rear-camera block is reset.
+
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `enabled` | `true` | Shows Rearcam in manual navigation and view cycling. It does not disable automatic reverse activation. |
@@ -115,7 +117,9 @@ This reset deliberately removes legacy fields and structures, including:
 - Numeric legacy `videoFps` values
 - Object-based legacy `deviceSelectionMode.options` entries
 
-After migration, `rearcam_settings_version` is updated and the clean configuration is saved. Because the new default is `Standard`, upgraded legacy installations return to the standard static guidelines.
+After migration, `rearcam_settings_version` is updated, `rearcam_settings_reset_notice` is enabled, and the clean configuration is saved. Because the new default is `Standard`, upgraded legacy installations return to the standard static guidelines.
+
+On the first subsequent visit to Rearcam, a red warning is rendered over the camera page. The frontend immediately persists the notice as acknowledged while keeping it visible for that mounted visit. It therefore remains pending across application restarts until Rearcam is actually opened, but does not appear again on later visits.
 
 When the rear-camera schema changes again, increment `REARCAM_SETTINGS_VERSION` in `backend/settings.py` and `constants.rearcam_settings_version` in `backend/config/app.json` together.
 

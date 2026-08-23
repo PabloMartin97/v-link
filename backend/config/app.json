@@ -6,6 +6,7 @@
     "chart_input_max": 6,
     "chart_input_current": 4,
     "rearcam_settings_version": 1,
+    "rearcam_settings_reset_notice": false,
     "profile": null,
     "keymap": {
       "options": [
