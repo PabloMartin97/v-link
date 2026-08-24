@@ -372,13 +372,13 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
           if (!payload) break
 
-          console.info('(CarPlay) Media metadata received:', payload)
-
           appUpdate((state) => {
-            state.system.carplay.media = mergeCarplayMedia(
-              state.system.carplay.media,
-              payload,
+            const previousTitle = state.system.carplay.media.title
+            const nextMedia = mergeCarplayMedia(state.system.carplay.media, payload)
+            console.info(
+              `(CarPlay) Media metadata snapshot: ${JSON.stringify(payload)} previousTitle=${JSON.stringify(previousTitle)} nextTitle=${JSON.stringify(nextMedia.title)}`,
             )
+            state.system.carplay.media = nextMedia
           })
 
           break
