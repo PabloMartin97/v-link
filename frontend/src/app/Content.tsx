@@ -169,6 +169,7 @@ const Content = () => {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pageSwitchHandledRef = useRef(false);
 
   // Reverse refs + timer (to exit from rearcam)
   const previousView = useRef<string | null>(null);
@@ -383,8 +384,13 @@ const Content = () => {
 
   // Listen for key strokes to switch views
   useEffect(() => {
-    if (view !== 'Music' && !pauseKeyBinds && keyStroke === switchPage) {
-      console.log(pauseKeyBinds, keyStroke, switchPage)
+    if (!keyStroke) {
+      pageSwitchHandledRef.current = false;
+      return;
+    }
+    if (pageSwitchHandledRef.current) return;
+    if (!pauseKeyBinds && keyStroke === switchPage) {
+      pageSwitchHandledRef.current = true;
       cycleView();
     }
   }, [keyStroke, pauseKeyBinds, switchPage, view]);

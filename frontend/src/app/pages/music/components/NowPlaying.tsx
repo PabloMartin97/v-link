@@ -34,6 +34,8 @@ const FolderIcon = () => (
   </svg>
 );
 
+const PROJECTED_MEDIA_COMMANDS = ['prev', 'playOrPause', 'next'] as const;
+
 const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const theme = useTheme();
   const themeColor = useThemeColor();
@@ -47,6 +49,7 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
   const localAudioActive = APP((state) => state.system.audioSource === 'local');
   const keyStroke = APP((state) => state.keyStroke);
   const bindings = APP((state) => state.settings.dongle_bindings as Record<string, { value?: string }> | undefined);
+  const [focusedProjectedControl, setFocusedProjectedControl] = useState(1);
   const handledStrokeRef = useRef(false);
 
   useEffect(() => {
@@ -54,10 +57,20 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
       handledStrokeRef.current = false;
       return;
     }
-    if (handledStrokeRef.current || usbBrowserOpen || (localAudioActive && localTrack)) return;
+    if (handledStrokeRef.current || usbBrowserOpen) return;
     handledStrokeRef.current = true;
-    if (keyStroke === bindings?.selectDown?.value) setUsbBrowserOpen(true);
-  }, [bindings, keyStroke, localAudioActive, localTrack, usbBrowserOpen]);
+    if (keyStroke === bindings?.down?.value) {
+      setUsbBrowserOpen(true);
+    } else if (localAudioActive && localTrack) {
+      return;
+    } else if (phoneConnected && keyStroke === bindings?.left?.value) {
+      setFocusedProjectedControl((current) => (current - 1 + PROJECTED_MEDIA_COMMANDS.length) % PROJECTED_MEDIA_COMMANDS.length);
+    } else if (phoneConnected && keyStroke === bindings?.right?.value) {
+      setFocusedProjectedControl((current) => (current + 1) % PROJECTED_MEDIA_COMMANDS.length);
+    } else if (phoneConnected && keyStroke === bindings?.selectDown?.value) {
+      sendCarplayMediaCommand(PROJECTED_MEDIA_COMMANDS[focusedProjectedControl]);
+    }
+  }, [bindings, focusedProjectedControl, keyStroke, localAudioActive, localTrack, phoneConnected, usbBrowserOpen]);
 
   if (usbBrowserOpen) {
     return <UsbMediaBrowser onClose={() => setUsbBrowserOpen(false)} onTrackSelected={() => setUsbBrowserOpen(false)} />;
@@ -127,11 +140,11 @@ const NowPlaying = ({ media, phoneConnected, source }: NowPlayingProps) => {
           </Progress>
         )}
         <Controls>
-          <ControlButton type="button" aria-label="Anterior" onClick={() => sendCarplayMediaCommand('prev')}><PreviousIcon /></ControlButton>
-          <ControlButton type="button" $primary $color={accent} aria-label={playing ? 'Pausar' : 'Reproducir'} onClick={() => sendCarplayMediaCommand('playOrPause')}>
+          <ControlButton type="button" $focused={focusedProjectedControl === 0} $color={accent} aria-label="Anterior" onClick={() => sendCarplayMediaCommand('prev')}><PreviousIcon /></ControlButton>
+          <ControlButton type="button" $focused={focusedProjectedControl === 1} $primary $color={accent} aria-label={playing ? 'Pausar' : 'Reproducir'} onClick={() => sendCarplayMediaCommand('playOrPause')}>
             <PlayPauseIcon playing={playing} />
           </ControlButton>
-          <ControlButton type="button" aria-label="Siguiente" onClick={() => sendCarplayMediaCommand('next')}><NextIcon /></ControlButton>
+          <ControlButton type="button" $focused={focusedProjectedControl === 2} $color={accent} aria-label="Siguiente" onClick={() => sendCarplayMediaCommand('next')}><NextIcon /></ControlButton>
         </Controls>
       </Details>
     </MusicPage>

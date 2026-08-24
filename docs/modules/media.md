@@ -316,11 +316,12 @@ If the backend responds, the user can:
 
 If the backend is unavailable, the component falls back to the browser-selected playlist and keeps the native Choose Folder action available.
 
-The browser supports pointer input and MMI/key bindings:
+The browser supports pointer input and MMI/key bindings. From the main Music view, Down opens the browser while Up remains reserved for switching top-level V-Link pages:
 
-- Up/down changes the focused entry and wraps at the ends.
+- Left/right changes the focused entry and wraps at the ends.
 - Select enters a directory or starts a file.
-- Back moves to the previous backend directory, returns to roots, or closes the browser.
+- Back closes the browser and returns to the main Music view.
+- The on-screen Back button moves to the previous backend directory, returns to roots, or closes the browser.
 - The focused entry is scrolled into view.
 
 ## Starting Local Playback
@@ -567,9 +568,11 @@ Stopping the test or leaving the page cancels animation, stops microphone tracks
 
 The Media page reuses `dongle_bindings` from `app.json` for projected and local controls.
 
-- In projected Now Playing, Select opens Local Media when no other Media subview owns the key.
-- In the browser, Up/Down/Select/Back navigate files.
+- From the main Music view, Down opens Local Media.
+- In the browser, Left/Right changes the focused item, Select opens it, and Back returns to the main Music view.
+- In projected Now Playing, Left/Right focuses Previous, Play/Pause, or Next and Select activates it.
 - In Native Player, Left/Right/Select/Back operate its five controls and browser action.
+- Up switches the top-level V-Link page from every Music subview.
 - Global Next/Previous work outside the CarPlay view.
 - When local focus is active, global media actions are routed only to local playback.
 - When projected focus is active, they are sent to the CarPlay worker/dongle.

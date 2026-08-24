@@ -103,15 +103,15 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
     if (handledStrokeRef.current) return;
     handledStrokeRef.current = true;
     if (keyStroke === bindings?.back?.value) {
-      goBack();
+      onClose();
     } else if (!backendEntries && !tracks.length && keyStroke === bindings?.selectDown?.value) {
       void chooseFolder();
     } else if (!(backendEntries?.length ?? tracks.length)) {
       return;
-    } else if (keyStroke === bindings?.up?.value) {
+    } else if (keyStroke === bindings?.left?.value) {
       const count = backendEntries?.length ?? tracks.length;
       setSelectedTrack((current) => (current - 1 + count) % count);
-    } else if (keyStroke === bindings?.down?.value) {
+    } else if (keyStroke === bindings?.right?.value) {
       const count = backendEntries?.length ?? tracks.length;
       setSelectedTrack((current) => (current + 1) % count);
     } else if (keyStroke === bindings?.selectDown?.value) {
