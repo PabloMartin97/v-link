@@ -14,25 +14,61 @@ const Row = styled.div`min-height:48px;display:grid;grid-template-columns:minmax
 const Fixed = styled.span`justify-self:end;color:${({ theme }) => theme.colors.medium};`;
 const Meter = styled.div`height:10px;overflow:hidden;border-radius:5px;background:${({ theme }) => theme.colors.dark};`;
 const MeterFill = styled.div<{ $level: number; $clipping: boolean }>`height:100%;width:${({ $level }) => `${$level}%`};background:${({ $clipping, theme }) => $clipping ? '#e64b4b' : theme.colors.theme.white.active};transition:width 70ms linear;`;
-const Help = styled.p`margin:0;color:${({ theme }) => theme.colors.medium};font:12px/1.45 ${({ theme }) => theme.fonts.inter};`;
+const Help = styled.p<{ $error?: boolean }>`margin:0;color:${({ $error, theme }) => $error ? '#e64b4b' : theme.colors.medium};font:12px/1.45 ${({ theme }) => theme.fonts.inter};`;
 const Actions = styled.div`display:flex;align-items:center;gap:12px;`;
+
+type MicrophoneTestStatus = 'idle' | 'starting' | 'testing' | 'error';
+
+type MicrophoneTestResources = {
+  stream: MediaStream;
+  context: AudioContext;
+  source: MediaStreamAudioSourceNode;
+  gain: GainNode;
+  analyser: AnalyserNode;
+};
+
+const MICROPHONE_START_TIMEOUT_MS = 10_000;
+
+const releaseTestResources = (resources: MicrophoneTestResources | null) => {
+  if (!resources) return;
+  resources.source.disconnect();
+  resources.gain.disconnect();
+  resources.analyser.disconnect();
+  resources.stream.getTracks().forEach((track) => track.stop());
+  if (resources.context.state !== 'closed') {
+    void resources.context.close().catch((error) => console.warn('Failed to close microphone test AudioContext', error));
+  }
+};
+
+const describeMicrophoneError = (error: unknown) => {
+  if (error && typeof error === 'object' && 'name' in error && 'message' in error) {
+    return `${String(error.name)}: ${String(error.message)}`;
+  }
+  return `Microphone test failed: ${String(error)}`;
+};
 
 const AudioSettings = () => {
   const storedValues = useAudioSettings();
   const [values, setValues] = useState(storedValues);
-  const [testing, setTesting] = useState(false);
+  const [testStatus, setTestStatus] = useState<MicrophoneTestStatus>('idle');
+  const [testError, setTestError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
-  const streamRef = useRef<MediaStream | null>(null);
+  const resourcesRef = useRef<MicrophoneTestResources | null>(null);
   const animationRef = useRef<number | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const startTimeoutRef = useRef<number | null>(null);
+  const testRequestRef = useRef(0);
+  const mountedRef = useRef(true);
   const theme = useTheme();
   const themeColor = useThemeColor();
 
   useEffect(() => setValues(storedValues), [storedValues]);
   useEffect(() => () => {
+    mountedRef.current = false;
+    testRequestRef.current += 1;
+    if (startTimeoutRef.current != null) window.clearTimeout(startTimeoutRef.current);
     if (animationRef.current != null) cancelAnimationFrame(animationRef.current);
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    void audioContextRef.current?.close();
+    releaseTestResources(resourcesRef.current);
+    resourcesRef.current = null;
   }, []);
 
   const update = (key: keyof AudioSettingsValues, value: number) => {
@@ -42,30 +78,66 @@ const AudioSettings = () => {
   };
 
   const stopTest = () => {
+    testRequestRef.current += 1;
+    if (startTimeoutRef.current != null) window.clearTimeout(startTimeoutRef.current);
+    startTimeoutRef.current = null;
     if (animationRef.current != null) cancelAnimationFrame(animationRef.current);
     animationRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    void audioContextRef.current?.close();
-    audioContextRef.current = null;
-    setTesting(false);
+    releaseTestResources(resourcesRef.current);
+    resourcesRef.current = null;
+    setTestStatus('idle');
+    setTestError(null);
     setLevel(0);
   };
 
   const startTest = async () => {
+    const requestId = testRequestRef.current + 1;
+    testRequestRef.current = requestId;
+    releaseTestResources(resourcesRef.current);
+    resourcesRef.current = null;
+    setLevel(0);
+    setTestError(null);
+    setTestStatus('starting');
+
+    startTimeoutRef.current = window.setTimeout(() => {
+      if (!mountedRef.current || testRequestRef.current !== requestId) return;
+      testRequestRef.current += 1;
+      startTimeoutRef.current = null;
+      setTestStatus('error');
+      setTestError('TimeoutError: Chromium did not finish opening the microphone within 10 seconds. The device may already be in use.');
+    }, MICROPHONE_START_TIMEOUT_MS);
+
+    let stream: MediaStream | null = null;
+    let resources: MicrophoneTestResources | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone access is not available in this browser');
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!mountedRef.current || testRequestRef.current !== requestId) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       const context = new AudioContext();
       const analyser = context.createAnalyser();
       const gain = context.createGain();
+      const source = context.createMediaStreamSource(stream);
       gain.gain.value = 10 ** (values.microphoneGainDb / 20);
-      context.createMediaStreamSource(stream).connect(gain).connect(analyser);
+      source.connect(gain).connect(analyser);
       analyser.fftSize = 1024;
       const samples = new Uint8Array(analyser.fftSize);
-      streamRef.current = stream;
-      audioContextRef.current = context;
-      setTesting(true);
+      resources = { stream, context, source, gain, analyser };
+
+      if (!mountedRef.current || testRequestRef.current !== requestId) {
+        releaseTestResources(resources);
+        return;
+      }
+
+      resourcesRef.current = resources;
+      if (startTimeoutRef.current != null) window.clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+      setTestStatus('testing');
       const measure = () => {
+        if (!mountedRef.current || testRequestRef.current !== requestId) return;
         analyser.getByteTimeDomainData(samples);
         let peak = 0;
         samples.forEach((sample) => { peak = Math.max(peak, Math.abs(sample - 128) / 128); });
@@ -73,8 +145,19 @@ const AudioSettings = () => {
         animationRef.current = requestAnimationFrame(measure);
       };
       measure();
-    } catch {
-      setTesting(false);
+    } catch (error) {
+      if (startTimeoutRef.current != null) window.clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+      if (resources) {
+        releaseTestResources(resources);
+      } else {
+        stream?.getTracks().forEach((track) => track.stop());
+      }
+      if (!mountedRef.current || testRequestRef.current !== requestId) return;
+      resourcesRef.current = null;
+      setLevel(0);
+      setTestStatus('error');
+      setTestError(describeMicrophoneError(error));
     }
   };
 
@@ -102,10 +185,16 @@ const AudioSettings = () => {
         <SectionTitle>Call microphone</SectionTitle>
         {slider('Microphone input gain', 'microphoneGainDb', -20, 2, ' dB')}
         <Meter aria-label="Microphone level"><MeterFill $level={level} $clipping={level > 92} /></Meter>
-        {(testing || level > 92) && <Help>{level > 92 ? 'Input is clipping. Reduce microphone gain.' : 'Speak normally; occasional peaks around 75% are ideal.'}</Help>}
+        <div aria-live="polite">
+          {testStatus === 'starting' && <Help>Starting microphone test…</Help>}
+          {testStatus === 'testing' && <Help>{level > 92 ? 'Input is clipping. Reduce microphone gain.' : 'Speak normally; occasional peaks around 75% are ideal.'}</Help>}
+          {testStatus === 'error' && testError && <Help $error>{testError}</Help>}
+        </div>
         <Actions>
-          <Button onClick={() => testing ? stopTest() : void startTest()}>{testing ? 'Stop microphone test' : 'Test microphone'}</Button>
-          <Button onClick={() => { setValues(DEFAULT_AUDIO_SETTINGS); saveAudioSettings(DEFAULT_AUDIO_SETTINGS); }}>Restore defaults</Button>
+          <Button type="button" onClick={() => testStatus === 'starting' || testStatus === 'testing' ? stopTest() : void startTest()}>
+            {testStatus === 'starting' ? 'Cancel microphone test' : testStatus === 'testing' ? 'Stop microphone test' : testStatus === 'error' ? 'Retry microphone test' : 'Test microphone'}
+          </Button>
+          <Button type="button" onClick={() => { setValues(DEFAULT_AUDIO_SETTINGS); saveAudioSettings(DEFAULT_AUDIO_SETTINGS); }}>Restore defaults</Button>
         </Actions>
       </Section>
     </Page>
