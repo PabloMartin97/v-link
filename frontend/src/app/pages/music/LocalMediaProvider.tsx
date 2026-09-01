@@ -143,6 +143,12 @@ const isAudioFile = (file: File) => {
   return file.type.startsWith('audio/') || AUDIO_EXTENSIONS.some((extension) => name.endsWith(extension));
 };
 
+export const shouldAutoplayRestoredTrack = (
+  detectionComplete: boolean,
+  phoneConnected: boolean,
+  autoplayEnabled: boolean,
+) => detectionComplete && !phoneConnected && autoplayEnabled;
+
 export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const urlsRef = useRef<string[]>([]);
@@ -150,7 +156,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
   const shuffleHistoryRef = useRef<number[]>([]);
   const restoredAudioRef = useRef<HTMLAudioElement | null>(null);
   const projectionDetectionComplete = APP((state) => state.system.carplay.detectionComplete);
-  const dongleConnected = APP((state) => state.system.carplay.dongle || state.system.carplay.phone);
+  const phoneConnected = APP((state) => state.system.carplay.phone);
   const audioSource = APP((state) => state.system.audioSource);
   const [folderName, setFolderName] = useState('Local Media');
   const [tracks, setTracks] = useState<LocalTrack[]>([]);
@@ -176,12 +182,13 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     const audio = restoredAudioRef.current;
     if (!audio || !projectionDetectionComplete) return;
     restoredAudioRef.current = null;
-    if (dongleConnected) return;
+    const autoplayEnabled = getAudioSettings().autoplayLocalMedia;
+    if (!shouldAutoplayRestoredTrack(projectionDetectionComplete, phoneConnected, autoplayEnabled)) return;
     APP.getState().update((state) => { state.system.audioSource = 'local'; });
     void audio.play().catch(() => {
       APP.getState().update((state) => { state.system.audioSource = 'carplay'; });
     });
-  }, [dongleConnected, projectionDetectionComplete]);
+  }, [currentTrack, phoneConnected, projectionDetectionComplete]);
 
   const releaseUrls = () => {
     urlsRef.current.forEach(URL.revokeObjectURL);

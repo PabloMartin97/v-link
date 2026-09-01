@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import styled, { useTheme } from 'styled-components';
 
 import CustomSlider from '@/app/components/CustomSlider';
-import { Button } from '@/theme/styles/Inputs';
+import { Button, ToggleSwitch } from '@/theme/styles/Inputs';
 import { useThemeColor } from '@/store/Store';
-import { DEFAULT_AUDIO_SETTINGS, saveAudioSettings, useAudioSettings, type AudioSettingsValues } from './audioSettingsState';
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettingsValues } from './audioSettingsState';
 
 const Page = styled.div`display:flex;flex-direction:column;gap:10px;padding-bottom:24px;color:${({ theme }) => theme.colors.text};`;
 const Heading = styled.h2`margin:8px 0 10px;color:${({ theme }) => theme.colors.light};font-family:${({ theme }) => theme.fonts.spartan};`;
@@ -16,6 +16,12 @@ const Meter = styled.div`height:10px;overflow:hidden;border-radius:5px;backgroun
 const MeterFill = styled.div<{ $level: number; $clipping: boolean }>`height:100%;width:${({ $level }) => `${$level}%`};background:${({ $clipping, theme }) => $clipping ? '#e64b4b' : theme.colors.theme.white.active};transition:width 70ms linear;`;
 const Help = styled.p<{ $error?: boolean }>`margin:0;color:${({ $error, theme }) => $error ? '#e64b4b' : theme.colors.medium};font:12px/1.45 ${({ theme }) => theme.fonts.inter};`;
 const Actions = styled.div`display:flex;align-items:center;gap:12px;`;
+const ToggleRow = styled.div`min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid ${({ theme }) => theme.colors.dark};font-family:${({ theme }) => theme.fonts.inter};`;
+const ToggleCopy = styled.div`display:flex;flex-direction:column;gap:2px;`;
+
+type NumericAudioSetting = {
+  [Key in keyof AudioSettingsValues]: AudioSettingsValues[Key] extends number ? Key : never;
+}[keyof AudioSettingsValues];
 
 type MicrophoneTestStatus = 'idle' | 'starting' | 'testing' | 'error';
 
@@ -47,9 +53,12 @@ const describeMicrophoneError = (error: unknown) => {
   return `Microphone test failed: ${String(error)}`;
 };
 
-const AudioSettings = () => {
-  const storedValues = useAudioSettings();
-  const [values, setValues] = useState(storedValues);
+interface AudioSettingsProps {
+  values: AudioSettingsValues;
+  onChange: (values: AudioSettingsValues) => void;
+}
+
+const AudioSettings = ({ values, onChange }: AudioSettingsProps) => {
   const [testStatus, setTestStatus] = useState<MicrophoneTestStatus>('idle');
   const [testError, setTestError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
@@ -61,7 +70,6 @@ const AudioSettings = () => {
   const theme = useTheme();
   const themeColor = useThemeColor();
 
-  useEffect(() => setValues(storedValues), [storedValues]);
   useEffect(() => () => {
     mountedRef.current = false;
     testRequestRef.current += 1;
@@ -71,10 +79,9 @@ const AudioSettings = () => {
     resourcesRef.current = null;
   }, []);
 
-  const update = (key: keyof AudioSettingsValues, value: number) => {
+  const update = <Key extends keyof AudioSettingsValues>(key: Key, value: AudioSettingsValues[Key]) => {
     const next = { ...values, [key]: value };
-    setValues(next);
-    saveAudioSettings(next);
+    onChange(next);
   };
 
   const stopTest = () => {
@@ -161,7 +168,7 @@ const AudioSettings = () => {
     }
   };
 
-  const slider = (label: string, key: keyof AudioSettingsValues, min = 0, max = 100, unit = '%') => (
+  const slider = (label: string, key: NumericAudioSetting, min = 0, max = 100, unit = '%') => (
     <Row>
       <span>{label}</span>
       <CustomSlider value={values[key]} min={min} max={max} step={1} onChange={(event) => update(key, Number(event.target.value))} width="100%" backgroundColor={theme.colors.medium} defaultColor={theme.colors.theme[themeColor].default} activeColor={theme.colors.theme[themeColor].active} />
@@ -172,6 +179,27 @@ const AudioSettings = () => {
   return (
     <Page>
       <Heading>Audio Settings</Heading>
+      <Section>
+        <SectionTitle>Local media</SectionTitle>
+        <ToggleRow>
+          <ToggleCopy>
+            <span>Play local media on startup</span>
+          </ToggleCopy>
+          <ToggleSwitch
+            backgroundColor={theme.colors.medium}
+            defaultColor={theme.colors.theme[themeColor].default}
+            activeColor={theme.colors.theme[themeColor].active}
+          >
+            <input
+              type="checkbox"
+              aria-label="Play local media on startup"
+              checked={values.autoplayLocalMedia}
+              onChange={(event) => update('autoplayLocalMedia', event.target.checked)}
+            />
+            <span className="slider" />
+          </ToggleSwitch>
+        </ToggleRow>
+      </Section>
       <Section>
         <SectionTitle>Output</SectionTitle>
         {slider('Navigation instructions', 'navigationVolume')}
@@ -194,7 +222,7 @@ const AudioSettings = () => {
           <Button type="button" onClick={() => testStatus === 'starting' || testStatus === 'testing' ? stopTest() : void startTest()}>
             {testStatus === 'starting' ? 'Cancel microphone test' : testStatus === 'testing' ? 'Stop microphone test' : testStatus === 'error' ? 'Retry microphone test' : 'Test microphone'}
           </Button>
-          <Button type="button" onClick={() => { setValues(DEFAULT_AUDIO_SETTINGS); saveAudioSettings(DEFAULT_AUDIO_SETTINGS); }}>Restore defaults</Button>
+          <Button type="button" onClick={() => onChange(DEFAULT_AUDIO_SETTINGS)}>Restore defaults</Button>
         </Actions>
       </Section>
     </Page>

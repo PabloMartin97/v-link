@@ -73,6 +73,30 @@
       "value": false
     }
   },
+  "audio": {
+    "title": "Audio Settings",
+    "type": "system",
+    "autoplayLocalMedia": {
+      "value": false,
+      "label": "Play Local Media on Startup"
+    },
+    "navigationVolume": {
+      "value": 80,
+      "label": "Navigation Volume"
+    },
+    "callVolume": {
+      "value": 85,
+      "label": "Call Volume"
+    },
+    "navigationDuckingAmount": {
+      "value": 80,
+      "label": "Navigation Ducking Intensity"
+    },
+    "microphoneGainDb": {
+      "value": 0,
+      "label": "Microphone Input Gain"
+    }
+  },
   "shutdown": {
     "title": "Auto Shutdown",
     "type": "system",

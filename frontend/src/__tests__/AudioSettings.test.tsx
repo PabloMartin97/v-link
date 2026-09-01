@@ -1,15 +1,27 @@
+import { useState } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from 'styled-components';
 
 import AudioSettings from '@/app/pages/settings/AudioSettings';
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettingsValues } from '@/app/pages/settings/audioSettingsState';
 import { theme } from '@/theme/Theme';
 
-const renderComponent = () => render(
-  <ThemeProvider theme={theme}>
-    <AudioSettings />
-  </ThemeProvider>,
-);
+const renderComponent = (onValuesChange = vi.fn()) => {
+  const Harness = () => {
+    const [values, setValues] = useState(DEFAULT_AUDIO_SETTINGS);
+    const handleChange = (next: AudioSettingsValues) => {
+      setValues(next);
+      onValuesChange(next);
+    };
+    return <AudioSettings values={values} onChange={handleChange} />;
+  };
+
+  return {
+    onValuesChange,
+    ...render(<ThemeProvider theme={theme}><Harness /></ThemeProvider>),
+  };
+};
 
 const setGetUserMedia = (getUserMedia: ReturnType<typeof vi.fn>) => {
   Object.defineProperty(navigator, 'mediaDevices', {
@@ -18,11 +30,7 @@ const setGetUserMedia = (getUserMedia: ReturnType<typeof vi.fn>) => {
   });
 };
 
-describe('AudioSettings microphone test', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
+describe('AudioSettings', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -44,6 +52,20 @@ describe('AudioSettings microphone test', () => {
 
     expect(screen.getByText(/TimeoutError: Chromium did not finish opening the microphone/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry microphone test' })).toBeInTheDocument();
+  });
+
+  it('loads the autoplay default and updates the settings draft', () => {
+    const { onValuesChange } = renderComponent();
+
+    const autoplay = screen.getByRole('checkbox', { name: 'Play local media on startup' });
+    expect(autoplay).not.toBeChecked();
+
+    fireEvent.click(autoplay);
+
+    expect(autoplay).toBeChecked();
+    expect(onValuesChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      autoplayLocalMedia: true,
+    }));
   });
 
   it('shows the browser error when microphone access is rejected', async () => {
