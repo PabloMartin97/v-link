@@ -12,7 +12,7 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 import { transitionProjectionSession } from './sessionState'
-import { createEmptyCarplayMedia, mergeCarplayMedia, playbackStatusFromAudioCommand } from './mediaState'
+import { createEmptyCarplayMedia, hasCarplayMediaIdentityChanged, mergeCarplayMedia, playbackStatusFromAudioCommand } from './mediaState'
 import { CARPLAY_MEDIA_COMMAND_EVENT, type MediaCommand } from './mediaCommands'
 
 import { APP } from '@/store/Store';
@@ -374,11 +374,13 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           if (!payload) break
 
           appUpdate((state) => {
-            const previousTitle = state.system.carplay.media.title
-            const nextMedia = mergeCarplayMedia(state.system.carplay.media, payload)
-            console.info(
-              `(CarPlay) Media metadata snapshot: ${JSON.stringify(payload)} previousTitle=${JSON.stringify(previousTitle)} nextTitle=${JSON.stringify(nextMedia.title)}`,
-            )
+            const previousMedia = state.system.carplay.media
+            const nextMedia = mergeCarplayMedia(previousMedia, payload)
+            if (hasCarplayMediaIdentityChanged(previousMedia, nextMedia)) {
+              console.info(
+                `(CarPlay) Media changed: title=${JSON.stringify(nextMedia.title)} artist=${JSON.stringify(nextMedia.artist)}`,
+              )
+            }
             state.system.carplay.media = nextMedia
           })
 
