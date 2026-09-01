@@ -410,13 +410,13 @@ The projection worker creates one shared ring buffer for each unique combination
 - Channel count.
 - Dongle `audioType`.
 
-`createAudioPlayerKey()` combines those values into a stable route key. `useCarplayAudio()` creates one `PcmPlayer` for each key and transfers its SharedArrayBuffer to the worker.
+`createAudioPlayerKey()` combines those values into a stable route key. `useCarplayPcmPlayers()` creates one `PcmPlayer` for each key and transfers its SharedArrayBuffer to the worker.
 
 When audio arrives before its player exists, the worker queues up to eight PCM frames for that route, requests a buffer from React, and flushes the pending frames after registration.
 
 ## Audio Route Classification
 
-The audio hook classifies each route key into one of four sets:
+The pure audio-routing reducer tracks the roles active on each route key:
 
 | Route class | Triggering commands | Applied level |
 | --- | --- | --- |
@@ -425,9 +425,11 @@ The audio hook classifies each route key into one of four sets:
 | Call | `AudioPhonecallStart` | Configured call volume. |
 | Priority | `AudioSiriStart`, `AudioAlertStart` | Full volume. |
 
-A route is removed from the other classes when a more specific start command classifies it. `AudioOutputStart` is treated as media only if the key is not already known as navigation, call, or priority audio.
+A route can retain its media identity while a transient navigation, call, Siri, or alert role is active. This is important when the dongle mixes multiple roles into the same PCM route: the matching stop command removes only its own role, allowing the previous media policy to resume. `AudioOutputStart` is treated as media only if the key is not already known exclusively as navigation, call, or priority audio.
 
-The current implementation explicitly handles navigation stop to release ducking. Media/output stop commands update Now Playing status, while call/Siri/alert stop commands do not currently perform additional route reclassification.
+All matching stop commands update route state. Navigation activity is derived across every route, so stopping one navigation route does not release global ducking while another remains active. Route state is reset when the phone disconnects.
+
+`getTargetVolume()` is the single policy entry point for dongle volume messages, route transitions, focus changes, and live settings changes. Its explicit priority order is navigation, calls, Siri/alerts, then focused or ducked media.
 
 ## Audio Priority and Focus
 
@@ -490,7 +492,7 @@ The ramp uses smoothstep interpolation to avoid abrupt volume changes.
 
 ## Volume Ramping
 
-Projected PCM players are ramped with `requestAnimationFrame`. Starting a new ramp for the same route cancels its previous animation.
+`useCarplayPcmPlayers()` ramps projected PCM players with `requestAnimationFrame`. Starting a new ramp for the same route cancels its previous animation.
 
 Each step interpolates from the tracked current volume to a clamped 0–1 target using smoothstep easing. `PcmPlayer.volume()` receives a very small duration because its duration parameter delays automation; V-Link performs the actual ramp itself.
 

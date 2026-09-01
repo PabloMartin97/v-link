@@ -208,7 +208,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     return worker
   }, [])
 
-  const { processAudio, getAudioPlayer, startRecording, stopRecording } =
+  const { processAudio, getAudioPlayer, resetAudioRouting, startRecording, stopRecording } =
     useCarplayAudio(carplayWorker, micChannel.port2)
 
   const clearRetryTimeout = useCallback(() => {
@@ -326,6 +326,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           break
         case 'unplugged':
           clearStartupWatchdog()
+          resetAudioRouting()
           console.log('(CarPlay) Worker disconnected')
           socket.log.emit('debug', '(CarPlay) Worker Disconnected')
 
@@ -428,7 +429,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           break
       }
     }
-  }, [armStartupWatchdog, carplayWorker, clearRetryTimeout, clearStartupWatchdog, getAudioPlayer, processAudio, renderWorker, startRecording, stopRecording])
+  }, [armStartupWatchdog, carplayWorker, clearRetryTimeout, clearStartupWatchdog, getAudioPlayer, processAudio, renderWorker, resetAudioRouting, startRecording, stopRecording])
 
   useEffect(() => {
     const element = mainElem?.current
