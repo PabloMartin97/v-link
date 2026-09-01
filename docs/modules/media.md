@@ -57,7 +57,8 @@ Music page
 
 | File | Responsibility |
 | --- | --- |
-| `backend/server.py` | Exposes safe roots, directory browsing, and audio-file streaming endpoints. |
+| `backend/media.py` | Defines the media API blueprint for safe roots, directory browsing, and audio-file streaming. |
+| `backend/server.py` | Configures Flask and registers the media API blueprint. |
 | `frontend/src/carplay/worker/CarPlay.worker.ts` | Receives projection messages and forwards media/audio data to React or shared audio buffers. |
 | `frontend/src/carplay/Carplay.tsx` | Converts worker media/audio events into store updates and audio actions. |
 | `frontend/src/carplay/mediaState.ts` | Defines projected media state and merges partial metadata/artwork updates. |
@@ -238,7 +239,7 @@ There are two file-access strategies.
 
 ### Backend-mounted storage
 
-The production UI first requests media locations from the Python backend. Available roots are existing directories among:
+The production UI first requests media locations from the Python backend. By default, the available roots are existing directories among:
 
 ```text
 ~/Music
@@ -246,7 +247,7 @@ The production UI first requests media locations from the Python backend. Availa
 /mnt
 ```
 
-This covers media stored in the Pi user's music directory and storage commonly mounted under `/media` or `/mnt`.
+This covers media stored in the Pi user's music directory and storage commonly mounted under `/media` or `/mnt`. Deployments can override this list through the Flask `MEDIA_ROOTS` configuration value.
 
 ### Browser directory picker
 
@@ -263,7 +264,7 @@ IndexedDB and persistent handles are optional. Folder selection and playback con
 
 ## Backend Media API
 
-The backend provides three HTTP endpoints on port 4001.
+The backend provides three HTTP endpoints on port 4001. These endpoints intentionally do not require authentication because V-Link is designed to run in an isolated, air-gapped environment; deployments on a shared network must add an appropriate access-control boundary.
 
 ### `GET /api/media/roots`
 
@@ -703,4 +704,4 @@ The following areas currently require integration/manual testing because they de
 - Audio settings are browser-local rather than stored in `app.json`.
 - Calls, Siri, and alert starts receive priority levels, but do not explicitly duck all independent media routes.
 - Route cleanup is explicit for navigation stop; other stop commands do not currently reclassify route sets.
-- Backend media roots are fixed to `~/Music`, `/media`, and `/mnt`.
+- Backend media roots default to `~/Music`, `/media`, and `/mnt` unless overridden through Flask configuration.

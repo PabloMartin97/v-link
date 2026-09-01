@@ -6,11 +6,12 @@ import eventlet
 
 #eventlet.monkey_patch()
 
-from flask                  import Flask, abort, jsonify, request, send_file, send_from_directory, render_template
+from flask                  import Flask, send_from_directory, render_template
 from flask_socketio         import SocketIO
 from flask_cors             import CORS
 
 from .                      import settings
+from .media                 import media_api
 from .shared.shared_state   import shared_state
 
 from .threads.cam         import CAMThread
@@ -19,28 +20,10 @@ from .threads.cam         import CAMThread
 import logging
 logger = logging.getLogger('vlink')
 
-MEDIA_EXTENSIONS = {'.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.webm'}
-
-
-def _media_roots():
-    candidates = [os.path.expanduser('~/Music'), '/media', '/mnt']
-    roots = []
-    for candidate in candidates:
-        path = os.path.realpath(candidate)
-        if os.path.isdir(path) and path not in roots:
-            roots.append(path)
-    return roots
-
-
-def _safe_media_path(value):
-    path = os.path.realpath(value or '')
-    if not any(path == root or path.startswith(root + os.sep) for root in _media_roots()):
-        abort(403)
-    return path
-
 # Flask configuration
 server = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist'), static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist', 'assets'), static_url_path='/assets')
 server.config['SECRET_KEY'] = 'v-link'
+server.register_blueprint(media_api)
 CORS(server, resources={r'/*': {'origins': '*'}})
 
 # Socket.io configuration
@@ -150,37 +133,6 @@ class ServerThread(threading.Thread):
         response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
         return response
 
-    @server.route('/api/media/roots')
-    def media_roots():
-        return jsonify([{'name': os.path.basename(path) or path, 'path': path} for path in _media_roots()])
-
-    @server.route('/api/media/browse')
-    def media_browse():
-        path = _safe_media_path(request.args.get('path'))
-        if not os.path.isdir(path):
-            abort(404)
-        entries = []
-        try:
-            with os.scandir(path) as iterator:
-                for entry in iterator:
-                    if entry.name.startswith('.'):
-                        continue
-                    if entry.is_dir(follow_symlinks=False):
-                        entries.append({'kind': 'directory', 'name': entry.name, 'path': entry.path})
-                    elif entry.is_file(follow_symlinks=False) and os.path.splitext(entry.name)[1].lower() in MEDIA_EXTENSIONS:
-                        entries.append({'kind': 'file', 'name': entry.name, 'path': entry.path})
-        except OSError:
-            abort(403)
-        entries.sort(key=lambda item: (item['kind'] != 'directory', item['name'].lower()))
-        return jsonify({'name': os.path.basename(path) or path, 'path': path, 'entries': entries})
-
-    @server.route('/api/media/file')
-    def media_file():
-        path = _safe_media_path(request.args.get('path'))
-        if not os.path.isfile(path) or os.path.splitext(path)[1].lower() not in MEDIA_EXTENSIONS:
-            abort(404)
-        return send_file(path, conditional=True)
-    
     # Handle client connection
     @socketio.on('connect', namespace='/')
     def handle_connect():
