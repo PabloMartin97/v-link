@@ -22,7 +22,8 @@ export interface BackendMediaEntry {
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
-interface DirectoryHandleWithValues extends FileSystemDirectoryHandle {
+interface DirectoryHandleWithValues {
+  readonly name: string;
   values(): AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>;
   queryPermission(options?: { mode: 'read' }): Promise<PermissionState>;
   requestPermission(options?: { mode: 'read' }): Promise<PermissionState>;
