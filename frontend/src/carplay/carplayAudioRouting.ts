@@ -81,12 +81,27 @@ export const getAudioRoute = (
   key: AudioPlayerKey,
 ): Readonly<AudioRouteState> => state.routes.get(key) ?? EMPTY_ROUTE
 
+export const audioCommandClaimsProjectionFocus = (
+  state: CarplayAudioRoutingState,
+  key: AudioPlayerKey,
+  command: AudioCommand,
+) => (
+  (command === AudioCommand.AudioMediaStart || command === AudioCommand.AudioOutputStart)
+  && getAudioRoute(state, key).media
+)
+
 export const isPriorityRoute = (route: Readonly<AudioRouteState>) => (
   route.siri || route.alert
 )
 
 export const isNavigationActive = (state: CarplayAudioRoutingState) => (
   Array.from(state.routes.values()).some((route) => route.navigation)
+)
+
+export const isProjectionInterruptionActive = (state: CarplayAudioRoutingState) => (
+  Array.from(state.routes.values()).some((route) => (
+    route.call || route.siri || route.alert
+  ))
 )
 
 const isRouteEmpty = (route: Readonly<AudioRouteState>) => (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from 'styled-components';
 
 import { APP, useThemeColor } from '@/store/Store';
@@ -35,6 +35,16 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
   const [selectedTrack, setSelectedTrack] = useState(currentTrack ?? 0);
   const trackRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handledStrokeRef = useRef(false);
+
+  const chooseNativeFolder = useCallback(async () => {
+    const loaded = await chooseFolder();
+    if (!loaded) return;
+
+    setBackendEntries(null);
+    setPathHistory([]);
+    setBrowserError(null);
+    setSelectedTrack(0);
+  }, [chooseFolder]);
 
   const openBackendDirectory = async (path: string, addToHistory = true) => {
     try {
@@ -105,7 +115,7 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
     if (keyStroke === bindings?.back?.value) {
       onClose();
     } else if (!backendEntries && !tracks.length && keyStroke === bindings?.selectDown?.value) {
-      void chooseFolder();
+      void chooseNativeFolder();
     } else if (!(backendEntries?.length ?? tracks.length)) {
       return;
     } else if (keyStroke === bindings?.left?.value) {
@@ -127,7 +137,7 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
         onTrackSelected();
       }
     }
-  }, [backendEntries, bindings, browserTitle, chooseFolder, keyStroke, loadBackendTracks, onClose, onTrackSelected, playTrack, selectedTrack, tracks.length]);
+  }, [backendEntries, bindings, browserTitle, chooseNativeFolder, keyStroke, loadBackendTracks, onClose, onTrackSelected, playTrack, selectedTrack, tracks.length]);
 
   const visibleEntries = backendEntries;
 
@@ -140,7 +150,7 @@ const UsbMediaBrowser = ({ onClose, onTrackSelected }: UsbMediaBrowserProps) => 
         </div>
         <UsbBrowserActions>
           <UsbBrowserButton type="button" onClick={goBack}>Back</UsbBrowserButton>
-          <UsbBrowserButton type="button" $accent={accent} onClick={() => void chooseFolder()}>Choose folder</UsbBrowserButton>
+          <UsbBrowserButton type="button" $accent={accent} onClick={() => void chooseNativeFolder()}>Choose folder</UsbBrowserButton>
         </UsbBrowserActions>
       </UsbBrowserHeader>
 

@@ -2,11 +2,13 @@ import { AudioCommand } from 'node-carplay/web'
 import { describe, expect, it } from 'vitest'
 
 import {
+  audioCommandClaimsProjectionFocus,
   createCarplayAudioRoutingState,
   getAudioRoute,
   getTargetVolume,
   getVolumePolicy,
   isNavigationActive,
+  isProjectionInterruptionActive,
   reduceAudioRouteCommand,
 } from './carplayAudioRouting'
 import type { AudioPlayerKey } from './worker/types'
@@ -81,6 +83,49 @@ describe('CarPlay audio routing', () => {
     ])
 
     expect(getAudioRoute(state, mediaKey).media).toBe(true)
+  })
+
+  it('claims projection focus for both media start command variants', () => {
+    const mediaStarted = transition([AudioCommand.AudioMediaStart])
+    const outputStarted = transition([AudioCommand.AudioOutputStart])
+    const navigationStarted = transition([
+      AudioCommand.AudioNaviStart,
+      AudioCommand.AudioOutputStart,
+    ])
+
+    expect(audioCommandClaimsProjectionFocus(
+      mediaStarted,
+      mediaKey,
+      AudioCommand.AudioMediaStart,
+    )).toBe(true)
+    expect(audioCommandClaimsProjectionFocus(
+      outputStarted,
+      mediaKey,
+      AudioCommand.AudioOutputStart,
+    )).toBe(true)
+    expect(audioCommandClaimsProjectionFocus(
+      navigationStarted,
+      mediaKey,
+      AudioCommand.AudioOutputStart,
+    )).toBe(false)
+  })
+
+  it('tracks calls, Siri, and alerts as local-media interruptions', () => {
+    let state = createCarplayAudioRoutingState()
+    state = reduceAudioRouteCommand(state, mediaKey, AudioCommand.AudioPhonecallStart)
+    state = reduceAudioRouteCommand(state, navigationKey, AudioCommand.AudioSiriStart)
+    expect(isProjectionInterruptionActive(state)).toBe(true)
+
+    state = reduceAudioRouteCommand(state, mediaKey, AudioCommand.AudioPhonecallStop)
+    expect(isProjectionInterruptionActive(state)).toBe(true)
+
+    state = reduceAudioRouteCommand(state, navigationKey, AudioCommand.AudioSiriStop)
+    expect(isProjectionInterruptionActive(state)).toBe(false)
+
+    state = reduceAudioRouteCommand(state, mediaKey, AudioCommand.AudioAlertStart)
+    expect(isProjectionInterruptionActive(state)).toBe(true)
+    state = reduceAudioRouteCommand(state, mediaKey, AudioCommand.AudioAlertStop)
+    expect(isProjectionInterruptionActive(state)).toBe(false)
   })
 })
 

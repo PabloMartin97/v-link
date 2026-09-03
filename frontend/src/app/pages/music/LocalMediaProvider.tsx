@@ -4,6 +4,10 @@ import { eventEmitter } from '@/app/helper/EventEmitter';
 import { LOCAL_MEDIA_COMMAND_EVENT, type LocalMediaCommand } from './localMediaCommands';
 import { duckingOutputLevel, getAudioSettings, NAVIGATION_DUCKING_EVENT } from '../settings/audioSettingsState';
 import { sendCarplayMediaCommand } from '@/carplay/mediaCommands';
+import {
+  isProjectionAudioInterrupted,
+  PROJECTION_AUDIO_INTERRUPTION_EVENT,
+} from '@/carplay/audioFocus';
 
 const AUDIO_EXTENSIONS = ['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.webm'];
 
@@ -43,7 +47,7 @@ interface LocalMediaContextValue {
   duration: number;
   shuffle: boolean;
   repeatMode: RepeatMode;
-  chooseFolder: () => Promise<void>;
+  chooseFolder: () => Promise<boolean>;
   loadBackendTracks: (folder: string, entries: BackendMediaEntry[], index: number) => Promise<void>;
   playTrack: (index: number) => Promise<void>;
   playNext: (fromEnded?: boolean) => void;
@@ -156,6 +160,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
   const savedDirectoryRef = useRef<DirectoryHandleWithValues | null>(null);
   const shuffleHistoryRef = useRef<number[]>([]);
   const restoredAudioRef = useRef<HTMLAudioElement | null>(null);
+  const resumeAfterProjectionRef = useRef(false);
   const projectionDetectionComplete = APP((state) => state.system.carplay.detectionComplete);
   const phoneConnected = APP((state) => state.system.carplay.phone);
   const audioSource = APP((state) => state.system.audioSource);
@@ -199,8 +204,38 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => releaseUrls, []);
 
   useEffect(() => {
-    if (audioSource === 'carplay' && !audioRef.current?.paused) audioRef.current?.pause();
+    if (audioSource === 'carplay') {
+      resumeAfterProjectionRef.current = false;
+      if (!audioRef.current?.paused) audioRef.current?.pause();
+    }
   }, [audioSource]);
+
+  useEffect(() => {
+    const handleProjectionInterruption = (event: Event) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      const active = (event as CustomEvent<boolean>).detail;
+      if (active) {
+        resumeAfterProjectionRef.current = (
+          APP.getState().system.audioSource === 'local' && !audio.paused
+        );
+        if (resumeAfterProjectionRef.current) audio.pause();
+        return;
+      }
+
+      const shouldResume = resumeAfterProjectionRef.current;
+      resumeAfterProjectionRef.current = false;
+      if (!shouldResume || APP.getState().system.audioSource !== 'local') return;
+
+      void audio.play().catch(() => {
+        setError('Local playback could not be resumed after projection audio ended.');
+      });
+    };
+
+    window.addEventListener(PROJECTION_AUDIO_INTERRUPTION_EVENT, handleProjectionInterruption);
+    return () => window.removeEventListener(PROJECTION_AUDIO_INTERRUPTION_EVENT, handleProjectionInterruption);
+  }, []);
 
   useEffect(() => {
     const handleDucking = (event: Event) => {
@@ -259,6 +294,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     setPlaying(false);
     setPosition(0);
     setDuration(0);
+    resumeAfterProjectionRef.current = false;
     APP.getState().update((state) => { state.system.audioSource = 'carplay'; });
     setError(nextTracks.length ? null : 'No supported audio files were found in this folder.');
     const storedTrack = readStoredTrack();
@@ -310,7 +346,7 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
     if (!picker) {
       setError('Folder selection is not supported by this browser.');
-      return;
+      return false;
     }
 
     try {
@@ -323,9 +359,11 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
       directory ??= await picker.call(window);
       await loadDirectory(directory);
       void saveDirectory(directory).catch(() => undefined);
+      return true;
     } catch (pickerError) {
-      if (pickerError instanceof DOMException && pickerError.name === 'AbortError') return;
+      if (pickerError instanceof DOMException && pickerError.name === 'AbortError') return false;
       setError('V-Link could not open this folder.');
+      return false;
     }
   };
 
@@ -348,6 +386,10 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     setDuration(0);
     audio.src = track.url;
     storeTrack(track);
+    if (isProjectionAudioInterrupted()) {
+      resumeAfterProjectionRef.current = true;
+      return;
+    }
     try {
       await audio.play();
       setError(null);
@@ -381,6 +423,10 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     setCurrentTrack(index);
     audio.src = track.url;
     storeTrack(track);
+    if (isProjectionAudioInterrupted()) {
+      resumeAfterProjectionRef.current = true;
+      return;
+    }
     try {
       await audio.play();
     } catch {
@@ -428,6 +474,10 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
+      if (isProjectionAudioInterrupted()) {
+        resumeAfterProjectionRef.current = true;
+        return;
+      }
       try {
         await audio.play();
       } catch {

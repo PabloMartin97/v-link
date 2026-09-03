@@ -5,6 +5,7 @@ import { setNavigationDucking, useAudioSettings } from '@/app/pages/settings/aud
 import { useNamespaces } from '@/socket/Namespaces'
 import { APP } from '@/store/Store'
 import {
+  audioCommandClaimsProjectionFocus,
   audioCommandRampDuration,
   audioCommandStartsPlayer,
   createCarplayAudioRoutingState,
@@ -13,8 +14,10 @@ import {
   getTargetVolume,
   getVolumePolicy,
   isNavigationActive,
+  isProjectionInterruptionActive,
   reduceAudioRouteCommand,
 } from './carplayAudioRouting'
+import { setProjectionAudioInterrupted } from './audioFocus'
 import { useCarplayMicrophone } from './useCarplayMicrophone'
 import { useCarplayPcmPlayers } from './useCarplayPcmPlayers'
 import type { AudioPlayerKey, CarPlayWorker } from './worker/types'
@@ -85,6 +88,7 @@ const useCarplayAudio = (
     const key = createAudioPlayerKey(audio.decodeType, audio.audioType)
     const previousRouting = routingRef.current
     const navigationWasActive = isNavigationActive(previousRouting)
+    const interruptionWasActive = isProjectionInterruptionActive(previousRouting)
     const navigationSharesMediaRoute = command === AudioCommand.AudioNaviStart
       && getAudioRoute(previousRouting, key).media
 
@@ -94,7 +98,7 @@ const useCarplayAudio = (
 
     routingRef.current = reduceAudioRouteCommand(previousRouting, key, command)
 
-    if (command === AudioCommand.AudioMediaStart) {
+    if (audioCommandClaimsProjectionFocus(routingRef.current, key, command)) {
       APP.getState().update((state) => {
         state.system.audioSource = 'carplay'
       })
@@ -118,6 +122,11 @@ const useCarplayAudio = (
       setNavigationDucking(navigationIsActive)
     }
 
+    const interruptionIsActive = isProjectionInterruptionActive(routingRef.current)
+    if (interruptionWasActive !== interruptionIsActive) {
+      setProjectionAudioInterrupted(interruptionIsActive)
+    }
+
     reconcilePlayerVolumes(audioCommandRampDuration(command))
   }, [getAudioPlayer, reconcilePlayerVolumes, setRequestedVolume, socket])
 
@@ -133,8 +142,10 @@ const useCarplayAudio = (
 
   const resetAudioRouting = useCallback(() => {
     const navigationWasActive = isNavigationActive(routingRef.current)
+    const interruptionWasActive = isProjectionInterruptionActive(routingRef.current)
     routingRef.current = createCarplayAudioRoutingState()
     if (navigationWasActive) setNavigationDucking(false)
+    if (interruptionWasActive) setProjectionAudioInterrupted(false)
     reconcilePlayerVolumes(200)
   }, [reconcilePlayerVolumes])
 
@@ -151,6 +162,9 @@ const useCarplayAudio = (
 
   useEffect(() => () => {
     if (isNavigationActive(routingRef.current)) setNavigationDucking(false)
+    if (isProjectionInterruptionActive(routingRef.current)) {
+      setProjectionAudioInterrupted(false)
+    }
   }, [])
 
   return {
