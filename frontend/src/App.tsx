@@ -31,6 +31,12 @@ const AppContainer = styled.div`
   background: linear-gradient(180deg, #0D0D0D, #1C1C1C);
 `;
 
+const TEXT_SCALE_MAP: Record<string, number> = {
+  Small: 0.85,
+  Default: 1,
+  Large: 1.2,
+};
+
 function App() {
   // Subscribe to store slices
   const systemSettings = APP((state) => state.system);
@@ -38,17 +44,14 @@ function App() {
   const setKeyStroke = APP((state) => state.setKeyStroke);
   const dongleBindings = APP((state) => state.settings.dongle_bindings) as Record<string, { value: string }> | undefined;
 
-  const keyStroke = APP((state) => state.keyStroke);
-  const switchPage = APP((state) => state.switchPage);
   const pauseKeyBinds = APP((state) => state.pauseKeyBinds);
   const audioSource = APP((state) => state.system.audioSource);
 
   const socket = useNamespaces();
 
   const textSizeValue = APP((state) => ((state.settings.general as Record<string, { value: string }> | undefined)?.textSize?.value) ?? 'Default');
-  const textScaleMap: Record<string, number> = { Small: 0.85, Default: 1, Large: 1.2 };
   const scaledTheme = useMemo(() => {
-    const scale = textScaleMap[textSizeValue] ?? 1;
+    const scale = TEXT_SCALE_MAP[textSizeValue] ?? 1;
     if (scale === 1) return theme;
     return {
       ...theme,
@@ -66,54 +69,54 @@ function App() {
   const [keyCommand, setKeyCommand] = useState('');
 
   useEffect(() => {
+    const mmiKeyDown = (event: KeyboardEvent) => {
+      // Store last Keystroke in store to broadcast it
+      setKeyStroke(event.code);
+
+      // If keybinds are paused, do not process further
+      if (pauseKeyBinds) return;
+
+      // If user is not switching the page, send control to CarPlay
+      if (!systemSettings.switch || event.code === systemSettings.switch || !dongleBindings) return;
+
+      // Find the action whose .value matches the key event
+      const action = Object.keys(dongleBindings).find(
+        (key) => dongleBindings[key].value === event.code
+      );
+
+      if (action === undefined) return;
+
+      const route = routeHardwareAction(
+        action,
+        audioSource,
+        systemSettings.view === 'Carplay',
+      );
+      if (!route) return;
+
+      // Media controls follow the active audio source, regardless of which page is
+      // visible. Other CarPlay controls remain scoped to the CarPlay page.
+      if (route.target === 'local') {
+        sendLocalMediaCommand(route.command);
+        return;
+      }
+
+      socket.log.emit('debug', 'Emitting carplay key-command: ', route.command);
+      setKeyCommand(route.command);
+      setCommandCounter((c) => c + 1);
+
+      if (route.command === 'selectDown') {
+        setTimeout(() => {
+          setKeyCommand('selectUp');
+          setCommandCounter((c) => c + 1);
+        }, 200);
+      }
+    };
+
     document.addEventListener('keydown', mmiKeyDown);
     return () => {
       document.removeEventListener('keydown', mmiKeyDown);
     };
-  }, [systemSettings.view, systemSettings.switch, pauseKeyBinds, audioSource]);
-
-  const mmiKeyDown = (event: KeyboardEvent) => {
-    // Store last Keystroke in store to broadcast it
-    setKeyStroke(event.code);
-
-    // If keybinds are paused, do not process further
-    if (pauseKeyBinds) return;
-
-    // If user is not switching the page, send control to CarPlay
-    if (!systemSettings.switch || event.code === systemSettings.switch || !dongleBindings) return;
-
-    // Find the action whose .value matches the key event
-    const action = Object.keys(dongleBindings).find(
-      (key) => dongleBindings[key].value === event.code
-    );
-
-    if (action === undefined) return;
-
-    const route = routeHardwareAction(
-      action,
-      audioSource,
-      systemSettings.view === 'Carplay',
-    );
-    if (!route) return;
-
-    // Media controls follow the active audio source, regardless of which page is
-    // visible. Other CarPlay controls remain scoped to the CarPlay page.
-    if (route.target === 'local') {
-      sendLocalMediaCommand(route.command);
-      return;
-    }
-
-    socket.log.emit('debug', 'Emitting carplay key-command: ', route.command);
-    setKeyCommand(route.command);
-    setCommandCounter((c) => c + 1);
-
-    if (route.command === 'selectDown') {
-      setTimeout(() => {
-        setKeyCommand('selectUp');
-        setCommandCounter((c) => c + 1);
-      }, 200);
-    }
-  };
+  }, [audioSource, dongleBindings, pauseKeyBinds, setKeyStroke, socket.log, systemSettings.switch, systemSettings.view]);
 
 
   // Dimensions of the container
