@@ -37,6 +37,11 @@ const TEXT_SCALE_MAP: Record<string, number> = {
   Large: 1.2,
 };
 
+type SideBarsSettings = {
+  topBar?: { value: boolean };
+  topBarHeight?: { value: number };
+};
+
 function App() {
   // Subscribe to store slices
   const systemSettings = APP((state) => state.system);
@@ -46,6 +51,9 @@ function App() {
 
   const pauseKeyBinds = APP((state) => state.pauseKeyBinds);
   const audioSource = APP((state) => state.system.audioSource);
+  const sideBars = APP((state) => state.settings.side_bars as SideBarsSettings | undefined);
+  const topBarEnabled = sideBars?.topBar?.value ?? true;
+  const topBarHeight = sideBars?.topBarHeight?.value ?? 40;
 
   const socket = useNamespaces();
 
@@ -120,39 +128,35 @@ function App() {
 
 
   // Dimensions of the container
-  const containerRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   /* Observe container resizing and update dimensions. */
   useEffect(() => {
     const handleResize = () => {
-      if (containerRef.current)
-        if (containerRef.current && systemSettings.startedUp) {
-          const store         = APP.getState() as any;
-          const topBarEnabled = store.settings.side_bars.topBar.value as boolean;
-          const topBarHeight  = store.settings.side_bars.topBarHeight.value as number;
-          const el            = containerRef.current as HTMLDivElement;
-          const containerWidth  = el.offsetWidth;
-          const containerHeight = el.offsetHeight;
-          const carplayHeight   = topBarEnabled ? containerHeight - topBarHeight : containerHeight;
+      const element = containerRef.current;
+      if (element && systemSettings.startedUp) {
+        const containerWidth  = element.offsetWidth;
+        const containerHeight = element.offsetHeight;
+        const carplayHeight   = topBarEnabled ? containerHeight - topBarHeight : containerHeight;
 
-          socket.log.emit('info', `Window size changed: ${containerWidth}x${containerHeight}, CarPlay: ${containerWidth}x${carplayHeight}`)
+        socket.log.emit('info', `Window size changed: ${containerWidth}x${containerHeight}, CarPlay: ${containerWidth}x${carplayHeight}`)
 
-          appUpdate((state) => {
-            state.system.windowSize.width  = containerWidth;
-            state.system.windowSize.height = containerHeight;
+        appUpdate((state) => {
+          state.system.windowSize.width  = containerWidth;
+          state.system.windowSize.height = containerHeight;
 
-            state.system.carplaySize.width  = containerWidth;
-            state.system.carplaySize.height = carplayHeight;
-          });
+          state.system.carplaySize.width  = containerWidth;
+          state.system.carplaySize.height = carplayHeight;
+        });
 
-          setReady(true);
-        }
+        setReady(true);
+      }
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
     if (containerRef.current) resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
-  }, [systemSettings.startedUp, containerRef.current]);
+  }, [appUpdate, socket.log, systemSettings.startedUp, topBarEnabled, topBarHeight]);
 
   return (
     <StyleSheetManager shouldForwardProp={isPropValid}>
