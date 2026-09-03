@@ -14,8 +14,8 @@ import Splash from './app/Splash';
 import Content from './app/Content';
 import { Modal } from './app/components/Modal';
 import { LocalMediaProvider } from './app/pages/music/LocalMediaProvider';
-import { sendLocalMediaCommand, type LocalMediaCommand } from './app/pages/music/localMediaCommands';
-
+import { sendLocalMediaCommand } from './app/pages/music/localMediaCommands';
+import { routeHardwareAction } from './mediaActions';
 
 import Carplay from './carplay/Carplay';
 import Cardata from './cardata/Cardata';
@@ -30,9 +30,6 @@ const AppContainer = styled.div`
   height: 100%;
   background: linear-gradient(180deg, #0D0D0D, #1C1C1C);
 `;
-
-const BACKGROUND_MEDIA_COMMANDS = new Set(['next', 'prev']);
-const LOCAL_MEDIA_COMMANDS = new Set<LocalMediaCommand>(['next', 'prev', 'playOrPause']);
 
 function App() {
   // Subscribe to store slices
@@ -92,21 +89,25 @@ function App() {
 
     if (action === undefined) return;
 
-    // Allow track controls
-    if (systemSettings.view !== 'Carplay' && !BACKGROUND_MEDIA_COMMANDS.has(action)) return;
+    const route = routeHardwareAction(
+      action,
+      audioSource,
+      systemSettings.view === 'Carplay',
+    );
+    if (!route) return;
 
-    // NativePlayer consumes media keys through keyStroke while it owns audio
-    // focus. Do not mirror those commands into the projection session.
-    if (audioSource === 'local' && LOCAL_MEDIA_COMMANDS.has(action as LocalMediaCommand)) {
-      sendLocalMediaCommand(action as LocalMediaCommand);
+    // Media controls follow the active audio source, regardless of which page is
+    // visible. Other CarPlay controls remain scoped to the CarPlay page.
+    if (route.target === 'local') {
+      sendLocalMediaCommand(route.command);
       return;
     }
 
-    socket.log.emit('debug', 'Emitting carplay key-command: ', action);
-    setKeyCommand(action);
+    socket.log.emit('debug', 'Emitting carplay key-command: ', route.command);
+    setKeyCommand(route.command);
     setCommandCounter((c) => c + 1);
 
-    if (action === 'selectDown') {
+    if (route.command === 'selectDown') {
       setTimeout(() => {
         setKeyCommand('selectUp');
         setCommandCounter((c) => c + 1);

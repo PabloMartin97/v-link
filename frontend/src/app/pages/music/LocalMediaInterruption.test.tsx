@@ -9,6 +9,7 @@ import {
   LocalMediaProvider,
   useLocalMedia,
 } from './LocalMediaProvider'
+import { sendLocalMediaCommand } from './localMediaCommands'
 
 describe('local media projection interruption', () => {
   let paused = true
@@ -16,6 +17,7 @@ describe('local media projection interruption', () => {
 
   beforeEach(() => {
     paused = true
+    setProjectionAudioInterrupted(false)
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => {
       paused = false
       return Promise.resolve()
@@ -85,5 +87,68 @@ describe('local media projection interruption', () => {
       await Promise.resolve()
     })
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce()
+  })
+
+  it('handles explicit play and pause commands idempotently', async () => {
+    const Probe = () => {
+      media = useLocalMedia()
+      return null
+    }
+    render(<LocalMediaProvider><Probe /></LocalMediaProvider>)
+
+    await act(async () => {
+      await media.loadBackendTracks('USB', [{
+        kind: 'file',
+        name: 'track.mp3',
+        path: '/media/track.mp3',
+      }], 0)
+    })
+
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce()
+    const pausesBeforeCommands = vi.mocked(HTMLMediaElement.prototype.pause).mock.calls.length
+
+    await act(async () => {
+      sendLocalMediaCommand('play')
+      await Promise.resolve()
+    })
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce()
+
+    act(() => sendLocalMediaCommand('pause'))
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(pausesBeforeCommands + 1)
+
+    act(() => sendLocalMediaCommand('pause'))
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(pausesBeforeCommands + 1)
+
+    await act(async () => {
+      sendLocalMediaCommand('play')
+      await Promise.resolve()
+    })
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2)
+  })
+
+  it('lets an explicit pause cancel playback queued after an interruption', async () => {
+    const Probe = () => {
+      media = useLocalMedia()
+      return null
+    }
+    render(<LocalMediaProvider><Probe /></LocalMediaProvider>)
+    act(() => setProjectionAudioInterrupted(true))
+
+    await act(async () => {
+      await media.loadBackendTracks('USB', [{
+        kind: 'file',
+        name: 'track.mp3',
+        path: '/media/track.mp3',
+      }], 0)
+    })
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()
+
+    act(() => sendLocalMediaCommand('pause'))
+    await act(async () => {
+      setProjectionAudioInterrupted(false)
+      await Promise.resolve()
+    })
+
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()
   })
 })

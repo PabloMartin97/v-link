@@ -470,28 +470,52 @@ export const LocalMediaProvider = ({ children }: { children: ReactNode }) => {
     else if (audioRef.current) audioRef.current.currentTime = 0;
   };
 
-  const togglePlayback = async () => {
+  const playPlayback = async () => {
     const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      if (isProjectionAudioInterrupted()) {
-        resumeAfterProjectionRef.current = true;
-        return;
-      }
-      try {
-        await audio.play();
-      } catch {
-        setError('Playback could not be resumed.');
-      }
-    } else audio.pause();
+    if (!audio || !audio.paused) return;
+    if (isProjectionAudioInterrupted()) {
+      resumeAfterProjectionRef.current = true;
+      return;
+    }
+    resumeAfterProjectionRef.current = false;
+    try {
+      await audio.play();
+    } catch {
+      setError('Playback could not be resumed.');
+    }
+  };
+
+  const pausePlayback = () => {
+    resumeAfterProjectionRef.current = false;
+    const audio = audioRef.current;
+    if (audio && !audio.paused) audio.pause();
+  };
+
+  const togglePlayback = async () => {
+    if (audioRef.current?.paused) await playPlayback();
+    else pausePlayback();
   };
 
   useEffect(() => {
     const handleMediaCommand = (event: Event) => {
       const command = (event as CustomEvent<LocalMediaCommand>).detail;
-      if (command === 'prev') playPrevious();
-      else if (command === 'next') playNext(false);
-      else void togglePlayback();
+      switch (command) {
+        case 'previous':
+          playPrevious();
+          break;
+        case 'next':
+          playNext(false);
+          break;
+        case 'play':
+          void playPlayback();
+          break;
+        case 'pause':
+          pausePlayback();
+          break;
+        case 'toggle':
+          void togglePlayback();
+          break;
+      }
     };
 
     eventEmitter.addEventListener(LOCAL_MEDIA_COMMAND_EVENT, handleMediaCommand);

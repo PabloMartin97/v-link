@@ -1,6 +1,7 @@
 import { eventEmitter } from '@/app/helper/EventEmitter';
+import type { MediaAction } from '@/mediaActions';
 
-export type LocalMediaCommand = 'prev' | 'playOrPause' | 'next';
+export type LocalMediaCommand = MediaAction;
 
 export const LOCAL_MEDIA_COMMAND_EVENT = 'localMediaCommand';
 
