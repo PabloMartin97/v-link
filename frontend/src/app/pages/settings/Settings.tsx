@@ -1,5 +1,7 @@
 import { Fragment, useState, useEffect, useRef, ReactNode } from 'react';
 import CanSettings from './CanSettings';
+import AudioSettings from './AudioSettings';
+import { getAudioSettingsFromAppSettings, withAudioSettings, type AudioSettingsValues } from './audioSettingsState';
 import RearcamSettings from './RearcamSettings';
 
 import styled, { useTheme } from 'styled-components';
@@ -246,6 +248,12 @@ const Settings = () => {
       pendingAppSaveRef.current = false;
       saveSettings(pendingSettingsRef.current);
     }, SAVE_DEBOUNCE_MS);
+  };
+
+  const handleAudioSettingsChange = (values: AudioSettingsValues) => {
+    const nextSettings = withAudioSettings(currentSettings, values);
+    setCurrentSettings(nextSettings);
+    scheduleSave(nextSettings);
   };
 
   const handleAddSetting = (key: string, currentSettings: AppSettings) => {
@@ -733,6 +741,7 @@ const Settings = () => {
 
         {settingPage === 'dashboard' &&
           <>
+            {renderSetting("dashboard", currentSettings)}
             {renderSetting("dash_topbar", currentSettings)}
             {renderSetting("dash_classic", currentSettings)}
             {renderSetting("dash_race", currentSettings)}
@@ -811,6 +820,13 @@ const Settings = () => {
             <p />
           </>
         }
+
+        {settingPage === 'audio' && (
+          <AudioSettings
+            values={getAudioSettingsFromAppSettings(currentSettings)}
+            onChange={handleAudioSettingsChange}
+          />
+        )}
 
         {settingPage === 'rearcam' &&
           <>
