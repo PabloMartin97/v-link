@@ -173,6 +173,10 @@ select_or_install_node() {
             NODE_TEMP=""
         fi
 
+        # mktemp creates a new staging directory as root with mode 0700. Also
+        # repair a managed runtime left by an older installer before reusing it.
+        # The frontend build itself deliberately runs as TARGET_USER.
+        chmod -R a+rX "$node_install_dir"
         NODE_BIN_DIR="$node_install_dir/bin"
         NODE_BUILD_PATH="$NODE_BIN_DIR:$SYSTEM_PATH"
     fi
