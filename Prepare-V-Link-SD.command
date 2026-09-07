@@ -102,13 +102,13 @@ CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
 if [[ "$CMDLINE_TEXT" != *"init=/usr/lib/raspberrypi-sys-mods/firstboot"* ]]; then
     CMDLINE_TEXT+=" init=/usr/lib/raspberrypi-sys-mods/firstboot"
 fi
-CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
+CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.unit=kernel-command-line.target"
 printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
 
 printf '\nSD card prepared successfully.\n\n'
 printf 'First boot flow:\n'
 printf '  1. Raspberry Pi Imager applies your username/network settings.\n'
-printf '  2. The Pi reboots once.\n'
+printf '  2. The Pi continues into its normal boot.\n'
 printf '  3. V-Link Lite Installer opens automatically on the screen.\n'
 printf '  4. It checks for Internet, lets you choose the GitHub branch and hardware mode.\n'
 printf '  5. After a successful installation the temporary installer removes itself.\n\n'
