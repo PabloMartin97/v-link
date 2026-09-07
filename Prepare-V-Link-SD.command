@@ -90,22 +90,20 @@ chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/nu
 
 printf 'ORIGINAL_SYSTEMD_RUN=%q\n' "$ORIGINAL_RUN" >"$BOOT_VOLUME/$CONFIG_NAME"
 
-python3 - "$CMDLINE" <<'PY'
-from pathlib import Path
-import re
-import sys
+CMDLINE_TEXT="$(tr -d '\r\n' <"$CMDLINE")"
+CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
+    -e 's/(^| )systemd\.run=[^ ]+//g' \
+    -e 's/(^| )systemd\.run_success_action=[^ ]+//g' \
+    -e 's/(^| )systemd\.unit=kernel-command-line\.target//g' \
+    -e 's/  +/ /g' \
+    -e 's/^ //' \
+    -e 's/ $//')"
 
-path = Path(sys.argv[1])
-text = path.read_text().strip()
-text = re.sub(r'(?:^| )systemd\.run=[^ ]+', '', text)
-text = re.sub(r'(?:^| )systemd\.run_success_action=[^ ]+', '', text)
-text = re.sub(r'(?:^| )systemd\.unit=kernel-command-line\.target', '', text)
-text = re.sub(r' +', ' ', text).strip()
-if 'init=/usr/lib/raspberrypi-sys-mods/firstboot' not in text:
-    text += ' init=/usr/lib/raspberrypi-sys-mods/firstboot'
-text += ' systemd.run=/boot/V-Link-FirstBoot.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target'
-path.write_text(text + '\n')
-PY
+if [[ "$CMDLINE_TEXT" != *"init=/usr/lib/raspberrypi-sys-mods/firstboot"* ]]; then
+    CMDLINE_TEXT+=" init=/usr/lib/raspberrypi-sys-mods/firstboot"
+fi
+CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
+printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
 
 printf '\nSD card prepared successfully.\n\n'
 printf 'First boot flow:\n'
