@@ -33,6 +33,7 @@ Press Ctrl+C in the terminal to stop the Vite server.
 
 from __future__ import annotations
 
+import argparse
 import shutil
 import subprocess
 import sys
@@ -44,8 +45,12 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 PREVIEW_URL = "http://localhost:5173/vlink-preview.html"
 
 
-def main() -> int:
-    """Validate the local setup and run Vite until the user stops it."""
+def main(args: argparse.Namespace) -> int:
+    """Validate the local setup and run Vite until the user stops it.
+
+    If the frontend dependencies are missing the launcher can optionally
+    install them when invoked with `--install` or `--ci`.
+    """
 
     # Resolve every path relative to this script instead of the current
     # working directory. This makes the launcher usable from any directory.
@@ -69,16 +74,50 @@ def main() -> int:
         )
         return 1
 
-    # Do not install packages automatically: installation may require network
-    # access and can modify package-lock.json. Give the user the exact command
-    # instead, keeping this launcher predictable and safe.
-    if not (FRONTEND_DIR / "node_modules").is_dir():
-        print(
-            "Error: the frontend dependencies have not been installed.\n"
-            f"Run this command first:\n  npm install --prefix {FRONTEND_DIR}",
-            file=sys.stderr,
-        )
-        return 1
+    # If the frontend dependencies are missing offer to install them when the
+    # user requested it via command-line flags. By default do not modify
+    # repository files automatically — explicit action is required.
+    node_modules_dir = FRONTEND_DIR / "node_modules"
+    if not node_modules_dir.is_dir():
+        if args.install or args.ci:
+            # Ask user for confirmation before modifying the workspace.
+            prompt = (
+                "Frontend dependencies are missing. Install now? [y/N]: "
+            )
+            try:
+                answer = input(prompt).strip().lower()
+            except EOFError:
+                print("No input available; aborting installation.", file=sys.stderr)
+                return 1
+
+            if answer not in ("y", "yes"):
+                print("Installation aborted by user.")
+                return 1
+
+            install_cmd = [
+                shutil.which("npm") or "npm",
+                "ci" if args.ci else "install",
+                "--prefix",
+                str(FRONTEND_DIR),
+            ]
+            print("Installing frontend dependencies...")
+            try:
+                subprocess.check_call(install_cmd)
+            except subprocess.CalledProcessError as error:
+                print(
+                    f"Failed to install frontend dependencies: {error}",
+                    file=sys.stderr,
+                )
+                return 1
+        else:
+            print(
+                "Error: the frontend dependencies have not been installed.\n"
+                f"Run this command first:\n  npm install --prefix {FRONTEND_DIR}\n\n"
+                "Or re-run this script with `--install` to install them automatically,\n"
+                "or `--ci` to run a clean CI-style install.",
+                file=sys.stderr,
+            )
+            return 1
 
     # --strictPort prevents Vite from silently selecting a different port.
     # --open selects the backend-free HTML entry point instead of index.html.
@@ -119,4 +158,23 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(
+        prog="vlink-preview.py",
+        description=(
+            "Start the standalone V-Link frontend preview. Use --install to "
+            "automatically install frontend dependencies if they are missing."
+        ),
+    )
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Run `npm install --prefix frontend` if node_modules is missing",
+    )
+    parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="Run `npm ci --prefix frontend` (clean install) if node_modules is missing",
+    )
+
+    args = parser.parse_args()
+    raise SystemExit(main(args))

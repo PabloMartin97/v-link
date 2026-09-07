@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createEmptyCarplayMedia,
+  hasCarplayMediaIdentityChanged,
   mergeCarplayMedia,
   playbackStatusFromAudioCommand,
   type CarplayMediaPayload,
@@ -40,6 +41,29 @@ describe('CarPlay media state', () => {
       ...current,
       artworkBase64: 'new-cover',
     })
+  })
+
+  it('only treats title or artist updates as media identity changes', () => {
+    const current = {
+      ...createEmptyCarplayMedia(),
+      title: 'Song',
+      artist: 'Artist',
+      positionMs: 1_000,
+    }
+
+    expect(hasCarplayMediaIdentityChanged(current, {
+      ...current,
+      positionMs: 2_000,
+      playbackStatus: 1,
+    })).toBe(false)
+    expect(hasCarplayMediaIdentityChanged(current, {
+      ...current,
+      title: 'Next song',
+    })).toBe(true)
+    expect(hasCarplayMediaIdentityChanged(current, {
+      ...current,
+      artist: 'Next artist',
+    })).toBe(true)
   })
 
   it('derives playback state from media audio commands', () => {

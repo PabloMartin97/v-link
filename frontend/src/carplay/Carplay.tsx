@@ -12,7 +12,7 @@ import useCarplayAudio from './useCarplayAudio'
 import { useCarplayTouch } from './useCarplayTouch'
 import { InitEvent } from './worker/render/RenderEvents'
 import { transitionProjectionSession } from './sessionState'
-import { createEmptyCarplayMedia, mergeCarplayMedia, playbackStatusFromAudioCommand } from './mediaState'
+import { createEmptyCarplayMedia, hasCarplayMediaIdentityChanged, mergeCarplayMedia, playbackStatusFromAudioCommand } from './mediaState'
 import { CARPLAY_MEDIA_COMMAND_EVENT, type MediaCommand } from './mediaCommands'
 
 import { APP } from '@/store/Store';
@@ -208,7 +208,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
     return worker
   }, [])
 
-  const { processAudio, getAudioPlayer, startRecording, stopRecording } =
+  const { processAudio, getAudioPlayer, resetAudioRouting, startRecording, stopRecording } =
     useCarplayAudio(carplayWorker, micChannel.port2)
 
   const clearRetryTimeout = useCallback(() => {
@@ -326,6 +326,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           break
         case 'unplugged':
           clearStartupWatchdog()
+          resetAudioRouting()
           console.log('(CarPlay) Worker disconnected')
           socket.log.emit('debug', '(CarPlay) Worker Disconnected')
 
@@ -372,13 +373,15 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
           if (!payload) break
 
-          console.info('(CarPlay) Media metadata received:', payload)
-
           appUpdate((state) => {
-            state.system.carplay.media = mergeCarplayMedia(
-              state.system.carplay.media,
-              payload,
-            )
+            const previousMedia = state.system.carplay.media
+            const nextMedia = mergeCarplayMedia(previousMedia, payload)
+            if (hasCarplayMediaIdentityChanged(previousMedia, nextMedia)) {
+              console.info(
+                `(CarPlay) Media changed: title=${JSON.stringify(nextMedia.title)} artist=${JSON.stringify(nextMedia.artist)}`,
+              )
+            }
+            state.system.carplay.media = nextMedia
           })
 
           break
@@ -428,7 +431,7 @@ function Carplay({ command, commandCounter }: CarplayProps) {
           break
       }
     }
-  }, [armStartupWatchdog, carplayWorker, clearRetryTimeout, clearStartupWatchdog, getAudioPlayer, processAudio, renderWorker, startRecording, stopRecording])
+  }, [armStartupWatchdog, carplayWorker, clearRetryTimeout, clearStartupWatchdog, getAudioPlayer, processAudio, renderWorker, resetAudioRouting, startRecording, stopRecording])
 
   useEffect(() => {
     const element = mainElem?.current
@@ -472,6 +475,9 @@ function Carplay({ command, commandCounter }: CarplayProps) {
   const checkDevice = useCallback(
     async (request: boolean = false) => {
       const device = request ? await requestDevice() : await findDevice()
+      appUpdate((state) => {
+        state.system.carplay.detectionComplete = true
+      })
       if (device) {
         const phase = APP.getState().system.carplay.phase
         appUpdate((state) => {

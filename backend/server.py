@@ -11,6 +11,7 @@ from flask_socketio         import SocketIO
 from flask_cors             import CORS
 
 from .                      import settings
+from .media                 import media_api
 from .shared.shared_state   import shared_state
 
 from .threads.cam         import CAMThread, CameraGPIO
@@ -22,6 +23,7 @@ logger = logging.getLogger('vlink')
 # Flask configuration
 server = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist'), static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist', 'assets'), static_url_path='/assets')
 server.config['SECRET_KEY'] = 'v-link'
+server.register_blueprint(media_api)
 ALLOWED_ORIGINS = [
     'http://localhost:4001',
     'http://127.0.0.1:4001',

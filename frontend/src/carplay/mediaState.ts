@@ -26,6 +26,11 @@ export const createEmptyCarplayMedia = (): CarplayMediaState => ({
   artworkBase64: null,
 })
 
+export const hasCarplayMediaIdentityChanged = (
+  previous: CarplayMediaState,
+  next: CarplayMediaState,
+) => previous.title !== next.title || previous.artist !== next.artist
+
 export const playbackStatusFromAudioCommand = (
   currentStatus: number,
   command?: AudioCommand,

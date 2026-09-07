@@ -1,5 +1,7 @@
 import { Fragment, useState, useEffect, useRef, ReactNode } from 'react';
 import CanSettings from './CanSettings';
+import AudioSettings from './AudioSettings';
+import { getAudioSettingsFromAppSettings, withAudioSettings, type AudioSettingsValues } from './audioSettingsState';
 
 import styled, { useTheme } from 'styled-components';
 import ScrollContainer from 'react-indiana-drag-scroll'
@@ -292,6 +294,12 @@ const Settings = () => {
       pendingAppSaveRef.current = false;
       saveSettings(pendingSettingsRef.current);
     }, SAVE_DEBOUNCE_MS);
+  };
+
+  const handleAudioSettingsChange = (values: AudioSettingsValues) => {
+    const nextSettings = withAudioSettings(currentSettings, values);
+    setCurrentSettings(nextSettings);
+    scheduleSave(nextSettings);
   };
 
   const handleAddSetting = (key: string, currentSettings: AppSettings) => {
@@ -905,6 +913,13 @@ const Settings = () => {
             <p />
           </>
         }
+
+        {settingPage === 'audio' && (
+          <AudioSettings
+            values={getAudioSettingsFromAppSettings(currentSettings)}
+            onChange={handleAudioSettingsChange}
+          />
+        )}
 
         {settingPage === 'rearcam' &&
           <>
