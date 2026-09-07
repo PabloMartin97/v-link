@@ -1,0 +1,34 @@
+name: Adjust Lite installer UX
+
+on:
+  push:
+    branches:
+      - installer-user-friendly
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: installer-user-friendly
+          fetch-depth: 0
+      - name: Adjust and validate installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 tools/adjust_installer_ux.py
+          bash -n Install-Lite.sh
+          bash Install-Lite.sh --help >/tmp/install-lite-help.txt
+          grep -q 'recommended for development / testing' Install-Lite.sh
+          grep -q -- '--lin-port requires hardware mode' Install-Lite.sh
+          git rm .github/workflows/adjust-installer-ux.yml
+          git rm tools/adjust_installer_ux.py
+          git add Install-Lite.sh
+          git commit -m "Prefer branch installs in interactive dev mode"
+          git push origin HEAD:installer-user-friendly
