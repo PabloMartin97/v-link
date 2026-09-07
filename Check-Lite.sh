@@ -206,14 +206,19 @@ if [[ -x "$APP_DIR/venv/bin/python" ]]; then
         fail "pip check reports inconsistent Python dependencies"
     fi
 
-    if runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" -c \
-        'import flask, flask_socketio, can, serial, eventlet, lgpio, uinput, board, busio; import adafruit_ads1x15.ads1115' >/dev/null 2>&1; then
+    if runuser -u "$TARGET_USER" -- sh -c \
+        'cd "$1" && exec "$2" -c "$3"' \
+        sh "$APP_DIR" "$APP_DIR/venv/bin/python" \
+        'import flask, flask_socketio, can, serial, eventlet, lgpio, uinput, board, busio; import adafruit_ads1x15.ads1115' \
+        >/dev/null 2>&1; then
         pass "core Python modules import correctly"
     else
         fail "one or more core Python modules cannot be imported"
     fi
 
-    if runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" "$APP_DIR/V-Link.py" --help >/dev/null 2>&1; then
+    if runuser -u "$TARGET_USER" -- sh -c \
+        'cd "$1" && exec "$2" "$1/V-Link.py" --help' \
+        sh "$APP_DIR" "$APP_DIR/venv/bin/python" >/dev/null 2>&1; then
         pass "V-Link loads its complete Python import graph"
     else
         fail "V-Link fails during startup imports"

@@ -464,6 +464,12 @@ validate_source() {
     fi
 }
 
+validate_v_link_imports() {
+    runuser -u "$TARGET_USER" -- sh -c \
+        'cd "$1" && exec "$2" "$1/V-Link.py" --help' \
+        sh "$APP_DIR" "$APP_DIR/venv/bin/python"
+}
+
 frontend_source_hash() {
     local source="$1"
     python3 - "$source/frontend" <<'PY'
@@ -937,7 +943,7 @@ fi
 if [[ -x "$APP_DIR/venv/bin/python" && -f "$APP_DIR/venv/.v-link-requirements.sha256" ]] && \
    [[ "$(<"$APP_DIR/venv/.v-link-requirements.sha256")" == "$REQUIREMENTS_HASH" ]] && \
    runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" -m pip check >/dev/null 2>&1 && \
-   runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" "$APP_DIR/V-Link.py" --help >/dev/null 2>&1; then
+   validate_v_link_imports >/dev/null 2>&1; then
     VENV_CURRENT=true
 fi
 
@@ -974,7 +980,7 @@ if [[ "$VENV_CURRENT" != true ]]; then
         --no-index --find-links "$VENV_WORK/wheels" \
         -r "$APP_DIR/requirements.txt"
     runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" -m pip check
-    runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" "$APP_DIR/V-Link.py" --help >/dev/null
+    validate_v_link_imports >/dev/null
     runuser -u "$TARGET_USER" -- sh -c 'printf "%s\n" "$1" >"$2"' \
         sh "$REQUIREMENTS_HASH" "$APP_DIR/venv/.v-link-requirements.sha256"
     rm -rf -- "$VENV_WORK"

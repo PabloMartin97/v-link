@@ -242,9 +242,12 @@ fi
     --find-links "$TEMP_DIR/wheels" \
     -r "$APP_DIR/requirements.txt"
 "$APP_DIR/venv/bin/python" -m pip check
-"$APP_DIR/venv/bin/python" -c \
-    'import flask, flask_socketio, can, serial, eventlet, lgpio, uinput, board, busio; import adafruit_ads1x15.ads1115'
-"$APP_DIR/venv/bin/python" "$APP_DIR/V-Link.py" --help >/dev/null
+(
+    cd "$APP_DIR"
+    "$APP_DIR/venv/bin/python" -c \
+        'import flask, flask_socketio, can, serial, eventlet, lgpio, uinput, board, busio; import adafruit_ads1x15.ads1115'
+    "$APP_DIR/venv/bin/python" "$APP_DIR/V-Link.py" --help >/dev/null
+)
 sha256sum "$APP_DIR/requirements.txt" | awk '{print $1}' >"$APP_DIR/venv/.v-link-requirements.sha256"
 chmod 0755 "$APP_DIR/V-Link.py" "$APP_DIR/Check-Lite.sh" "$APP_DIR/Update.sh"
 

@@ -27,6 +27,7 @@ WAIT_HELPER="$SYSTEM_ROOT/usr/local/sbin/v-link-firstboot-wait"
 INSTALL_HELPER="$SYSTEM_ROOT/usr/local/sbin/v-link-firstboot-installer"
 INSTALL_LOG="$SYSTEM_ROOT/var/log/v-link-firstboot-installer.log"
 BOOT_LOG="$BOOT_ROOT/v-link-firstboot.log"
+BOOT_INSTALL_LOG="$BOOT_ROOT/v-link-firstboot-installer.log"
 
 # A read-only boot partition must not prevent the cmdline cleanup attempt.
 if : >>"$BOOT_LOG" 2>/dev/null; then
@@ -75,11 +76,22 @@ cat >"$INSTALL_HELPER" <<EOF
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+copy_log_to_boot_partition() {
+    cp -f "$INSTALL_LOG" "$BOOT_INSTALL_LOG" 2>/dev/null || true
+}
+trap copy_log_to_boot_partition EXIT
+
 target_user="\$(getent passwd 1000 | cut -d: -f1 || true)"
 [[ -n "\$target_user" ]] || {
     printf '[V-Link first boot] ERROR: no UID 1000 user exists\n' >&2
     exit 1
 }
+target_home="\$(getent passwd 1000 | cut -d: -f6 || true)"
+[[ -n "\$target_home" && -d "\$target_home" ]] || {
+    printf '[V-Link first boot] ERROR: home directory for UID 1000 is unavailable\n' >&2
+    exit 1
+}
+cd "\$target_home"
 "$INSTALLER_STAGED" --first-boot --user "\$target_user" 2>&1 | \
     tee -a "$INSTALL_LOG"
 EOF
