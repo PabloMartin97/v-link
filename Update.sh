@@ -5,6 +5,9 @@
 set -Eeuo pipefail
 
 readonly REPOSITORY="PabloMartin97/v-link"
+readonly PYTHON_BUILD_PIP="24.3.1"
+readonly PYTHON_BUILD_SETUPTOOLS="75.6.0"
+readonly PYTHON_BUILD_WHEEL="0.45.1"
 readonly -a APP_ITEMS=(
     V-Link.py backend frontend resources requirements.txt Patch.sh Check-Lite.sh Update.sh venv
 )
@@ -198,7 +201,19 @@ done
 # Download and build every dependency before touching the known-working app.
 # After this succeeds, installation into the new venv is fully offline.
 log "Preparing Python dependency wheels"
-"$APP_DIR/venv/bin/python" -m pip wheel \
+/usr/bin/python3 -m venv "$TEMP_DIR/builder"
+"$TEMP_DIR/builder/bin/python" -m pip install \
+    --disable-pip-version-check --no-input --upgrade \
+    "pip==$PYTHON_BUILD_PIP" \
+    "setuptools==$PYTHON_BUILD_SETUPTOOLS" \
+    "wheel==$PYTHON_BUILD_WHEEL"
+log "Python builder toolchain"
+printf '  Python:     %s\n' "$("$TEMP_DIR/builder/bin/python" --version 2>&1)"
+printf '  pip:        %s\n' "$("$TEMP_DIR/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("pip"))')"
+printf '  setuptools: %s\n' "$("$TEMP_DIR/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("setuptools"))')"
+printf '  wheel:      %s\n' "$("$TEMP_DIR/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("wheel"))')"
+"$TEMP_DIR/builder/bin/python" -m pip wheel \
+    --disable-pip-version-check --no-input \
     --wheel-dir "$TEMP_DIR/wheels" \
     -r "$TEMP_DIR/staging/requirements.txt"
 

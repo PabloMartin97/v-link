@@ -9,6 +9,12 @@ readonly REPOSITORY="PabloMartin97/v-link"
 readonly APP_NAME="v-link"
 readonly CONFIG_BEGIN="# BEGIN V-LINK LITE"
 readonly CONFIG_END="# END V-LINK LITE"
+readonly NODE_VERSION="v22.23.2"
+readonly NODE_MIN_MINOR=12
+readonly PYTHON_BUILD_PIP="24.3.1"
+readonly PYTHON_BUILD_SETUPTOOLS="75.6.0"
+readonly PYTHON_BUILD_WHEEL="0.45.1"
+readonly SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 ASSUME_YES=false
 CONFIGURE_HARDWARE=true
@@ -25,6 +31,10 @@ SUDOERS_TEMP=""
 BOOT_TEMP=""
 CMDLINE_TEMP=""
 VENV_WORK=""
+NODE_TEMP=""
+NODE_STAGE=""
+NODE_BIN_DIR=""
+NODE_BUILD_PATH=""
 VENV_BACKUP=""
 VENV_TRANSACTION=false
 APP_TRANSACTION=false
@@ -62,6 +72,8 @@ cleanup() {
     [[ -z "$BOOT_TEMP" || ! -e "$BOOT_TEMP" ]] || rm -f -- "$BOOT_TEMP"
     [[ -z "$CMDLINE_TEMP" || ! -e "$CMDLINE_TEMP" ]] || rm -f -- "$CMDLINE_TEMP"
     [[ -z "$VENV_WORK" || ! -d "$VENV_WORK" ]] || rm -rf -- "$VENV_WORK"
+    [[ -z "$NODE_TEMP" || ! -d "$NODE_TEMP" ]] || rm -rf -- "$NODE_TEMP"
+    [[ -z "$NODE_STAGE" || ! -d "$NODE_STAGE" ]] || rm -rf -- "$NODE_STAGE"
 
     exit "$status"
 }
@@ -101,6 +113,78 @@ log() {
 die() {
     printf '\n[V-Link Lite] ERROR: %s\n' "$*" >&2
     exit 1
+}
+
+node_is_compatible() {
+    local node_command="$1"
+    "$node_command" -e \
+        "const [major, minor] = process.versions.node.split('.').map(Number); process.exit(major === 22 && minor >= $NODE_MIN_MINOR ? 0 : 1)" \
+        >/dev/null 2>&1
+}
+
+select_or_install_node() {
+    local node_command="" npm_command="" node_dist_arch=""
+    local node_archive="" node_base_url="" node_install_dir=""
+
+    node_command="$(command -v node || true)"
+    npm_command="$(command -v npm || true)"
+    if [[ -n "$node_command" && -n "$npm_command" ]] && \
+            node_is_compatible "$node_command" && "$npm_command" --version >/dev/null 2>&1; then
+        NODE_BIN_DIR="$(dirname -- "$node_command")"
+        NODE_BUILD_PATH="$NODE_BIN_DIR:$(dirname -- "$npm_command"):$SYSTEM_PATH"
+    else
+        case "$ARCHITECTURE" in
+            arm64) node_dist_arch=arm64 ;;
+            armhf) node_dist_arch=armv7l ;;
+            *) die "Node.js $NODE_VERSION is unavailable for architecture '$ARCHITECTURE'" ;;
+        esac
+
+        node_archive="node-$NODE_VERSION-linux-$node_dist_arch.tar.xz"
+        node_base_url="https://nodejs.org/dist/$NODE_VERSION"
+        node_install_dir="/opt/v-link-node-$NODE_VERSION-$node_dist_arch"
+
+        if [[ ! -x "$node_install_dir/bin/node" ]] || \
+                ! node_is_compatible "$node_install_dir/bin/node" || \
+                [[ ! -x "$node_install_dir/bin/npm" ]]; then
+            log "Installing the verified Node.js $NODE_VERSION build for $node_dist_arch"
+            NODE_TEMP="$(mktemp -d /tmp/v-link-node.XXXXXX)"
+            curl --fail --show-error --location --retry 3 --connect-timeout 10 \
+                --max-time 900 --speed-limit 1024 --speed-time 30 \
+                "$node_base_url/$node_archive" --output "$NODE_TEMP/$node_archive"
+            curl --fail --show-error --location --retry 3 --connect-timeout 10 \
+                --max-time 120 --speed-limit 32 --speed-time 30 \
+                "$node_base_url/SHASUMS256.txt" --output "$NODE_TEMP/SHASUMS256.txt"
+            awk -v archive="$node_archive" '
+                $2 == archive && length($1) == 64 && $1 !~ /[^[:xdigit:]]/ { print; found=1 }
+                END { if (!found) exit 1 }
+            ' "$NODE_TEMP/SHASUMS256.txt" >"$NODE_TEMP/SHASUMS256.selected" || \
+                die "Node.js checksum list does not contain $node_archive"
+            (cd "$NODE_TEMP" && sha256sum --check SHASUMS256.selected)
+
+            NODE_STAGE="$(mktemp -d /opt/.v-link-node.XXXXXX)"
+            tar -xJf "$NODE_TEMP/$node_archive" --strip-components=1 -C "$NODE_STAGE"
+            node_is_compatible "$NODE_STAGE/bin/node" || \
+                die "downloaded Node.js runtime does not satisfy 22.$NODE_MIN_MINOR or newer"
+            [[ -x "$NODE_STAGE/bin/npm" ]] || die "downloaded Node.js runtime has no npm executable"
+            rm -rf -- "$node_install_dir"
+            mv "$NODE_STAGE" "$node_install_dir"
+            NODE_STAGE=""
+            rm -rf -- "$NODE_TEMP"
+            NODE_TEMP=""
+        fi
+
+        NODE_BIN_DIR="$node_install_dir/bin"
+        NODE_BUILD_PATH="$NODE_BIN_DIR:$SYSTEM_PATH"
+    fi
+
+    runuser -u "$TARGET_USER" -- env PATH="$NODE_BUILD_PATH" node -e \
+        "const [major, minor] = process.versions.node.split('.').map(Number); process.exit(major === 22 && minor >= $NODE_MIN_MINOR ? 0 : 1)" || \
+        die "the selected Node.js runtime is not available to user '$TARGET_USER'"
+    runuser -u "$TARGET_USER" -- env PATH="$NODE_BUILD_PATH" npm --version >/dev/null || \
+        die "the selected npm runtime is not available to user '$TARGET_USER'"
+
+    log "Node.js: $(runuser -u "$TARGET_USER" -- env PATH="$NODE_BUILD_PATH" node --version)"
+    log "npm: $(runuser -u "$TARGET_USER" -- env PATH="$NODE_BUILD_PATH" npm --version)"
 }
 
 confirm() {
@@ -172,7 +256,8 @@ cleanup_first_boot_stage() {
         /etc/systemd/system/v-link-firstboot.service \
         /etc/systemd/system/v-link-firstboot-wait.service \
         /usr/local/sbin/v-link-firstboot-installer \
-        /usr/local/sbin/v-link-firstboot-wait
+        /usr/local/sbin/v-link-firstboot-wait \
+        /usr/local/libexec/v-link-install-lite
     rm -f -- \
         /boot/firmware/Install-Lite.sh \
         /boot/firmware/V-Link-FirstBoot.sh \
@@ -709,7 +794,8 @@ apt-get install -y --no-install-recommends \
 
 if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     log "Installing frontend build tools"
-    apt-get install -y --no-install-recommends git nodejs npm libusb-1.0-0-dev
+    apt-get install -y --no-install-recommends git xz-utils libusb-1.0-0-dev
+    select_or_install_node
 fi
 
 systemctl enable lightdm.service
@@ -774,9 +860,15 @@ validate_source "$SOURCE_DIR"
 if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     log "Building the frontend (this can take several minutes on a Pi 3)"
     [[ -f "$SOURCE_DIR/frontend/package.json" ]] || die "frontend source is unavailable for the required build"
+    [[ -n "$NODE_BUILD_PATH" ]] || die "a compatible Node.js build runtime was not selected"
     chown -R "$TARGET_USER:$TARGET_GROUP" "$SOURCE_DIR/frontend"
-    runuser -u "$TARGET_USER" -- bash -c \
-        'cd "$1" && export NODE_OPTIONS=--max-old-space-size=768 ELECTRON_SKIP_BINARY_DOWNLOAD=1 && npm ci --legacy-peer-deps --no-audit --no-fund && npm run build' \
+    runuser -u "$TARGET_USER" -- env \
+        PATH="$NODE_BUILD_PATH" \
+        NODE_OPTIONS=--max-old-space-size=768 \
+        ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
+        npm_config_engine_strict=true \
+        bash -c \
+        'cd "$1" && npm ci --legacy-peer-deps --no-audit --no-fund && npm run build' \
         bash "$SOURCE_DIR/frontend"
     FRONTEND_SOURCE_HASH="$(frontend_source_hash "$SOURCE_DIR")"
     runuser -u "$TARGET_USER" -- sh -c 'printf "%s\n" "$1" >"$2"' \
@@ -849,7 +941,23 @@ if [[ "$VENV_CURRENT" != true ]]; then
     VENV_WORK="$(mktemp -d "$TARGET_HOME/.v-link-venv.XXXXXX")"
     chown "$TARGET_USER:$TARGET_GROUP" "$VENV_WORK"
     runuser -u "$TARGET_USER" -- python3 -m venv "$VENV_WORK/builder"
-    runuser -u "$TARGET_USER" -- "$VENV_WORK/builder/bin/python" -m pip wheel \
+    install -d -o "$TARGET_USER" -g "$TARGET_GROUP" "$VENV_WORK/wheels"
+    runuser -u "$TARGET_USER" -- env \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 \
+        "$VENV_WORK/builder/bin/python" -m pip install --upgrade \
+        "pip==$PYTHON_BUILD_PIP" \
+        "setuptools==$PYTHON_BUILD_SETUPTOOLS" \
+        "wheel==$PYTHON_BUILD_WHEEL"
+
+    log "Python builder toolchain"
+    printf '  Python:     %s\n' "$(runuser -u "$TARGET_USER" -- "$VENV_WORK/builder/bin/python" --version 2>&1)"
+    printf '  pip:        %s\n' "$(runuser -u "$TARGET_USER" -- "$VENV_WORK/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("pip"))')"
+    printf '  setuptools: %s\n' "$(runuser -u "$TARGET_USER" -- "$VENV_WORK/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("setuptools"))')"
+    printf '  wheel:      %s\n' "$(runuser -u "$TARGET_USER" -- "$VENV_WORK/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("wheel"))')"
+
+    runuser -u "$TARGET_USER" -- env \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 \
+        "$VENV_WORK/builder/bin/python" -m pip wheel \
         --wheel-dir "$VENV_WORK/wheels" \
         -r "$APP_DIR/requirements.txt"
 
