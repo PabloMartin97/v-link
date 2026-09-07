@@ -32,9 +32,9 @@ if [[ -n "$ORIGINAL_SYSTEMD_RUN" ]]; then
         /boot/*) ;;
         *) die "unsafe original first-run path: $ORIGINAL_SYSTEMD_RUN" ;;
     esac
-    if [[ "$ORIGINAL_SYSTEMD_RUN" != /boot/V-Link-FirstBoot.sh && -x "$ORIGINAL_SYSTEMD_RUN" ]]; then
+    if [[ "$ORIGINAL_SYSTEMD_RUN" != /boot/V-Link-FirstBoot.sh && -f "$ORIGINAL_SYSTEMD_RUN" ]]; then
         log "Running Raspberry Pi Imager first-run customisation"
-        "$ORIGINAL_SYSTEMD_RUN"
+        /bin/bash "$ORIGINAL_SYSTEMD_RUN"
     fi
 fi
 
