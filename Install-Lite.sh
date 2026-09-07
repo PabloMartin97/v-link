@@ -167,7 +167,12 @@ EOF
 cleanup_first_boot_stage() {
     log "Removing temporary first-boot installer files"
     systemctl disable v-link-firstboot.service >/dev/null 2>&1 || true
-    rm -f -- /etc/systemd/system/v-link-firstboot.service
+    systemctl disable v-link-firstboot-wait.service >/dev/null 2>&1 || true
+    rm -f -- \
+        /etc/systemd/system/v-link-firstboot.service \
+        /etc/systemd/system/v-link-firstboot-wait.service \
+        /usr/local/sbin/v-link-firstboot-installer \
+        /usr/local/sbin/v-link-firstboot-wait
     rm -f -- \
         /boot/firmware/Install-Lite.sh \
         /boot/firmware/V-Link-FirstBoot.sh \

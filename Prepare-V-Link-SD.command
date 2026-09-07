@@ -67,23 +67,6 @@ if grep -q 'systemd.run=/boot/V-Link-FirstBoot.sh' "$CMDLINE" || \
     printf '\nUpdating an already prepared V-Link SD card.\n'
 fi
 
-if [[ "$ALREADY_PREPARED" != true && ! -f "$BOOT_VOLUME/firstrun.sh" ]]; then
-    fail "Raspberry Pi Imager firstrun.sh is missing. Re-flash the card and configure username/password in Imager before writing."
-fi
-
-if [[ "$ALREADY_PREPARED" == true && -r "$BOOT_VOLUME/$CONFIG_NAME" ]]; then
-    ORIGINAL_RUN="$(sed -n 's/^ORIGINAL_SYSTEMD_RUN=//p' "$BOOT_VOLUME/$CONFIG_NAME")"
-    # The value was previously generated with printf %q and is restricted to a
-    # simple validated /boot path, so remove the optional shell quotes only.
-    ORIGINAL_RUN="${ORIGINAL_RUN#\'}"
-    ORIGINAL_RUN="${ORIGINAL_RUN%\'}"
-else
-    ORIGINAL_RUN="$(grep -oE 'systemd\.run=[^ ]+' "$CMDLINE" | head -n1 | cut -d= -f2- || true)"
-fi
-if [[ -n "$ORIGINAL_RUN" && ! "$ORIGINAL_RUN" =~ ^/boot/[A-Za-z0-9._/+:-]+$ ]]; then
-    fail "Unexpected Raspberry Pi Imager systemd.run path: $ORIGINAL_RUN"
-fi
-
 TMPDIR_VLINK="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_VLINK"' EXIT
 
@@ -100,26 +83,44 @@ cp "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME"
 cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME"
 chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/null || true
 
-printf 'ORIGINAL_SYSTEMD_RUN=%q\n' "$ORIGINAL_RUN" >"$BOOT_VOLUME/$CONFIG_NAME"
-
 CMDLINE_TEXT="$(tr -d '\r\n' <"$CMDLINE")"
 CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
-    -e 's#(^| )init=/usr/lib/raspberrypi-sys-mods/firstboot##g' \
     -e 's/(^| )systemd\.run=[^ ]+//g' \
     -e 's/(^| )systemd\.run_success_action=[^ ]+//g' \
     -e 's/(^| )systemd\.unit=kernel-command-line\.target//g' \
+    -e 's/(^| )systemd\.wants=kernel-command-line\.target//g' \
     -e 's/  +/ /g' \
     -e 's/^ //' \
     -e 's/ $//')"
 
-CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.unit=kernel-command-line.target"
+if [[ -f "$BOOT_VOLUME/firstrun.sh" && "$CMDLINE_TEXT" != *"systemd.run=/boot/firstrun.sh"* ]]; then
+    CMDLINE_TEXT+=" systemd.run=/boot/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
+elif [[ ! -f "$BOOT_VOLUME/firstrun.sh" ]]; then
+    CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.wants=kernel-command-line.target"
+fi
 printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
+
+if [[ -f "$BOOT_VOLUME/firstrun.sh" ]] && \
+        ! grep -qFx '/bin/bash /boot/V-Link-FirstBoot.sh' "$BOOT_VOLUME/firstrun.sh"; then
+    FIRSTRUN_TEMP="$TMPDIR_VLINK/firstrun.sh"
+    awk '
+        /^rm -f \/boot\/firstrun\.sh$/ && !inserted {
+            print "# Stage the V-Link installer for the next normal boot."
+            print "/bin/bash /boot/V-Link-FirstBoot.sh"
+            inserted=1
+        }
+        { print }
+        END { if (!inserted) exit 1 }
+    ' "$BOOT_VOLUME/firstrun.sh" >"$FIRSTRUN_TEMP" || \
+        fail "Could not add the V-Link hook to Raspberry Pi Imager firstrun.sh"
+    cp "$FIRSTRUN_TEMP" "$BOOT_VOLUME/firstrun.sh"
+fi
 
 printf '\nSD card prepared successfully.\n\n'
 printf 'First boot flow:\n'
-printf '  1. Raspberry Pi Imager applies your username/network settings.\n'
-printf '  2. The Pi continues into its normal boot.\n'
-printf '  3. V-Link Lite Installer opens automatically on the screen.\n'
+printf '  1. Raspberry Pi Imager applies any configured user/network settings.\n'
+printf '  2. Without a configured user, Raspberry Pi OS first asks you to create one.\n'
+printf '  3. V-Link Lite Installer then opens automatically on the screen.\n'
 printf '  4. It checks for Internet, lets you choose the GitHub branch and hardware mode.\n'
 printf '  5. After a successful installation the temporary installer removes itself.\n\n'
 printf 'You can now eject the SD card and put it in the Raspberry Pi.\n'
