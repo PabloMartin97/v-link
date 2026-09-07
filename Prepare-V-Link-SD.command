@@ -59,15 +59,27 @@ fi
 
 printf '\nSelected: %s\n' "$BOOT_VOLUME"
 
-[[ -f "$BOOT_VOLUME/firstrun.sh" ]] || fail "Raspberry Pi Imager firstrun.sh is missing. Re-flash the card and configure username/password in Imager before writing."
-
 CMDLINE="$BOOT_VOLUME/cmdline.txt"
-if grep -q 'systemd.run=/boot/V-Link-FirstBoot.sh' "$CMDLINE"; then
-    printf '\nThis SD card is already prepared for V-Link first boot.\n'
-    pause_and_exit 0
+ALREADY_PREPARED=false
+if grep -q 'systemd.run=/boot/V-Link-FirstBoot.sh' "$CMDLINE" || \
+        [[ -f "$BOOT_VOLUME/$CONFIG_NAME" && -f "$CMDLINE.v-link-prep.bak" ]]; then
+    ALREADY_PREPARED=true
+    printf '\nUpdating an already prepared V-Link SD card.\n'
 fi
 
-ORIGINAL_RUN="$(grep -oE 'systemd\.run=[^ ]+' "$CMDLINE" | head -n1 | cut -d= -f2- || true)"
+if [[ "$ALREADY_PREPARED" != true && ! -f "$BOOT_VOLUME/firstrun.sh" ]]; then
+    fail "Raspberry Pi Imager firstrun.sh is missing. Re-flash the card and configure username/password in Imager before writing."
+fi
+
+if [[ "$ALREADY_PREPARED" == true && -r "$BOOT_VOLUME/$CONFIG_NAME" ]]; then
+    ORIGINAL_RUN="$(sed -n 's/^ORIGINAL_SYSTEMD_RUN=//p' "$BOOT_VOLUME/$CONFIG_NAME")"
+    # The value was previously generated with printf %q and is restricted to a
+    # simple validated /boot path, so remove the optional shell quotes only.
+    ORIGINAL_RUN="${ORIGINAL_RUN#\'}"
+    ORIGINAL_RUN="${ORIGINAL_RUN%\'}"
+else
+    ORIGINAL_RUN="$(grep -oE 'systemd\.run=[^ ]+' "$CMDLINE" | head -n1 | cut -d= -f2- || true)"
+fi
 if [[ -n "$ORIGINAL_RUN" && ! "$ORIGINAL_RUN" =~ ^/boot/[A-Za-z0-9._/+:-]+$ ]]; then
     fail "Unexpected Raspberry Pi Imager systemd.run path: $ORIGINAL_RUN"
 fi
@@ -83,7 +95,7 @@ printf '\nDownloading the current V-Link first-boot files...\n'
     "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$BOOTSTRAP_NAME" \
     -o "$TMPDIR_VLINK/$BOOTSTRAP_NAME" || fail "Could not download $BOOTSTRAP_NAME"
 
-cp "$CMDLINE" "$CMDLINE.v-link-prep.bak"
+[[ -f "$CMDLINE.v-link-prep.bak" ]] || cp "$CMDLINE" "$CMDLINE.v-link-prep.bak"
 cp "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME"
 cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME"
 chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/null || true
@@ -92,6 +104,7 @@ printf 'ORIGINAL_SYSTEMD_RUN=%q\n' "$ORIGINAL_RUN" >"$BOOT_VOLUME/$CONFIG_NAME"
 
 CMDLINE_TEXT="$(tr -d '\r\n' <"$CMDLINE")"
 CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
+    -e 's#(^| )init=/usr/lib/raspberrypi-sys-mods/firstboot##g' \
     -e 's/(^| )systemd\.run=[^ ]+//g' \
     -e 's/(^| )systemd\.run_success_action=[^ ]+//g' \
     -e 's/(^| )systemd\.unit=kernel-command-line\.target//g' \
@@ -99,9 +112,6 @@ CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
     -e 's/^ //' \
     -e 's/ $//')"
 
-if [[ "$CMDLINE_TEXT" != *"init=/usr/lib/raspberrypi-sys-mods/firstboot"* ]]; then
-    CMDLINE_TEXT+=" init=/usr/lib/raspberrypi-sys-mods/firstboot"
-fi
 CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.unit=kernel-command-line.target"
 printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
 

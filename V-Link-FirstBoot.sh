@@ -2,9 +2,10 @@
 set -Eeuo pipefail
 
 # This script is placed on the Raspberry Pi OS Bookworm boot partition by the
-# SD preparation helper. It runs in Raspberry Pi Imager's early first-boot
-# environment, lets the original Imager firstrun complete, then stages the
-# interactive V-Link installer for the next normal boot.
+# SD preparation helper. It runs directly under systemd, lets the original
+# Imager firstrun complete, then stages the interactive V-Link installer. The
+# older init=/usr/lib/raspberrypi-sys-mods/firstboot path is deliberately not
+# used because some Pi 4 systems fail to return from its forced reboot.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BOOT_ROOT=/boot/firmware
