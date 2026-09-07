@@ -87,6 +87,7 @@ CMDLINE_TEXT="$(tr -d '\r\n' <"$CMDLINE")"
 CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
     -e 's/(^| )systemd\.run=[^ ]+//g' \
     -e 's/(^| )systemd\.run_success_action=[^ ]+//g' \
+    -e 's/(^| )systemd\.run_failure_action=[^ ]+//g' \
     -e 's/(^| )systemd\.unit=kernel-command-line\.target//g' \
     -e 's/(^| )systemd\.wants=kernel-command-line\.target//g' \
     -e 's/  +/ /g' \
@@ -96,7 +97,7 @@ CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
 if [[ -f "$BOOT_VOLUME/firstrun.sh" && "$CMDLINE_TEXT" != *"systemd.run=/boot/firstrun.sh"* ]]; then
     CMDLINE_TEXT+=" systemd.run=/boot/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
 elif [[ ! -f "$BOOT_VOLUME/firstrun.sh" ]]; then
-    CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.wants=kernel-command-line.target"
+    CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.run_success_action=reboot systemd.run_failure_action=reboot systemd.unit=kernel-command-line.target"
 fi
 printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
 
