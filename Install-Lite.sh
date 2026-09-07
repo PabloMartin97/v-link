@@ -192,8 +192,8 @@ select_install_source() {
     local choice=""
 
     printf '\nChoose what V-Link source to install:\n'
-    printf '  1) Latest published release  [recommended for normal use]\n'
-    printf '  2) GitHub branch             [development / testing]\n'
+    printf '  1) GitHub branch             [recommended for development / testing]\n'
+    printf '  2) Latest published release  [packaged release, when available]\n'
     if [[ -n "$local_checkout" ]]; then
         printf '  3) This local checkout       [%s]\n' "$local_checkout"
     fi
@@ -203,12 +203,12 @@ select_install_source() {
         [[ -n "$choice" ]] || choice=1
         case "$choice" in
             1)
-                SOURCE_DIR=""
-                SOURCE_REF=""
+                select_github_branch
                 return
                 ;;
             2)
-                select_github_branch
+                SOURCE_DIR=""
+                SOURCE_REF=""
                 return
                 ;;
             3)
@@ -541,6 +541,9 @@ if [[ "$ASSUME_YES" != true ]]; then
 elif [[ "$SOURCE_CHOICE_EXPLICIT" != true && -n "$LOCAL_SOURCE_CANDIDATE" ]]; then
     SOURCE_DIR="$LOCAL_SOURCE_CANDIDATE"
 fi
+
+[[ -z "$LIN_PORT" || "$CONFIGURE_HARDWARE" == true ]] || \
+    die "--lin-port requires hardware mode"
 
 if [[ -n "$SOURCE_DIR" ]]; then
     SOURCE_DIR="$(realpath -e "$SOURCE_DIR")"
