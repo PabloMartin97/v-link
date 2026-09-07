@@ -1,0 +1,35 @@
+name: Validate first-boot files
+
+on:
+  push:
+    branches:
+      - little-os-test
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: little-os-test
+          fetch-depth: 0
+      - name: Validate scripts and clean helper workflow
+        run: |
+          set -Eeuo pipefail
+          bash -n Install-Lite.sh
+          bash -n V-Link-FirstBoot.sh
+          bash -n Prepare-V-Link-SD.command
+          bash Install-Lite.sh --help >/tmp/help.txt
+          grep -q -- '--first-boot' /tmp/help.txt
+          grep -q 'INTERNET CONNECTION REQUIRED' Install-Lite.sh
+          grep -q 'systemd.run=/boot/V-Link-FirstBoot.sh' Prepare-V-Link-SD.command
+          grep -q 'ExecStart=/boot/firmware/Install-Lite.sh --first-boot' V-Link-FirstBoot.sh
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/validate-firstboot-files.yml
+          git commit -m "Remove one-off first-boot validation workflow"
+          git push origin HEAD:little-os-test
