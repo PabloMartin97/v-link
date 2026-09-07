@@ -1,0 +1,142 @@
+name: Patch first-boot installer mode
+
+on:
+  push:
+    branches:
+      - little-os-test
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: little-os-test
+          fetch-depth: 0
+
+      - name: Patch and validate first-boot installer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('Install-Lite.sh')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected one match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'ASSUME_YES=false\nCONFIGURE_HARDWARE=true\nHARDWARE_CHOICE_EXPLICIT=false\n',
+              'ASSUME_YES=false\nCONFIGURE_HARDWARE=true\nFIRST_BOOT_MODE=false\nHARDWARE_CHOICE_EXPLICIT=false\n',
+              'first boot state',
+          )
+
+          replace_once(
+              '  --no-reboot           Do not reboot when installation finishes.\n  -h, --help            Show this help.\n',
+              '  --no-reboot           Do not reboot when installation finishes.\n  --first-boot          First-boot mode used by the prepared-SD launcher.\n  -h, --help            Show this help.\n',
+              'usage first boot option',
+          )
+
+          anchor = '''print_welcome() {\n    cat <<'EOF'\n\n============================================================\n                    V-Link Lite Installer\n============================================================\nThis installer configures Raspberry Pi OS Lite as a dedicated\nV-Link kiosk. You will be shown the source, hardware mode and\nimportant system changes before anything is installed.\nEOF\n}\n\n'''
+
+          helpers = r'''internet_available() {
+    timeout 6 bash -c 'exec 3<>/dev/tcp/api.github.com/443' >/dev/null 2>&1
+}
+
+wait_for_internet() {
+    local answer=""
+
+    cat <<'EOF'
+
+INTERNET CONNECTION REQUIRED
+  V-Link Lite downloads packages and, for development installs, source code
+  directly from GitHub. Connect Ethernet or configure Wi-Fi before continuing.
+EOF
+
+    while ! internet_available; do
+        printf '\nNo Internet connection detected.\n'
+        if command -v nmtui >/dev/null 2>&1; then
+            printf '  [Enter] Retry   [N] Network/Wi-Fi settings   [Q] Quit\n'
+        else
+            printf '  [Enter] Retry   [Q] Quit\n'
+        fi
+        read -r -p '> ' answer
+        case "$answer" in
+            [Nn])
+                if command -v nmtui >/dev/null 2>&1; then
+                    nmtui
+                else
+                    printf 'NetworkManager text UI is not available. Configure Wi-Fi in Raspberry Pi Imager or use Ethernet.\n'
+                fi
+                ;;
+            [Qq]) die "installation cancelled; Internet is required" ;;
+            *) ;;
+        esac
+    done
+
+    printf '\nInternet connection OK.\n'
+}
+
+cleanup_first_boot_stage() {
+    log "Removing temporary first-boot installer files"
+    systemctl disable v-link-firstboot.service >/dev/null 2>&1 || true
+    rm -f -- /etc/systemd/system/v-link-firstboot.service
+    rm -f -- \
+        /boot/firmware/Install-Lite.sh \
+        /boot/firmware/V-Link-FirstBoot.sh \
+        /boot/firmware/v-link-firstboot.conf \
+        /boot/Install-Lite.sh \
+        /boot/V-Link-FirstBoot.sh \
+        /boot/v-link-firstboot.conf
+    systemctl daemon-reload
+}
+
+'''
+          replace_once(anchor, anchor + helpers, 'network and cleanup helpers')
+
+          replace_once(
+              '''        --no-reboot)\n            REBOOT=false\n            ;;\n        -h|--help)\n''',
+              '''        --no-reboot)\n            REBOOT=false\n            ;;\n        --first-boot)\n            FIRST_BOOT_MODE=true\n            ;;\n        -h|--help)\n''',
+              'parser first boot option',
+          )
+
+          replace_once(
+              '''if [[ "$ASSUME_YES" != true ]]; then\n    print_welcome\n    if [[ "$SOURCE_CHOICE_EXPLICIT" != true ]]; then\n''',
+              '''if [[ "$ASSUME_YES" != true ]]; then\n    print_welcome\n    wait_for_internet\n    if [[ "$SOURCE_CHOICE_EXPLICIT" != true ]]; then\n''',
+              'interactive internet preflight',
+          )
+
+          replace_once(
+              '''log "Installation complete"\nprintf 'User:        %s\\n' "$TARGET_USER"\n''',
+              '''if [[ "$FIRST_BOOT_MODE" == true ]]; then\n    cleanup_first_boot_stage\nfi\n\nlog "Installation complete"\nprintf 'User:        %s\\n' "$TARGET_USER"\n''',
+              'successful first boot cleanup',
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          bash -n Install-Lite.sh
+          bash Install-Lite.sh --help >/tmp/help.txt
+          grep -q -- '--first-boot' /tmp/help.txt
+          grep -q 'INTERNET CONNECTION REQUIRED' Install-Lite.sh
+          grep -q 'cleanup_first_boot_stage' Install-Lite.sh
+          bash -n V-Link-FirstBoot.sh
+          bash -n Prepare-V-Link-SD.command
+
+          git rm .github/workflows/patch-firstboot-installer.yml
+          git add Install-Lite.sh V-Link-FirstBoot.sh Prepare-V-Link-SD.command
+          git commit -m "Add automatic first-boot Lite installation flow"
+          git push origin HEAD:little-os-test
