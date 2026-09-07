@@ -6,6 +6,7 @@ SOURCE_BRANCH="little-os-test"
 INSTALLER_NAME="Install-Lite.sh"
 BOOTSTRAP_NAME="V-Link-FirstBoot.sh"
 CONFIG_NAME="v-link-firstboot.conf"
+DEFAULT_BOOT_RUNTIME="/boot/firmware"
 
 pause_and_exit() {
     local status="${1:-0}"
@@ -61,7 +62,7 @@ printf '\nSelected: %s\n' "$BOOT_VOLUME"
 
 CMDLINE="$BOOT_VOLUME/cmdline.txt"
 ALREADY_PREPARED=false
-if grep -q 'systemd.run=/boot/V-Link-FirstBoot.sh' "$CMDLINE" || \
+if grep -Eq 'systemd\.run=/boot(/firmware)?/V-Link-FirstBoot\.sh' "$CMDLINE" || \
         [[ -f "$BOOT_VOLUME/$CONFIG_NAME" && -f "$CMDLINE.v-link-prep.bak" ]]; then
     ALREADY_PREPARED=true
     printf '\nUpdating an already prepared V-Link SD card.\n'
@@ -84,6 +85,11 @@ cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME"
 chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/null || true
 
 CMDLINE_TEXT="$(tr -d '\r\n' <"$CMDLINE")"
+FIRSTRUN_RUNTIME="$(grep -oE 'systemd\.run=/boot(/firmware)?/firstrun\.sh' "$CMDLINE" | head -n1 | cut -d= -f2- || true)"
+if [[ -z "$FIRSTRUN_RUNTIME" ]]; then
+    FIRSTRUN_RUNTIME="$DEFAULT_BOOT_RUNTIME/firstrun.sh"
+fi
+BOOTSTRAP_RUNTIME="$(dirname -- "$FIRSTRUN_RUNTIME")/$BOOTSTRAP_NAME"
 CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
     -e 's/(^| )systemd\.run=[^ ]+//g' \
     -e 's/(^| )systemd\.run_success_action=[^ ]+//g' \
@@ -94,20 +100,21 @@ CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
     -e 's/^ //' \
     -e 's/ $//')"
 
-if [[ -f "$BOOT_VOLUME/firstrun.sh" && "$CMDLINE_TEXT" != *"systemd.run=/boot/firstrun.sh"* ]]; then
-    CMDLINE_TEXT+=" systemd.run=/boot/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
+if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
+    CMDLINE_TEXT+=" systemd.run=$FIRSTRUN_RUNTIME systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
 elif [[ ! -f "$BOOT_VOLUME/firstrun.sh" ]]; then
-    CMDLINE_TEXT+=" systemd.run=/boot/V-Link-FirstBoot.sh systemd.run_success_action=reboot systemd.run_failure_action=reboot systemd.unit=kernel-command-line.target"
+    BOOTSTRAP_RUNTIME="$DEFAULT_BOOT_RUNTIME/$BOOTSTRAP_NAME"
+    CMDLINE_TEXT+=" systemd.run=$BOOTSTRAP_RUNTIME systemd.run_success_action=reboot systemd.run_failure_action=reboot systemd.unit=kernel-command-line.target"
 fi
 printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
 
 if [[ -f "$BOOT_VOLUME/firstrun.sh" ]] && \
-        ! grep -qFx '/bin/bash /boot/V-Link-FirstBoot.sh' "$BOOT_VOLUME/firstrun.sh"; then
+        ! grep -Eq '^/bin/bash /boot(/firmware)?/V-Link-FirstBoot\.sh$' "$BOOT_VOLUME/firstrun.sh"; then
     FIRSTRUN_TEMP="$TMPDIR_VLINK/firstrun.sh"
-    awk '
-        /^rm -f \/boot\/firstrun\.sh$/ && !inserted {
+    awk -v bootstrap="$BOOTSTRAP_RUNTIME" '
+        /^rm -f \/boot(\/firmware)?\/firstrun\.sh$/ && !inserted {
             print "# Stage the V-Link installer for the next normal boot."
-            print "/bin/bash /boot/V-Link-FirstBoot.sh"
+            print "/bin/bash " bootstrap
             inserted=1
         }
         { print }

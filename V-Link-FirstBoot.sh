@@ -26,12 +26,12 @@ die() {
 }
 
 RUNNING_FROM_CMDLINE=false
-if grep -q 'systemd.run=/boot/V-Link-FirstBoot.sh' /proc/cmdline; then
+if grep -Eq 'systemd\.run=/boot(/firmware)?/V-Link-FirstBoot\.sh' /proc/cmdline; then
     RUNNING_FROM_CMDLINE=true
     CMDLINE_FILE="$BOOT_ROOT/cmdline.txt"
     [[ -f "$CMDLINE_FILE" ]] || die "could not locate the boot cmdline.txt"
     sed -E -i \
-        's/(^| )systemd\.run=\/boot\/V-Link-FirstBoot\.sh//g; s/(^| )systemd\.run_success_action=[^ ]+//g; s/(^| )systemd\.run_failure_action=[^ ]+//g; s/(^| )systemd\.unit=kernel-command-line\.target//g; s/(^| )systemd\.wants=kernel-command-line\.target//g; s/  +/ /g; s/^ //; s/ $//' \
+        's#(^| )systemd\.run=/boot(/firmware)?/V-Link-FirstBoot\.sh##g; s/(^| )systemd\.run_success_action=[^ ]+//g; s/(^| )systemd\.run_failure_action=[^ ]+//g; s/(^| )systemd\.unit=kernel-command-line\.target//g; s/(^| )systemd\.wants=kernel-command-line\.target//g; s/  +/ /g; s/^ //; s/ $//' \
         "$CMDLINE_FILE"
 fi
 
