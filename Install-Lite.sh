@@ -12,6 +12,7 @@ readonly CONFIG_END="# END V-LINK LITE"
 
 ASSUME_YES=false
 CONFIGURE_HARDWARE=true
+FIRST_BOOT_MODE=false
 HARDWARE_CHOICE_EXPLICIT=false
 SOURCE_CHOICE_EXPLICIT=false
 REBOOT=true
@@ -84,6 +85,7 @@ Options:
   --hardware            Configure V-Link HAT/CAN/UART/GPIO without asking.
   --no-hardware         UI-only mode; skip overlays, CAN, UART, GPIO and udev.
   --no-reboot           Do not reboot when installation finishes.
+  --first-boot          First-boot mode used by the prepared-SD launcher.
   -h, --help            Show this help.
 
 Without --yes, --ref/--source-dir and --hardware/--no-hardware, the installer
@@ -122,6 +124,58 @@ This installer configures Raspberry Pi OS Lite as a dedicated
 V-Link kiosk. You will be shown the source, hardware mode and
 important system changes before anything is installed.
 EOF
+}
+
+internet_available() {
+    timeout 6 bash -c 'exec 3<>/dev/tcp/api.github.com/443' >/dev/null 2>&1
+}
+
+wait_for_internet() {
+    local answer=""
+
+    cat <<'EOF'
+
+INTERNET CONNECTION REQUIRED
+  V-Link Lite downloads packages and, for development installs, source code
+  directly from GitHub. Connect Ethernet or configure Wi-Fi before continuing.
+EOF
+
+    while ! internet_available; do
+        printf '\nNo Internet connection detected.\n'
+        if command -v nmtui >/dev/null 2>&1; then
+            printf '  [Enter] Retry   [N] Network/Wi-Fi settings   [Q] Quit\n'
+        else
+            printf '  [Enter] Retry   [Q] Quit\n'
+        fi
+        read -r -p '> ' answer
+        case "$answer" in
+            [Nn])
+                if command -v nmtui >/dev/null 2>&1; then
+                    nmtui
+                else
+                    printf 'NetworkManager text UI is not available. Configure Wi-Fi in Raspberry Pi Imager or use Ethernet.\n'
+                fi
+                ;;
+            [Qq]) die "installation cancelled; Internet is required" ;;
+            *) ;;
+        esac
+    done
+
+    printf '\nInternet connection OK.\n'
+}
+
+cleanup_first_boot_stage() {
+    log "Removing temporary first-boot installer files"
+    systemctl disable v-link-firstboot.service >/dev/null 2>&1 || true
+    rm -f -- /etc/systemd/system/v-link-firstboot.service
+    rm -f -- \
+        /boot/firmware/Install-Lite.sh \
+        /boot/firmware/V-Link-FirstBoot.sh \
+        /boot/firmware/v-link-firstboot.conf \
+        /boot/Install-Lite.sh \
+        /boot/V-Link-FirstBoot.sh \
+        /boot/v-link-firstboot.conf
+    systemctl daemon-reload
 }
 
 fetch_github_branch_names() {
@@ -460,6 +514,9 @@ while (($#)); do
         --no-reboot)
             REBOOT=false
             ;;
+        --first-boot)
+            FIRST_BOOT_MODE=true
+            ;;
         -h|--help)
             usage
             exit 0
@@ -530,6 +587,7 @@ fi
 
 if [[ "$ASSUME_YES" != true ]]; then
     print_welcome
+    wait_for_internet
     if [[ "$SOURCE_CHOICE_EXPLICIT" != true ]]; then
         select_install_source "$LOCAL_SOURCE_CANDIDATE"
     fi
@@ -1216,6 +1274,10 @@ if [[ "$VENV_TRANSACTION" == true ]]; then
     rm -rf -- "$VENV_BACKUP"
     VENV_BACKUP=""
     VENV_TRANSACTION=false
+fi
+
+if [[ "$FIRST_BOOT_MODE" == true ]]; then
+    cleanup_first_boot_stage
 fi
 
 log "Installation complete"
