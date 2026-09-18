@@ -94,11 +94,11 @@ find "$RELEASE_DIR/backend" -type d -name __pycache__ -prune -exec rm -rf -- {} 
 cp -p "$SCRIPT_DIR/V-Link.py" "$RELEASE_DIR/V-Link.py"
 cp -p "$SCRIPT_DIR/requirements.txt" "$RELEASE_DIR/requirements.txt"
 cp -p "$SCRIPT_DIR/Install.sh" "$RELEASE_DIR/Install.sh"
-cp -p "$SCRIPT_DIR/Install-Lite.sh" "$RELEASE_DIR/Install-Lite.sh"
+cp -p "$SCRIPT_DIR/lite/Install-Lite.sh" "$RELEASE_DIR/Install-Lite.sh"
 cp -p "$SCRIPT_DIR/Uninstall.sh" "$RELEASE_DIR/Uninstall.sh"
 cp -p "$SCRIPT_DIR/Update.sh" "$RELEASE_DIR/Update.sh"
 cp -p "$SCRIPT_DIR/Patch.sh" "$RELEASE_DIR/Patch.sh"
-cp -p "$SCRIPT_DIR/Check-Lite.sh" "$RELEASE_DIR/Check-Lite.sh"
+cp -p "$SCRIPT_DIR/lite/Check-Lite.sh" "$RELEASE_DIR/Check-Lite.sh"
 
 echo "Creating and validating V-Link.zip..."
 (

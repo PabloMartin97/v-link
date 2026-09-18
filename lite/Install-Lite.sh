@@ -253,9 +253,14 @@ EOF
 }
 
 cleanup_first_boot_stage() {
-    log "Removing temporary first-boot installer files"
+    log "Scheduling first-boot file cleanup for the next normal boot"
     systemctl disable v-link-firstboot.service >/dev/null 2>&1 || true
     systemctl disable v-link-firstboot-wait.service >/dev/null 2>&1 || true
+
+    cat >/usr/local/sbin/v-link-firstboot-cleanup <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
     rm -f -- \
         /etc/systemd/system/v-link-firstboot.service \
         /etc/systemd/system/v-link-firstboot-wait.service \
@@ -269,7 +274,32 @@ cleanup_first_boot_stage() {
         /boot/Install-Lite.sh \
         /boot/V-Link-FirstBoot.sh \
         /boot/v-link-firstboot.conf
+rm -f -- \
+    /etc/systemd/system/multi-user.target.wants/v-link-firstboot-cleanup.service \
+    /etc/systemd/system/v-link-firstboot-cleanup.service
+systemctl daemon-reload || true
+
+# This must be the final command: the helper may safely remove itself only
+# after systemd has finished reading every preceding cleanup instruction.
+exec rm -f -- "$0"
+EOF
+    chmod 0755 /usr/local/sbin/v-link-firstboot-cleanup
+
+    cat >/etc/systemd/system/v-link-firstboot-cleanup.service <<'EOF'
+[Unit]
+Description=Remove the completed V-Link first-boot installer
+After=local-fs.target
+Before=lightdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/v-link-firstboot-cleanup
+
+[Install]
+WantedBy=multi-user.target
+EOF
     systemctl daemon-reload
+    systemctl enable v-link-firstboot-cleanup.service >/dev/null
 }
 
 fetch_github_branch_names() {
@@ -451,13 +481,16 @@ validate_source() {
     local required
 
     for required in \
-        V-Link.py requirements.txt Check-Lite.sh Update.sh \
+        V-Link.py requirements.txt Update.sh \
         backend/server.py \
         resources/dtoverlays/v-link.dtbo \
         resources/dtoverlays/mcp2515-can1.dtbo \
         resources/dtoverlays/mcp2515-can2.dtbo; do
         [[ -e "$source/$required" ]] || die "source is incomplete: missing $required"
     done
+
+    [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
+        die "source is incomplete: missing Check-Lite.sh"
 
     if [[ ! -f "$source/frontend/dist/index.html" && ! -f "$source/frontend/package.json" ]]; then
         die "source is incomplete: frontend/dist/index.html or frontend/package.json is required"
@@ -681,8 +714,13 @@ log "Detected $MODEL"
 # Detect a local checkout, but in interactive mode let the user choose whether
 # to use it. Non-interactive behavior stays compatible with the old installer.
 LOCAL_SOURCE_CANDIDATE=""
-if [[ -z "$SOURCE_DIR" && -z "$SOURCE_REF" && -f "$SCRIPT_DIR/V-Link.py" && -d "$SCRIPT_DIR/frontend" ]]; then
-    LOCAL_SOURCE_CANDIDATE="$SCRIPT_DIR"
+if [[ -z "$SOURCE_DIR" && -z "$SOURCE_REF" ]]; then
+    for source_candidate in "$SCRIPT_DIR" "$SCRIPT_DIR/.."; do
+        if [[ -f "$source_candidate/V-Link.py" && -d "$source_candidate/frontend" ]]; then
+            LOCAL_SOURCE_CANDIDATE="$(realpath -e "$source_candidate")"
+            break
+        fi
+    done
 fi
 
 if [[ "$ASSUME_YES" != true ]]; then
@@ -902,13 +940,20 @@ else
     replace_app_directory "$SOURCE_DIR/backend" "$APP_DIR/backend"
     replace_app_directory "$SOURCE_DIR/frontend/dist" "$APP_DIR/frontend/dist"
     replace_app_directory "$SOURCE_DIR/resources/dtoverlays" "$APP_DIR/resources/dtoverlays"
-    for optional_file in Update.sh Patch.sh Check-Lite.sh; do
+    for optional_file in Update.sh Patch.sh; do
         if [[ -f "$SOURCE_DIR/$optional_file" ]]; then
             install_app_file "$SOURCE_DIR/$optional_file" "$APP_DIR/$optional_file" 0755
         else
             remove_app_path "$APP_DIR/$optional_file"
         fi
     done
+    if [[ -f "$SOURCE_DIR/Check-Lite.sh" ]]; then
+        install_app_file "$SOURCE_DIR/Check-Lite.sh" "$APP_DIR/Check-Lite.sh" 0755
+    elif [[ -f "$SOURCE_DIR/lite/Check-Lite.sh" ]]; then
+        install_app_file "$SOURCE_DIR/lite/Check-Lite.sh" "$APP_DIR/Check-Lite.sh" 0755
+    else
+        remove_app_path "$APP_DIR/Check-Lite.sh"
+    fi
 fi
 
 if [[ "$SOURCE_IS_APP" != true ]]; then
@@ -996,6 +1041,29 @@ for group in audio video render input plugdev dialout gpio i2c spi; do
         usermod -aG "$group" "$TARGET_USER"
     fi
 done
+
+log "Authorizing supported CarPlay dongles for the V-Link kiosk"
+cat >/etc/udev/rules.d/41-v-link-carplay.rules <<'EOF'
+SUBSYSTEM=="usb", ATTR{idVendor}=="1314", ATTR{idProduct}=="1520", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="1314", ATTR{idProduct}=="1521", MODE="0660", GROUP="plugdev"
+EOF
+
+install -d -m 0755 /etc/chromium/policies/managed
+cat >/etc/chromium/policies/managed/v-link-webusb.json <<'EOF'
+{
+  "WebUsbAllowDevicesForUrls": [
+    {
+      "devices": [
+        { "vendor_id": 4884, "product_id": 5408 },
+        { "vendor_id": 4884, "product_id": 5409 }
+      ],
+      "urls": [ "http://localhost:4001" ]
+    }
+  ]
+}
+EOF
+chmod 0644 /etc/chromium/policies/managed/v-link-webusb.json
+udevadm control --reload-rules
 
 log "Configuring graphical autologin"
 install -d /etc/lightdm/lightdm.conf.d
@@ -1226,7 +1294,6 @@ i2c-dev
 EOF
 
     cat >/etc/udev/rules.d/42-v-link.rules <<'EOF'
-SUBSYSTEM=="usb", ATTR{idVendor}=="1314", ATTR{idProduct}=="152*", MODE="0660", GROUP="plugdev"
 KERNEL=="ttyS0", MODE="0660", GROUP="plugdev"
 KERNEL=="ttyAMA0", MODE="0660", GROUP="plugdev"
 KERNEL=="ttyAMA2", MODE="0660", GROUP="plugdev"

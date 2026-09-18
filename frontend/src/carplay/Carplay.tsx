@@ -474,7 +474,11 @@ function Carplay({ command, commandCounter }: CarplayProps) {
 
   const checkDevice = useCallback(
     async (request: boolean = false) => {
-      const device = request ? await requestDevice() : await findDevice()
+      // Managed kiosk installations pre-authorize the supported dongles in
+      // Chromium. Prefer that device so the Pair action does not open the
+      // WebUSB chooser; keep requestDevice as a fallback for other installs.
+      const authorizedDevice = await findDevice()
+      const device = authorizedDevice ?? (request ? await requestDevice() : null)
       appUpdate((state) => {
         state.system.carplay.detectionComplete = true
       })

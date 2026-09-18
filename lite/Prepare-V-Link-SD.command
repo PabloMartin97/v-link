@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 REPOSITORY="PabloMartin97/v-link"
 SOURCE_BRANCH="little-os-test"
+SOURCE_DIRECTORY="lite"
 INSTALLER_NAME="Install-Lite.sh"
 BOOTSTRAP_NAME="V-Link-FirstBoot.sh"
 CONFIG_NAME="v-link-firstboot.conf"
@@ -88,10 +89,10 @@ if [[ -f "$SCRIPT_DIR/$INSTALLER_NAME" && -f "$SCRIPT_DIR/$BOOTSTRAP_NAME" ]]; t
 else
     printf '\nDownloading the current V-Link first-boot files...\n'
     /usr/bin/curl -fL --retry 3 \
-        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$INSTALLER_NAME" \
+        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$SOURCE_DIRECTORY/$INSTALLER_NAME" \
         -o "$TMPDIR_VLINK/$INSTALLER_NAME" || fail "Could not download $INSTALLER_NAME"
     /usr/bin/curl -fL --retry 3 \
-        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$BOOTSTRAP_NAME" \
+        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$SOURCE_DIRECTORY/$BOOTSTRAP_NAME" \
         -o "$TMPDIR_VLINK/$BOOTSTRAP_NAME" || fail "Could not download $BOOTSTRAP_NAME"
     FILE_SOURCE="GitHub branch $SOURCE_BRANCH"
 fi

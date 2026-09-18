@@ -152,6 +152,21 @@ else
     fail "missing /usr/share/wayland-sessions/labwc.desktop"
 fi
 
+if [[ -f /etc/udev/rules.d/41-v-link-carplay.rules ]]; then
+    pass "CarPlay dongle USB permissions are installed"
+else
+    fail "missing CarPlay dongle USB permissions"
+fi
+
+WEBUSB_POLICY=/etc/chromium/policies/managed/v-link-webusb.json
+if [[ -f "$WEBUSB_POLICY" ]] && \
+   grep -qs '"WebUsbAllowDevicesForUrls"' "$WEBUSB_POLICY" && \
+   grep -qs '"http://localhost:4001"' "$WEBUSB_POLICY"; then
+    pass "Chromium automatically authorizes supported dongles for V-Link"
+else
+    fail "missing or invalid V-Link Chromium WebUSB policy"
+fi
+
 for required_group in audio video render input; do
     if id -nG "$TARGET_USER" | tr ' ' '\n' | grep -qx "$required_group"; then
         pass "$TARGET_USER belongs to $required_group"

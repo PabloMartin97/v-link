@@ -66,7 +66,7 @@ Until a release is published, the test branch can be installed directly after
 that branch has been pushed to GitHub:
 
 ```sh
-curl -fLO https://raw.githubusercontent.com/PabloMartin97/v-link/little-os-test/Install-Lite.sh
+curl -fLO https://raw.githubusercontent.com/PabloMartin97/v-link/little-os-test/lite/Install-Lite.sh
 chmod +x Install-Lite.sh
 sudo ./Install-Lite.sh --ref little-os-test --yes
 ```
