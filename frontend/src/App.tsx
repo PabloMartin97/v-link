@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react';
 
 import { theme } from './theme/Theme';
 import styled, { ThemeProvider, StyleSheetManager } from 'styled-components';
@@ -11,17 +11,17 @@ import { Socket } from './socket/Socket';
 
 import Init from './app/Init';
 import Splash from './app/Splash';
-import Content from './app/Content';
 import { Modal } from './app/components/Modal';
 import { LocalMediaProvider } from './app/pages/music/LocalMediaProvider';
 import { sendLocalMediaCommand } from './app/pages/music/localMediaCommands';
 import { routeHardwareAction } from './mediaActions';
 
-import Carplay from './carplay/ProjectionRuntime';
-import Cardata from './cardata/Cardata';
-
 import './App.css';
 import './theme/fonts.module.css';
+
+const Content = lazy(() => import('./app/Content'));
+const ProjectionRuntime = lazy(() => import('./carplay/ProjectionRuntime'));
+const Cardata = lazy(() => import('./cardata/Cardata'));
 
 const AppContainer = styled.div`
   position: absolute;
@@ -172,13 +172,18 @@ function App() {
 
           {systemSettings.startedUp && ready ? (
             <>
-              {<Carplay
-                commandCounter={commandCounter}
-                command={keyCommand}
-              />}
-
-              < Cardata />
-              <Content />
+              <Suspense fallback={null}>
+                <ProjectionRuntime
+                  commandCounter={commandCounter}
+                  command={keyCommand}
+                />
+              </Suspense>
+              <Suspense fallback={null}>
+                <Cardata />
+              </Suspense>
+              <Suspense fallback={null}>
+                <Content />
+              </Suspense>
             </>
           ) : (
             <></>

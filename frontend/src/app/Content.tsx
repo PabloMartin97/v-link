@@ -1,20 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
-import React from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import styled, { css } from 'styled-components';
 import { Fade as FadeBase } from '@/theme/styles/Effects';
 const Fade = FadeBase as React.ComponentType<{ className?: string; fadeLength?: number; children?: React.ReactNode }>;
 
 import { APP } from '@/store/Store';
 
-import Dashboard from './pages/dashboard/Dashboard';
-import Music from './pages/music/Music';
-import Carplay from './pages/carplay/Carplay';
 import Rearcam from './pages/rearcam/Rearcam';
-import Settings from './pages/settings/Settings';
 import NavBar from '@/app/sidebars/NavBar';
 import SideBar from '@/app/sidebars/SideBar';
 import TopBar from '@/app/sidebars/TopBar';
 import { useNamespaces } from '@/socket/Namespaces';
+
+const viewMap: Record<string, React.ComponentType> = {
+  Dashboard: lazy(() => import('./pages/dashboard/Dashboard')),
+  Music: lazy(() => import('./pages/music/Music')),
+  Carplay: lazy(() => import('./pages/carplay/Carplay')),
+  Rearcam,
+  Settings: lazy(() => import('./pages/settings/Settings')),
+};
 
 type SideBarsSettings = { topBarHeight: { value: number }; navBarHeight: { value: number } };
 type InterfaceSettings = { carplay: boolean; navBar: boolean; content: boolean };
@@ -132,8 +135,6 @@ const NavBlocker = styled.div<NavBlockerProps>`
 `;
 
 const Content = () => {
-  const viewMap = { Dashboard, Music, Carplay, Rearcam, Settings };
-
   const appUpdate         = APP((state) => state.update);
   const keyStroke         = APP((state) => state.keyStroke);
   const switchPage        = APP((state) => state.switchPage);
@@ -333,9 +334,8 @@ const Content = () => {
   }, []);
 
   const renderView = () => {
-    const vm = viewMap as Record<string, React.ComponentType>;
-    const key = vm[currentView] ? currentView : 'Dashboard';
-    const Component = vm[key];
+    const key = viewMap[currentView] ? currentView : 'Dashboard';
+    const Component = viewMap[key];
     if (!Component) {
       console.error(`Component for view "${currentView}" is undefined.`);
       return null;
@@ -406,7 +406,9 @@ const Content = () => {
             >
               <Page>
                 <Fade className={fadePage} fadeLength={fadeLength / 1000}>
-                  {renderView()}
+                  <Suspense fallback={null}>
+                    {renderView()}
+                  </Suspense>
                 </Fade>
                 <NavBlocker
                   sidebarSettings={sidebarSettings ?? { topBarHeight: { value: 0 }, navBarHeight: { value: 0 } }}
