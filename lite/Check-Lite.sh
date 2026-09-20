@@ -375,16 +375,34 @@ if grep -qsF "ExecStartPre=$TARGET_HOME/.local/libexec/v-link-recover-update $AP
 else
     fail "v-link.service is missing interrupted-update recovery"
 fi
+if grep -qsFx "WorkingDirectory=$APP_DIR" "$SERVICE_FILE" && \
+   grep -qsF "ExecStart=$APP_DIR/venv/bin/python $APP_DIR/V-Link.py" "$SERVICE_FILE"; then
+    pass "v-link.service has the expected working directory and runtime command"
+else
+    fail "v-link.service is missing the expected working directory or runtime command"
+fi
 if [[ -L "$TARGET_HOME/.config/systemd/user/default.target.wants/v-link.service" ]]; then
     fail "v-link.service is enabled outside the labwc boot gate"
 else
     pass "v-link.service is not independently enabled at user login"
 fi
-if command -v systemd-analyze >/dev/null 2>&1 && \
-   runuser -u "$TARGET_USER" -- systemd-analyze --user verify "$SERVICE_FILE" >/dev/null 2>&1; then
-    pass "v-link.service unit syntax is valid"
+if [[ "$PRE_REBOOT" == true ]]; then
+    warn "user service unit verification deferred until the user session exists"
+elif [[ ! -S "$RUNTIME_DIR/bus" ]]; then
+    fail "user session bus is unavailable; cannot verify v-link.service"
+elif ! command -v systemd-analyze >/dev/null 2>&1; then
+    fail "systemd-analyze is unavailable; cannot verify v-link.service"
 else
-    fail "v-link.service unit syntax is invalid or cannot be verified"
+    VERIFY_OUTPUT="$(runuser -u "$TARGET_USER" -- env \
+        "XDG_RUNTIME_DIR=$RUNTIME_DIR" \
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=$RUNTIME_DIR/bus" \
+        systemd-analyze --user --recursive-errors=no verify "$SERVICE_FILE" 2>&1)"
+    if [[ $? -eq 0 ]]; then
+        pass "v-link.service unit syntax is valid"
+    else
+        fail "v-link.service unit verification failed"
+        printf '    %s\n' "$VERIFY_OUTPUT"
+    fi
 fi
 
 if [[ -x "$APP_DIR/venv/bin/python" ]]; then
