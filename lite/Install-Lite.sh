@@ -110,6 +110,30 @@ log() {
     printf '\n[V-Link Lite] %s\n' "$*"
 }
 
+clear_screen() {
+    [[ -t 1 ]] || return 0
+
+    if command -v tput >/dev/null 2>&1 && \
+       [[ -n "${TERM:-}" && "${TERM:-}" != dumb ]]; then
+        if tput clear 2>/dev/null; then
+            return 0
+        fi
+    fi
+    printf '\033[2J\033[H'
+}
+
+show_phase() {
+    local step="$1"
+    local total="$2"
+    local title="$3"
+
+    clear_screen
+    printf '\n============================================================\n'
+    printf '                    V-Link Lite Installer\n'
+    printf '                    Step %s/%s — %s\n' "$step" "$total" "$title"
+    printf '============================================================\n\n'
+}
+
 die() {
     printf '\n[V-Link Lite] ERROR: %s\n' "$*" >&2
     exit 1
@@ -662,6 +686,8 @@ while (($#)); do
     shift
 done
 
+show_phase 1 7 "Setup"
+
 [[ -z "$SOURCE_DIR" || -z "$SOURCE_REF" ]] || \
     die "use either --source-dir or --ref, not both"
 if [[ -n "$SOURCE_DIR" || -n "$SOURCE_REF" ]]; then
@@ -830,6 +856,7 @@ else
     log "Remote preflight skipped because curl or python3 is unavailable; APT will install it"
 fi
 
+show_phase 2 7 "System packages"
 log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -853,6 +880,8 @@ fi
 
 systemctl enable lightdm.service
 systemctl set-default graphical.target
+
+show_phase 3 7 "V-Link source"
 
 if [[ -n "$SOURCE_REF" ]]; then
     log "Downloading source ref '$SOURCE_REF' from GitHub"
@@ -910,6 +939,9 @@ fi
 
 SOURCE_DIR="$(realpath -e "$SOURCE_DIR")"
 validate_source "$SOURCE_DIR"
+
+show_phase 4 7 "Frontend"
+
 if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     log "Building the frontend (this can take several minutes on a Pi 3)"
     [[ -f "$SOURCE_DIR/frontend/package.json" ]] || die "frontend source is unavailable for the required build"
@@ -929,6 +961,8 @@ if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
 else
     log "Using the existing frontend build"
 fi
+
+show_phase 5 7 "Runtime"
 
 log "Installing V-Link application files"
 [[ ! -L "$APP_DIR" ]] || die "$APP_DIR must not be a symbolic link"
@@ -1039,6 +1073,8 @@ else
     log "Reusing the verified Python environment"
     VENV_BACKUP=""
 fi
+
+show_phase 6 7 "System configuration"
 
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
@@ -1470,6 +1506,8 @@ fi
 
 systemctl daemon-reload
 
+show_phase 7 7 "Final checks"
+
 log "Running pre-reboot health checks"
 [[ -x "$APP_DIR/Check-Lite.sh" ]] || die "installed application is missing executable Check-Lite.sh"
 if ! "$APP_DIR/Check-Lite.sh" --user "$TARGET_USER" --pre-reboot; then
@@ -1491,7 +1529,16 @@ if [[ "$FIRST_BOOT_MODE" == true ]]; then
     cleanup_first_boot_stage
 fi
 
-log "Installation complete"
+clear_screen
+printf '\n============================================================\n'
+printf '                    V-Link Lite Installer\n'
+printf '                    Installation complete\n'
+printf '============================================================\n\n'
+printf '  ✓ V-Link installed\n'
+printf '  ✓ Frontend ready\n'
+printf '  ✓ Python environment ready\n'
+printf '  ✓ Kiosk configured\n'
+printf '  ✓ Health checks passed\n\n'
 printf 'User:        %s\n' "$TARGET_USER"
 printf 'Application: %s\n' "$APP_DIR"
 printf 'Display:     LightDM + labwc + Chromium kiosk\n'
