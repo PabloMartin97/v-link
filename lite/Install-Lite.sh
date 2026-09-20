@@ -35,6 +35,7 @@ NODE_TEMP=""
 NODE_STAGE=""
 NODE_BIN_DIR=""
 NODE_BUILD_PATH=""
+HELPER_STAGING=""
 VENV_BACKUP=""
 VENV_TRANSACTION=false
 APP_TRANSACTION=false
@@ -74,6 +75,7 @@ cleanup() {
     [[ -z "$VENV_WORK" || ! -d "$VENV_WORK" ]] || rm -rf -- "$VENV_WORK"
     [[ -z "$NODE_TEMP" || ! -d "$NODE_TEMP" ]] || rm -rf -- "$NODE_TEMP"
     [[ -z "$NODE_STAGE" || ! -d "$NODE_STAGE" ]] || rm -rf -- "$NODE_STAGE"
+    [[ -z "$HELPER_STAGING" || ! -e "$HELPER_STAGING" ]] || rm -f -- "$HELPER_STAGING"
 
     exit "$status"
 }
@@ -515,6 +517,9 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.sh; do
+        [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
+    done
 
     if [[ ! -f "$source/frontend/dist/index.html" && ! -f "$source/frontend/package.json" ]]; then
         die "source is incomplete: frontend/dist/index.html or frontend/package.json is required"
@@ -861,11 +866,16 @@ log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    labwc wtype wlr-randr lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
+    labwc wtype wlr-randr foot whiptail lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
-    libudev-dev build-essential can-utils iproute2 udisks2 udiskie
+    libudev-dev build-essential can-utils iproute2 network-manager udisks2 udiskie
+
+FOOT_VERSION="$(dpkg-query -W -f='${Version}' foot)" || die "installed foot package is unavailable"
+dpkg --compare-versions "$FOOT_VERSION" ge 1.13.1 || \
+    die "foot $FOOT_VERSION is too old for the verified Bookworm Setup options"
+command -v pw-dump >/dev/null 2>&1 || die "PipeWire pw-dump is required for Lite Setup audio selection"
 
 LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
 [[ -n "$LABWC_VERSION" ]] || die "could not determine the installed labwc version"
@@ -1083,6 +1093,19 @@ fi
 
 show_phase 6 7 "System configuration"
 
+log "Installing root-owned Lite maintenance helpers"
+install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
+for helper_spec in \
+    'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
+    'lite/V-Link-Lite-Setup.sh:/usr/local/bin/v-link-lite-setup'; do
+    HELPER_SOURCE="${helper_spec%%:*}"
+    HELPER_DESTINATION="${helper_spec#*:}"
+    HELPER_STAGING="$(mktemp "${HELPER_DESTINATION}.new.XXXXXX")"
+    install -o root -g root -m 0755 "$SOURCE_DIR/$HELPER_SOURCE" "$HELPER_STAGING"
+    mv -f -- "$HELPER_STAGING" "$HELPER_DESTINATION"
+    HELPER_STAGING=""
+done
+
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
     if getent group "$group" >/dev/null; then
@@ -1210,9 +1233,14 @@ Environment=PYTHONUNBUFFERED=1
 Environment=VLINK_MANAGED_CAN=1
 $LIN_ENVIRONMENT
 
-[Install]
-WantedBy=default.target
 EOF
+
+# The graphical boot gate is the only automatic starter of V-Link. Remove a
+# legacy user enable link if a previous installation created one.
+USER_SERVICE_LINK="$USER_CONFIG_DIR/systemd/user/default.target.wants/v-link.service"
+if [[ -L "$USER_SERVICE_LINK" ]]; then
+    rm -f -- "$USER_SERVICE_LINK"
+fi
 
 cat >"$USER_CONFIG_DIR/labwc/rc.xml" <<'EOF'
 <?xml version="1.0"?>
@@ -1236,8 +1264,11 @@ systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP 
 # Automount removable media within the kiosk user's graphical session.
 udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &
 
-# Start V-Link after Wayland, DBus, PipeWire and the user systemd manager exist.
-systemctl --user start v-link.service &
+# The foreground gate holds V-Link until its three-second timeout or Setup exit.
+# A confirmed reboot/shutdown skips the service launch.
+if /usr/local/libexec/v-link-lite-boot; then
+    systemctl --user start v-link.service &
+fi
 EOF
 
 chown -R "$TARGET_USER:$TARGET_GROUP" "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd"

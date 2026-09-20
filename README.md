@@ -86,6 +86,13 @@ wpctl status
 speaker-test -c 2 -t wav
 ```
 
+At startup, press **S** during the three-second V-Link Lite screen to open
+Setup before V-Link starts. The same maintenance menu is available later from
+a local terminal or SSH (`ssh -t user@host v-link-lite-setup`). It provides
+network (`nmtui`), audio, display and USB status, diagnostics, and V-Link
+service controls. Closing Setup with “Continue to V-Link” resumes normal
+startup; opening it manually does not stop a running V-Link service.
+
 On a Pi 3, the HAT setup assigns the good PL011 UART to RTI and disables the
 integrated Bluetooth controller. HDMI, analog and USB audio remain available;
 Bluetooth requires a USB adapter. Simultaneous RTI plus the LIN steering-wheel

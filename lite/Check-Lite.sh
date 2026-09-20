@@ -117,8 +117,29 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wtype wlr-randr lightdm pipewire wireplumber wpctl udiskie udisksctl; do
+for command_name in chromium labwc wtype wlr-randr foot whiptail lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
     check_command "$command_name"
+done
+FOOT_VERSION="$(dpkg-query -W -f='${Version}' foot 2>/dev/null || true)"
+if [[ -n "$FOOT_VERSION" ]] && dpkg --compare-versions "$FOOT_VERSION" ge 1.13.1; then
+    pass "foot $FOOT_VERSION supports the Lite Setup window options"
+else
+    fail "foot 1.13.1 or newer is required for the Lite Setup window"
+fi
+if command -v nmtui >/dev/null 2>&1; then
+    pass "nmtui is available for network configuration"
+else
+    warn "nmtui is unavailable; the Network summary still works"
+fi
+
+for helper in /usr/local/libexec/v-link-lite-boot /usr/local/bin/v-link-lite-setup; do
+    if [[ -f "$helper" && -x "$helper" ]] && \
+       [[ "$(stat -c '%u:%g' "$helper")" == '0:0' ]] && \
+       [[ "$(stat -c '%a' "$helper")" == 755 ]]; then
+        pass "$helper is installed root:root 0755"
+    else
+        fail "$helper is missing or has incorrect ownership/mode"
+    fi
 done
 
 for package_name in udisks2 udiskie; do
@@ -234,6 +255,19 @@ if [[ -f "$LABWC_AUTOSTART" ]] && awk '
 else
     fail "labwc autostart is missing the ordered wtype cursor shortcut"
 fi
+if [[ -f "$LABWC_AUTOSTART" ]] && awk '
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
+    /^udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &$/ { automounter = NR }
+    /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { starts++; started = NR }
+    /^fi$/ { if (gate && NR > gate) closed = NR }
+    END { exit !(imported && automounter > imported && gate > automounter &&
+                  started > gate && closed > started && starts == 1) }
+' "$LABWC_AUTOSTART"; then
+    pass "labwc boot gate runs before the single V-Link service start"
+else
+    fail "labwc boot gate is missing, unordered, or bypassed"
+fi
 if [[ -f "$LABWC_AUTOSTART" ]] && runuser -u "$TARGET_USER" -- test -x "$LABWC_AUTOSTART"; then
     pass "$TARGET_USER can execute labwc autostart"
 else
@@ -340,6 +374,17 @@ if grep -qsF "ExecStartPre=$TARGET_HOME/.local/libexec/v-link-recover-update $AP
     pass "interrupted updates are recovered before V-Link starts"
 else
     fail "v-link.service is missing interrupted-update recovery"
+fi
+if [[ -L "$TARGET_HOME/.config/systemd/user/default.target.wants/v-link.service" ]]; then
+    fail "v-link.service is enabled outside the labwc boot gate"
+else
+    pass "v-link.service is not independently enabled at user login"
+fi
+if command -v systemd-analyze >/dev/null 2>&1 && \
+   runuser -u "$TARGET_USER" -- systemd-analyze --user verify "$SERVICE_FILE" >/dev/null 2>&1; then
+    pass "v-link.service unit syntax is valid"
+else
+    fail "v-link.service unit syntax is invalid or cannot be verified"
 fi
 
 if [[ -x "$APP_DIR/venv/bin/python" ]]; then
