@@ -116,9 +116,18 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wlr-randr lightdm pipewire wireplumber wpctl; do
+for command_name in chromium labwc wtype wlr-randr lightdm pipewire wireplumber wpctl; do
     check_command "$command_name"
 done
+
+if command -v labwc >/dev/null 2>&1; then
+    LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
+    if [[ -n "$LABWC_VERSION" ]] && dpkg --compare-versions "$LABWC_VERSION" ge 0.8.4; then
+        pass "labwc $LABWC_VERSION supports HideCursor"
+    else
+        fail "labwc must be version 0.8.4 or newer for HideCursor (detected: ${LABWC_VERSION:-unknown})"
+    fi
+fi
 
 if [[ "$(systemctl get-default 2>/dev/null)" == graphical.target ]]; then
     pass "default boot target is graphical.target"
@@ -150,6 +159,63 @@ if [[ -f /usr/share/wayland-sessions/labwc.desktop ]]; then
     pass "LightDM labwc session is installed"
 else
     fail "missing /usr/share/wayland-sessions/labwc.desktop"
+fi
+
+LABWC_RC="$TARGET_HOME/.config/labwc/rc.xml"
+LABWC_AUTOSTART="$TARGET_HOME/.config/labwc/autostart"
+if [[ -f "$LABWC_RC" ]]; then
+    pass "labwc rc.xml is installed"
+    if python3 - "$LABWC_RC" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except (ET.ParseError, OSError):
+    raise SystemExit(1)
+
+if root.tag != 'labwc_config':
+    raise SystemExit(1)
+
+for binding in root.findall('./keyboard/keybind'):
+    actions = binding.findall('action')
+    if (binding.get('key') == 'A-W-h'
+            and len(actions) == 2
+            and actions[0].get('name') == 'HideCursor'
+            and actions[1].get('name') == 'WarpCursor'
+            and actions[1].get('x') == '-1'
+            and actions[1].get('y') == '-1'):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+        pass "labwc cursor keybind and actions are valid"
+    else
+        fail "labwc rc.xml is invalid or missing the HideCursor/WarpCursor keybind"
+    fi
+    if runuser -u "$TARGET_USER" -- test -r "$LABWC_RC"; then
+        pass "$TARGET_USER can read labwc rc.xml"
+    else
+        fail "$TARGET_USER cannot read labwc rc.xml"
+    fi
+else
+    fail "missing $LABWC_RC"
+fi
+
+if [[ -f "$LABWC_AUTOSTART" ]] && awk '
+    /^[[:space:]]*wtype[[:space:]]+-M[[:space:]]+alt[[:space:]]+-M[[:space:]]+logo[[:space:]]+-P[[:space:]]+h([[:space:]]|$)/ { if (!hide) hide = NR }
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { if (!imported) imported = NR }
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service([[:space:]]|$)/ { if (!started) started = NR }
+    END { exit !(hide && imported > hide && started > imported) }
+' "$LABWC_AUTOSTART"; then
+    pass "labwc autostart hides the cursor before V-Link starts"
+else
+    fail "labwc autostart is missing the ordered wtype cursor shortcut"
+fi
+if [[ -f "$LABWC_AUTOSTART" ]] && runuser -u "$TARGET_USER" -- test -x "$LABWC_AUTOSTART"; then
+    pass "$TARGET_USER can execute labwc autostart"
+else
+    fail "$TARGET_USER cannot execute labwc autostart"
 fi
 
 if [[ -f /etc/udev/rules.d/41-v-link-carplay.rules ]]; then

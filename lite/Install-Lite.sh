@@ -834,11 +834,16 @@ log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    labwc wlr-randr lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
+    labwc wtype wlr-randr lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
     libudev-dev build-essential can-utils iproute2
+
+LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
+[[ -n "$LABWC_VERSION" ]] || die "could not determine the installed labwc version"
+dpkg --compare-versions "$LABWC_VERSION" ge 0.8.4 || \
+    die "labwc $LABWC_VERSION does not support HideCursor (requires 0.8.4 or newer)"
 
 if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     log "Installing frontend build tools"
@@ -1166,7 +1171,22 @@ $LIN_ENVIRONMENT
 WantedBy=default.target
 EOF
 
+cat >"$USER_CONFIG_DIR/labwc/rc.xml" <<'EOF'
+<?xml version="1.0"?>
+<labwc_config>
+  <keyboard>
+    <keybind key="A-W-h">
+      <action name="HideCursor" />
+      <action name="WarpCursor" x="-1" y="-1" />
+    </keybind>
+  </keyboard>
+</labwc_config>
+EOF
+
 cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
+# Hide the pointer at kiosk startup. Moving a mouse makes it visible again.
+wtype -M alt -M logo -P h
+
 # Start V-Link after Wayland, DBus, PipeWire and the user systemd manager exist.
 systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 systemctl --user start v-link.service &
@@ -1174,6 +1194,7 @@ EOF
 
 chown -R "$TARGET_USER:$TARGET_GROUP" "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link.service"
+chmod 0644 "$USER_CONFIG_DIR/labwc/rc.xml"
 chmod 0755 "$USER_CONFIG_DIR/labwc/autostart"
 
 # The settings screen exposes only these two privileged power operations.
