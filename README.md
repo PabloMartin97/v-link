@@ -87,7 +87,7 @@ speaker-test -c 2 -t wav
 ```
 
 At startup, press **S** during the three-second V-Link Lite screen to open
-Setup before V-Link starts. The same maintenance menu is available later from
+Setup before V-Link starts. The persistent terminal menu is available later from
 a local terminal or SSH (`ssh -t user@host v-link-lite-setup`). It provides
 network (`nmtui`), audio, display and USB status, diagnostics, and V-Link
 service controls. Closing Setup with “Continue to V-Link” resumes normal

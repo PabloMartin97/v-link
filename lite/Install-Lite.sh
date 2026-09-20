@@ -517,7 +517,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.sh; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -866,7 +866,7 @@ log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    labwc wtype wlr-randr foot whiptail lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
+    labwc wtype wlr-randr foot lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
@@ -876,6 +876,7 @@ FOOT_VERSION="$(dpkg-query -W -f='${Version}' foot)" || die "installed foot pack
 dpkg --compare-versions "$FOOT_VERSION" ge 1.13.1 || \
     die "foot $FOOT_VERSION is too old for the verified Bookworm Setup options"
 command -v pw-dump >/dev/null 2>&1 || die "PipeWire pw-dump is required for Lite Setup audio selection"
+python3 -c 'import curses' >/dev/null 2>&1 || die "Python curses support is required for Lite Setup"
 
 LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
 [[ -n "$LABWC_VERSION" ]] || die "could not determine the installed labwc version"
@@ -1097,7 +1098,7 @@ log "Installing root-owned Lite maintenance helpers"
 install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
 for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
-    'lite/V-Link-Lite-Setup.sh:/usr/local/bin/v-link-lite-setup'; do
+    'lite/V-Link-Lite-Setup.py:/usr/local/bin/v-link-lite-setup'; do
     HELPER_SOURCE="${helper_spec%%:*}"
     HELPER_DESTINATION="${helper_spec#*:}"
     HELPER_STAGING="$(mktemp "${HELPER_DESTINATION}.new.XXXXXX")"

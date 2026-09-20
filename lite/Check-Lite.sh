@@ -117,9 +117,14 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wtype wlr-randr foot whiptail lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
+for command_name in chromium labwc wtype wlr-randr foot lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
     check_command "$command_name"
 done
+if runuser -u "$TARGET_USER" -- python3 -c 'import curses' >/dev/null 2>&1; then
+    pass "Python curses is available for the persistent Lite Setup interface"
+else
+    fail "Python curses is unavailable for Lite Setup"
+fi
 FOOT_VERSION="$(dpkg-query -W -f='${Version}' foot 2>/dev/null || true)"
 if [[ -n "$FOOT_VERSION" ]] && dpkg --compare-versions "$FOOT_VERSION" ge 1.13.1; then
     pass "foot $FOOT_VERSION supports the Lite Setup window options"
@@ -141,6 +146,20 @@ for helper in /usr/local/libexec/v-link-lite-boot /usr/local/bin/v-link-lite-set
         fail "$helper is missing or has incorrect ownership/mode"
     fi
 done
+if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
+   bash -n /usr/local/libexec/v-link-lite-boot >/dev/null 2>&1; then
+    pass "Lite boot gate shell syntax is valid"
+else
+    fail "Lite boot gate shell syntax is invalid"
+fi
+if [[ -f /usr/local/bin/v-link-lite-setup ]] && \
+   runuser -u "$TARGET_USER" -- python3 -c \
+       'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))' \
+       /usr/local/bin/v-link-lite-setup >/dev/null 2>&1; then
+    pass "Lite Setup Python syntax is valid"
+else
+    fail "Lite Setup Python syntax is invalid"
+fi
 
 for package_name in udisks2 udiskie; do
     if [[ "$(dpkg-query -W -f='${Status}' "$package_name" 2>/dev/null)" == 'install ok installed' ]]; then
