@@ -86,6 +86,7 @@ else
     APP_DIR="$TARGET_HOME/v-link"
 fi
 USER_ID="$(id -u "$TARGET_USER")"
+USER_GROUP_ID="$(id -g "$TARGET_USER")"
 RUNTIME_DIR="/run/user/$USER_ID"
 MODEL="unknown"
 
@@ -116,9 +117,30 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wtype wlr-randr lightdm pipewire wireplumber wpctl; do
+for command_name in chromium labwc wtype wlr-randr lightdm pipewire wireplumber wpctl udiskie udisksctl; do
     check_command "$command_name"
 done
+
+for package_name in udisks2 udiskie; do
+    if [[ "$(dpkg-query -W -f='${Status}' "$package_name" 2>/dev/null)" == 'install ok installed' ]]; then
+        pass "$package_name is installed"
+    else
+        fail "$package_name is not installed"
+    fi
+done
+
+if command -v udiskie >/dev/null 2>&1 && UDISKIE_HELP="$(udiskie --help 2>&1)"; then
+    pass "udiskie --help runs successfully"
+    for flag in --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt; do
+        if grep -Fq -- "$flag" <<<"$UDISKIE_HELP"; then
+            pass "udiskie supports $flag"
+        else
+            fail "udiskie does not support $flag"
+        fi
+    done
+else
+    fail "udiskie --help is unavailable"
+fi
 
 if command -v labwc >/dev/null 2>&1; then
     LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
@@ -216,6 +238,46 @@ if [[ -f "$LABWC_AUTOSTART" ]] && runuser -u "$TARGET_USER" -- test -x "$LABWC_A
     pass "$TARGET_USER can execute labwc autostart"
 else
     fail "$TARGET_USER cannot execute labwc autostart"
+fi
+
+UDISKIE_START='udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &'
+if [[ -f "$LABWC_AUTOSTART" ]] && grep -Fxq "$UDISKIE_START" "$LABWC_AUTOSTART" && awk '
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
+    /^udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &$/ { automounter = NR }
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service([[:space:]]|$)/ { started = NR }
+    END { exit !(imported && automounter > imported && started > automounter) }
+' "$LABWC_AUTOSTART"; then
+    pass "labwc starts udiskie before V-Link in the kiosk session"
+else
+    fail "labwc autostart is missing the ordered, headless udiskie launch"
+fi
+if [[ -f "$LABWC_AUTOSTART" ]] && \
+   [[ "$(stat -c '%u:%g' "$LABWC_AUTOSTART")" == "$USER_ID:$USER_GROUP_ID" ]] && \
+   [[ "$(stat -c '%a' "$LABWC_AUTOSTART")" == 755 ]]; then
+    pass "labwc autostart owner and mode are correct"
+else
+    fail "labwc autostart owner or mode is incorrect"
+fi
+if [[ -f "$LABWC_AUTOSTART" ]] && \
+   ! grep -Eq 'sudo[[:space:]]+mount|/dev/|/home/|/media/|/run/media/' "$LABWC_AUTOSTART"; then
+    pass "labwc automount has no manual mount command, device, or hardcoded user"
+else
+    fail "labwc automount contains a manual mount command, device, or hardcoded user"
+fi
+
+if [[ "$PRE_REBOOT" == true ]]; then
+    warn "UDisks and udiskie runtime checks deferred until reboot"
+else
+    if systemctl is-active --quiet udisks2.service; then
+        pass "UDisks daemon is active"
+    else
+        fail "UDisks daemon is not active"
+    fi
+    if pgrep -u "$TARGET_USER" -f '(^|[[:space:]])(/usr/bin/)?udiskie([[:space:]]|$)' >/dev/null 2>&1; then
+        pass "udiskie is running as $TARGET_USER"
+    else
+        fail "udiskie is not running as $TARGET_USER"
+    fi
 fi
 
 if [[ -f /etc/udev/rules.d/41-v-link-carplay.rules ]]; then

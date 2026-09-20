@@ -1,23 +1,50 @@
 import os
+import pwd
 
-from flask import Blueprint, abort, current_app, jsonify, request, send_file
+from flask import Blueprint, abort, jsonify, request, send_file
 
 
 media_api = Blueprint('media', __name__, url_prefix='/api/media')
 
 MEDIA_EXTENSIONS = {'.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.webm'}
-DEFAULT_MEDIA_ROOTS = ('~/Music', '/media', '/mnt')
+MEDIA_MOUNT_BASES = ('/media', '/run/media')
+
+
+def _media_user():
+    return pwd.getpwuid(os.geteuid())
+
+
+def _is_mounted_volume(path):
+    return os.path.ismount(path)
 
 
 def _media_roots():
-    candidates = current_app.config.get('MEDIA_ROOTS', DEFAULT_MEDIA_ROOTS)
-    if isinstance(candidates, (str, os.PathLike)):
-        candidates = (candidates,)
+    user = _media_user()
     roots = []
-    for candidate in candidates:
-        path = os.path.realpath(os.path.expanduser(os.fspath(candidate)))
-        if os.path.isdir(path) and path not in roots:
-            roots.append(path)
+
+    music = os.path.join(user.pw_dir, 'Music')
+    if os.path.isdir(music):
+        roots.append(os.path.realpath(music))
+
+    for base in MEDIA_MOUNT_BASES:
+        mount_parent = os.path.join(base, user.pw_name)
+        try:
+            with os.scandir(mount_parent) as entries:
+                for entry in sorted(entries, key=lambda item: item.name.casefold()):
+                    try:
+                        if entry.name.startswith('.') or not entry.is_dir(follow_symlinks=False):
+                            continue
+                        if not _is_mounted_volume(entry.path):
+                            continue
+                        path = os.path.realpath(entry.path)
+                        if path not in roots:
+                            roots.append(path)
+                    except OSError:
+                        # A volume can disappear while roots are being listed.
+                        continue
+        except OSError:
+            # The mount parent may not exist until the first USB is mounted.
+            continue
     return roots
 
 

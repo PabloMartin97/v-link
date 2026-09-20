@@ -865,12 +865,19 @@ apt-get install -y --no-install-recommends \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
-    libudev-dev build-essential can-utils iproute2
+    libudev-dev build-essential can-utils iproute2 udisks2 udiskie
 
 LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
 [[ -n "$LABWC_VERSION" ]] || die "could not determine the installed labwc version"
 dpkg --compare-versions "$LABWC_VERSION" ge 0.8.4 || \
     die "labwc $LABWC_VERSION does not support HideCursor (requires 0.8.4 or newer)"
+
+UDISKIE_VERSION="$(udiskie --version 2>&1)" || die "could not determine the installed udiskie version"
+log "Automounter: $UDISKIE_VERSION"
+UDISKIE_HELP="$(udiskie --help 2>&1)" || die "installed udiskie --help failed"
+for flag in --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt; do
+    grep -Fq -- "$flag" <<<"$UDISKIE_HELP" || die "installed udiskie does not support $flag"
+done
 
 if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     log "Installing frontend build tools"
@@ -1223,8 +1230,13 @@ cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
 # Hide the pointer at kiosk startup. Moving a mouse makes it visible again.
 wtype -M alt -M logo -P h
 
-# Start V-Link after Wayland, DBus, PipeWire and the user systemd manager exist.
+# Make the Wayland session environment available to user services.
 systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
+
+# Automount removable media within the kiosk user's graphical session.
+udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &
+
+# Start V-Link after Wayland, DBus, PipeWire and the user systemd manager exist.
 systemctl --user start v-link.service &
 EOF
 
