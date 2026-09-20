@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from 'styled-components';
 
@@ -9,13 +9,14 @@ import { theme } from '@/theme/Theme';
 const { sendCarplayMediaCommand } = vi.hoisted(() => ({
   sendCarplayMediaCommand: vi.fn(),
 }));
+const localTracks = vi.hoisted(() => [{ name: 'Local track.mp3', url: 'blob:local-track' }]);
 
 vi.mock('@/carplay/mediaCommands', () => ({ sendCarplayMediaCommand }));
 vi.mock('@/app/pages/music/LocalMediaProvider', () => ({
   useLocalMedia: () => ({
     folderName: 'Local Media',
-    tracks: [],
-    currentTrack: null,
+    tracks: localTracks,
+    currentTrack: 0,
     error: null,
     playing: false,
     position: 0,
@@ -32,7 +33,7 @@ vi.mock('@/app/pages/music/LocalMediaProvider', () => ({
     cycleRepeat: vi.fn(),
   }),
 }));
-vi.mock('@/app/pages/music/components/UsbMediaBrowser', () => ({ default: () => null }));
+vi.mock('@/app/pages/music/components/UsbMediaBrowser', () => ({ default: () => <div data-testid="usb-media-browser" /> }));
 
 import NowPlaying from '@/app/pages/music/components/NowPlaying';
 
@@ -48,6 +49,7 @@ describe('projected Music navigation', () => {
       APP.getState().update((state) => {
         state.keyStroke = '';
         state.system.audioSource = 'carplay';
+        state.system.liteMode = false;
         state.settings.dongle_bindings = {
           left: { value: 'ArrowLeft' },
           right: { value: 'ArrowRight' },
@@ -59,7 +61,7 @@ describe('projected Music navigation', () => {
   });
 
   afterEach(() => {
-    act(() => { APP.getState().update((state) => { state.keyStroke = ''; }); });
+    act(() => { APP.getState().update((state) => { state.keyStroke = ''; state.system.liteMode = false; }); });
   });
 
   it('uses Left and Right to choose the projected playback command', () => {
@@ -81,5 +83,17 @@ describe('projected Music navigation', () => {
       'prev',
       'next',
     ]);
+  });
+
+  it('returns from Browse files to the in-app media browser', () => {
+    act(() => { APP.getState().update((state) => { state.system.audioSource = 'local'; state.system.liteMode = true; }) });
+    render(
+      <ThemeProvider theme={theme}>
+        <NowPlaying media={createEmptyCarplayMedia()} phoneConnected={false} source={null} />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
+    expect(screen.getByTestId('usb-media-browser')).toBeInTheDocument();
   });
 });
