@@ -122,6 +122,7 @@ const Settings = () => {
   const themeColor = useThemeColor();
   const versionNumber = APP((state) => state.system.version);
   const settingPage = APP((state) => state.system.settingPage);
+  const liteMode = APP((state) => state.system.liteMode);
 
   const rtiState = APP((state) => state.system.rtiState);
   const canState = APP((state) => state.system.canState);
@@ -431,9 +432,16 @@ const Settings = () => {
 
   // System Tasks
   function systemTask(request: string) {
+    const waitMessages: Record<string, [string, string]> = {
+      quit: ['Exiting...', 'Please wait while V-Link is closing.'],
+      shutdown: ['Shutting down...', 'Please wait while the system is shutting down.'],
+      restart: ['Restarting V-Link...', 'Please wait while V-Link is restarting.'],
+      reboot: ['Rebooting...', 'Please wait while the system is rebooting.'],
+    };
+    const waitMessage = waitMessages[request];
 
-    if (['quit', 'reboot', 'restart'].includes(request)) {
-      openModal("Exiting...", "Please wait while the app is closing.", undefined, undefined)
+    if (waitMessage) {
+      openModal(waitMessage[0], waitMessage[1], undefined, undefined)
       setTimeout(() => {
         socket.sys.emit("systemTask", request);
       }, 1000)
@@ -872,7 +880,7 @@ const Settings = () => {
           <>
             <div style={{ display: 'flex', width: '100%', height: '90%', gap: '10px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>
-                <Button onClick={() => { systemTask('quit') }} style={{ height: '100%' }}> Quit </Button>
+                <Button onClick={() => { systemTask(liteMode ? 'shutdown' : 'quit') }} style={{ height: '100%' }}> {liteMode ? 'Shutdown' : 'Quit'} </Button>
                 <Button onClick={() => { systemTask('restart') }} style={{ height: '100%' }}> Restart </Button>
                 <Button onClick={() => { systemTask("rti") }} style={{ height: '100%' }}> {rtiState ? "Close RTI" : "Open RTI"} </Button>
               </div>

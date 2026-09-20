@@ -55,6 +55,12 @@ export const Socket = () => {
     });
   };
 
+  const handleRuntime = (payload: { lite: boolean }) => {
+    APP.getState().update((state) => {
+      state.system.liteMode = payload.lite;
+    });
+  };
+
   const handleState = (module: string) => (data: unknown) => {
     allStores['app'].update((state) => {
       state.system[`${module}State`] = data;
@@ -168,6 +174,7 @@ export const Socket = () => {
       const onError = handleError('sys');
 
       sysSocket.on('ign', handleIgnition);
+      sysSocket.on('runtime', handleRuntime);
 
 
       sysSocket.on('reverse', handleReverse);
@@ -177,6 +184,7 @@ export const Socket = () => {
 
       cleanupListeners.push(() => {
         sysSocket.off('ign', handleIgnition);
+        sysSocket.off('runtime', handleRuntime);
 
         sysSocket.off('reverse', handleReverse);
         sysSocket.off('connect', onConnect);
@@ -188,6 +196,7 @@ export const Socket = () => {
 
 
       sysSocket.emit('systemTask', 'reverse');
+      sysSocket.emit('systemTask', 'runtime');
     }
 
     // Setup log socket listeners if it exists

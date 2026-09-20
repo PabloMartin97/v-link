@@ -104,14 +104,16 @@ def test_index_has_cross_origin_isolation_headers():
     assert response.headers['Cross-Origin-Embedder-Policy'] == 'require-corp'
 
 
-def test_sys_connect_emits_ign_and_reverse(seeded_config_dir):
+@pytest.mark.parametrize('lite_mode', [False, True])
+def test_sys_connect_emits_ign_reverse_and_runtime(seeded_config_dir, monkeypatch, lite_mode):
     """
-    Connecting to /sys must immediately receive 'ign' and 'reverse' events
-    reflecting the current ignition/reverse state from shared_state.
+    Connecting to /sys must immediately receive ignition, reverse, and
+    runtime information from shared_state.
     """
     from backend.server import server, socketio
     from backend.shared.shared_state import shared_state
     server.config['TESTING'] = True
+    monkeypatch.setattr(shared_state, 'liteMode', lite_mode)
 
     client = socketio.test_client(server, namespace='/sys')
     try:
@@ -119,6 +121,9 @@ def test_sys_connect_emits_ign_and_reverse(seeded_config_dir):
         names = [r['name'] for r in received]
         assert 'ign' in names
         assert 'reverse' in names
+        assert {'name': 'runtime', 'args': [{'lite': lite_mode}], 'namespace': '/sys'} in received
+        client.emit('systemTask', 'runtime', namespace='/sys')
+        assert {'name': 'runtime', 'args': [{'lite': lite_mode}], 'namespace': '/sys'} in client.get_received('/sys')
     finally:
         client.disconnect(namespace='/sys')
 

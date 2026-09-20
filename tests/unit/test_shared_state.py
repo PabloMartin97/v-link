@@ -2,6 +2,8 @@
 Unit tests for backend/shared/shared_state.py
 """
 import threading
+from pathlib import Path
+from unittest.mock import patch
 
 from backend.shared.shared_state import SharedState
 
@@ -12,6 +14,15 @@ def test_initial_module_flags_are_false():
     assert s.swcModule is False
     assert s.rtiModule is False
     assert s.adcModule is False
+
+
+def test_lite_mode_uses_runtime_root_marker_once():
+    marker = Path(__file__).resolve().parents[2] / '.v-link-lite-runtime'
+    for marker_present in (False, True):
+        with patch.object(Path, 'is_file', autospec=True, return_value=marker_present) as is_file:
+            state = SharedState()
+        is_file.assert_called_once_with(marker)
+        assert state.liteMode is marker_present
 
 
 def test_initial_thread_dict_has_all_keys():

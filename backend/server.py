@@ -7,7 +7,7 @@ import eventlet
 #eventlet.monkey_patch()
 
 from flask                  import Flask, send_from_directory, render_template
-from flask_socketio         import SocketIO
+from flask_socketio         import SocketIO, emit
 from flask_cors             import CORS
 
 from .                      import settings
@@ -150,6 +150,7 @@ class ServerThread(threading.Thread):
     def handle_sys_connect():
      socketio.emit('ign',     shared_state.ignStatus.is_set(),     namespace='/sys')
      socketio.emit('reverse', shared_state.reverseStatus.is_set(), namespace='/sys')
+     emit('runtime', {'lite': shared_state.liteMode}, namespace='/sys')
 
 
     # Create event handler
@@ -432,6 +433,9 @@ class ServerThread(threading.Thread):
             # Sends the current ignition status to the frontend
             logger.info(f'[Server] Ignition status request')
             socketio.emit('ign', shared_state.ignStatus.is_set(), namespace='/sys')
+
+        elif args == 'runtime':
+            emit('runtime', {'lite': shared_state.liteMode}, namespace='/sys')
 
         else:
             logger.debug(f'[Server] Unknown action: {args}')

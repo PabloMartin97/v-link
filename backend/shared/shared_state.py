@@ -3,6 +3,7 @@
 import threading
 from threading import Lock
 import time
+from pathlib import Path
 
 class SharedState:
     def __init__(self):
@@ -31,6 +32,7 @@ class SharedState:
         #Display
         self.isKiosk = True
         self.hardware = True
+        self.liteMode = (Path(__file__).resolve().parents[2] / '.v-link-lite-runtime').is_file()
         self.rtiStatus = False
         self.hdmiStatus = False
 

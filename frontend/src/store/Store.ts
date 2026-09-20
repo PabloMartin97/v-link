@@ -52,6 +52,7 @@ interface SystemState {
   configLoaded: boolean;
   initialized: boolean;
   startedUp: boolean;
+  liteMode: boolean;
   isRecording: boolean;
   windowSize: SizeState;
   contentSize: SizeState;
@@ -118,6 +119,7 @@ const APP = create<AppState>()(
       configLoaded: false,
       initialized: false,
       startedUp: false,
+      liteMode: false,
       isRecording: false,
 
       windowSize: {
