@@ -587,7 +587,7 @@ if [[ "$NO_HARDWARE_RUNTIME" == true ]]; then
     else
         fail "v-link-can.service must be disabled in UI-only mode"
     fi
-    if ! grep -qsF '# BEGIN V-LINK LITE' /boot/firmware/config.txt; then
+    if ! grep -qsFx '# BEGIN V-LINK LITE' /boot/firmware/config.txt; then
         pass "V-Link HAT boot overlays are disabled in UI-only mode"
     else
         fail "V-Link HAT boot configuration remains active in UI-only mode"
@@ -694,7 +694,7 @@ else
     fi
 fi
 
-if grep -qsF '# BEGIN V-LINK LITE' /boot/firmware/config.txt; then
+if grep -qsFx '# BEGIN V-LINK LITE' /boot/firmware/config.txt; then
     printf '\nV-Link HAT\n'
     BEGIN_COUNT="$(grep -cFx '# BEGIN V-LINK LITE' /boot/firmware/config.txt || true)"
     END_COUNT="$(grep -cFx '# END V-LINK LITE' /boot/firmware/config.txt || true)"

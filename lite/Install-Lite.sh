@@ -1351,7 +1351,7 @@ if [[ "$CONFIGURE_HARDWARE" == true ]]; then
     [[ -e "$BOOT_CONFIG.v-link.bak" ]] || cp "$BOOT_CONFIG" "$BOOT_CONFIG.v-link.bak"
     BOOT_TEMP="$(mktemp "$BOOT_CONFIG.v-link.XXXXXX")"
     if [[ "$CONFIG_BEGIN_COUNT" -eq 1 ]]; then
-        sed "\|$CONFIG_BEGIN|,\|$CONFIG_END|d" "$BOOT_CONFIG" >"$BOOT_TEMP"
+        sed "\|^${CONFIG_BEGIN}$|,\|^${CONFIG_END}$|d" "$BOOT_CONFIG" >"$BOOT_TEMP"
     else
         cp "$BOOT_CONFIG" "$BOOT_TEMP"
     fi
@@ -1558,7 +1558,7 @@ else
         if [[ "$CONFIG_BEGIN_COUNT" -eq 1 ]]; then
             [[ -e "$BOOT_CONFIG.v-link.bak" ]] || cp "$BOOT_CONFIG" "$BOOT_CONFIG.v-link.bak"
             BOOT_TEMP="$(mktemp "$BOOT_CONFIG.v-link.XXXXXX")"
-            sed "\|$CONFIG_BEGIN|,\|$CONFIG_END|d" "$BOOT_CONFIG" >"$BOOT_TEMP"
+            sed "\|^${CONFIG_BEGIN}$|,\|^${CONFIG_END}$|d" "$BOOT_CONFIG" >"$BOOT_TEMP"
             chmod --reference="$BOOT_CONFIG" "$BOOT_TEMP"
             mv -f "$BOOT_TEMP" "$BOOT_CONFIG"
             BOOT_TEMP=""
