@@ -12,7 +12,12 @@ import stat
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from v_link_lite_support import (load_settings, save_settings, system_details,
+                                 format_size, read_snapshot)
 
 
 TITLE = "V-Link Lite Setup"
@@ -78,6 +83,7 @@ class SetupUI:
         self.uid = uid
         self.username = username
         self.env = env
+        self.home = Path(env.get("HOME") or Path.home())
         self.normal = curses.A_NORMAL
         self.selected = curses.A_REVERSE | curses.A_BOLD
         if curses.has_colors():
@@ -126,18 +132,22 @@ class SetupUI:
         self.screen.noutrefresh()
         curses.doupdate()
 
-    def choose(self, heading, items):
+    def choose(self, heading, items, summary=None):
         """One curses session across all menus; no terminal teardown."""
         selected = 0
         while True:
             if self.frame(heading):
                 height, width = self.screen.getmaxyx()
-                visible = max(1, height - 9)
+                summary_lines = (summary or [])[:max(0, min(5, height - 11))]
+                for row, line in enumerate(summary_lines):
+                    self.put(6 + row, 5, line)
+                start = 7 + len(summary_lines) if summary_lines else 6
+                visible = max(1, height - start - 3)
                 first = max(0, selected - visible + 1)
                 for offset, (_, label) in enumerate(items[first:first + visible]):
                     index = first + offset
                     prefix = "> " if index == selected else "  "
-                    self.put(6 + offset, 5, (prefix + label).ljust(width - 11),
+                    self.put(start + offset, 5, (prefix + label).ljust(width - 11),
                              self.selected if index == selected else self.normal)
                 if len(items) > visible:
                     self.put(height - 3, 5, f"{selected + 1}/{len(items)}")
@@ -257,14 +267,41 @@ class SetupUI:
 
     def network_menu(self):
         while True:
+            self.busy("Reading network")
+            code, raw = self.command(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION",
+                                      "device", "status"], 3)
+            summary = ["Ethernet: unavailable", "Wi-Fi: unavailable", "IP: unavailable"]
+            if code == 0:
+                connected_device = None
+                for line in raw.splitlines():
+                    parts = line.split(":", 3)
+                    if len(parts) < 4:
+                        continue
+                    device, kind, state, connection = parts
+                    if kind == "ethernet":
+                        summary[0] = f"Ethernet: {state}"
+                    elif kind == "wifi":
+                        summary[1] = f"Wi-Fi: {state}"
+                        if state == "connected":
+                            _, wifi = self.command(["nmcli", "-t", "-f", "IN-USE,SSID",
+                                                    "device", "wifi", "list", "--rescan", "no"], 2)
+                            ssid = next((entry[2:] for entry in wifi.splitlines() if entry.startswith("*:")), "")
+                            if ssid:
+                                summary[1] += f"  SSID: {ssid}"
+                    if state == "connected" and kind in ("ethernet", "wifi"):
+                        connected_device = connected_device or device
+                if connected_device:
+                    _, ip = self.command(["nmcli", "-g", "IP4.ADDRESS", "device", "show", connected_device], 2)
+                    summary[2] = f"IP: {ip.splitlines()[0] if ip else 'unavailable'}"
             choice = self.choose("Network", [
-                ("status", "Ethernet, Wi-Fi, connection and IP"),
-                ("configure", "Configure network with nmtui"), ("back", "Back")])
+                ("configure", "Configure network"), ("details", "Technical details"),
+                ("back", "Back")], summary=summary)
             if choice in (None, "back"):
                 return
             if choice == "configure":
                 self.open_nmtui()
-            self.view("Network", self.network_status())
+            else:
+                self.view("Network details", self.network_status())
 
     def audio_ready(self):
         bus = Path(f"/run/user/{self.uid}/bus")
@@ -331,11 +368,20 @@ class SetupUI:
         if not self.audio_ready():
             return
         while True:
+            _, sink = self.command(["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"], 3)
+            _, source = self.command(["wpctl", "inspect", "@DEFAULT_AUDIO_SOURCE@"], 3)
+            def label(payload):
+                match = re.search(r'node.description = "([^"]+)"', payload)
+                return match.group(1) if match else "not selected"
+            _, output_volume = self.command(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], 2)
+            _, input_volume = self.command(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], 2)
+            summary = [f"Output: {label(sink)}", f"Output volume: {output_volume or 'unavailable'}",
+                       f"Input: {label(source)}", f"Input volume: {input_volume or 'unavailable'}"]
             choice = self.choose("Audio", [
-                ("output", "Default output device"), ("input", "Default input device"),
+                ("output", "Select output"), ("input", "Select input"),
                 ("output_volume", "Output volume"), ("input_volume", "Input volume"),
-                ("test", "Test output"), ("status", "Show PipeWire status"),
-                ("back", "Back")])
+                ("test", "Test speakers"), ("status", "Technical status"),
+                ("back", "Back")], summary=summary)
             if choice in (None, "back"):
                 return
             if choice == "output":
@@ -361,6 +407,66 @@ class SetupUI:
         _, output = self.command(["wlr-randr"], 4)
         return output or "Could not query Wayland outputs."
 
+    def display_menu(self):
+        while True:
+            raw = self.display_status()
+            lines = raw.splitlines()
+            active = next((line.strip() for line in lines if "(current)" in line), "unavailable")
+            output = ("unavailable" if raw.startswith("Wayland display unavailable") else
+                      next((line.split()[0] for line in lines if line and not line[0].isspace()), "unavailable"))
+            choice = self.choose("Display / Input", [
+                ("status", "Display status"), ("cursor", "Cursor and mouse"),
+                ("details", "Technical details"), ("back", "Back")],
+                summary=[f"Display: {output}", f"Mode: {active[:60]}"])
+            if choice in (None, "back"):
+                return
+            if choice == "cursor":
+                self.cursor_menu()
+            elif choice == "details":
+                self.view("Display details", raw)
+            else:
+                self.view("Display status", f"Display: {output}\nMode: {active}")
+
+    def cursor_menu(self):
+        while True:
+            try:
+                settings = load_settings(self.home)
+            except ValueError as error:
+                self.message(f"Invalid Lite settings: {error}")
+                return
+            mode = settings["CURSOR_MODE"].title()
+            mouse = "Activated" if settings["MOUSE_ENABLED"] == "yes" else "Deactivated"
+            choice = self.choose("Cursor and mouse", [
+                ("auto", "Cursor: Auto"), ("visible", "Cursor: Visible"),
+                ("mouse", "Toggle mouse activated / deactivated"),
+                ("test", "Hide cursor now (test)"), ("back", "Back")],
+                summary=[f"Cursor mode: {mode}", f"Mouse: {mouse}",
+                         "Mouse off also hides the pointer, regardless of cursor mode.",
+                         "Changes to mouse input take effect at next boot."])
+            if choice in (None, "back"):
+                return
+            if choice in ("auto", "visible", "mouse"):
+                if choice == "mouse":
+                    settings["MOUSE_ENABLED"] = "no" if settings["MOUSE_ENABLED"] == "yes" else "yes"
+                else:
+                    settings["CURSOR_MODE"] = choice
+                try:
+                    save_settings(self.home, settings)
+                    status, output = self.command(["/usr/local/bin/v-link-lite-cursor", "sync-config"], 3)
+                    if status == 0:
+                        self.message("Preference saved. It applies after Continue or the next graphical boot.")
+                    else:
+                        self.message(f"Preference saved, but labwc configuration failed: {output}")
+                except (OSError, ValueError) as error:
+                    self.message(f"Could not save preference: {error}")
+            elif choice == "test":
+                if not self.display_available():
+                    self.message("Wayland display unavailable in this session.")
+                else:
+                    status, output = self.command(["/usr/local/bin/v-link-lite-cursor", "hide"], 3)
+                    self.message("Cursor hidden. Press Esc to return; enabled mouse movement restores it."
+                                 if status == 0 else f"Cursor test failed: {output}")
+
     def storage_status(self):
         _, devices = self.command(["lsblk", "-o", "NAME,LABEL,FSTYPE,SIZE,TRAN,MOUNTPOINT"], 4)
         udisks = self.service_state("udisks2.service")
@@ -368,19 +474,61 @@ class SetupUI:
         return (f"Storage devices and mounts:\n{devices}\n\n"
                 f"udisks2: {udisks}\nudiskie: {'running' if udiskie == 0 else 'not running'}")
 
+    def storage_menu(self):
+        while True:
+            code, output = self.command(["lsblk", "-J", "-o",
+                                          "NAME,LABEL,FSTYPE,SIZE,TRAN,MOUNTPOINT,RM,TYPE"], 4)
+            devices = []
+            if code == 0:
+                try:
+                    def collect(node, usb=False):
+                        usb = usb or node.get("tran") == "usb"
+                        if usb and (node.get("type") == "part" or
+                                    (node.get("type") == "disk" and not node.get("children"))):
+                            devices.append(f"{node.get('label') or node.get('name')}: {node.get('size')}  "
+                                           f"{node.get('fstype') or 'unknown'}  "
+                                           f"{'Mounted' if node.get('mountpoint') else 'Not mounted'}")
+                        for child in node.get("children") or []:
+                            collect(child, usb)
+                    for device in json.loads(output).get("blockdevices", []):
+                        collect(device)
+                except (TypeError, ValueError, AttributeError):
+                    pass
+            udiskie, _ = self.command(["pgrep", "-u", str(self.uid), "-x", "udiskie"], 2)
+            choice = self.choose("Storage / USB", [
+                ("refresh", "Refresh"), ("details", "Technical details"), ("back", "Back")],
+                summary=(devices[:3] or ["No removable USB volumes found."]) +
+                        [f"Automount: {'OK' if udiskie == 0 else 'unavailable'}"])
+            if choice in (None, "back"):
+                return
+            if choice == "details":
+                self.view("Storage details", self.storage_status())
+
     def vlink_menu(self):
         while True:
             state = self.service_state("v-link.service", user=True)
+            _, start_us = self.command(["systemctl", "--user", "show", "v-link.service",
+                                        "-p", "ActiveEnterTimestampMonotonic", "--value"], 2)
+            try:
+                uptime = f"{max(0, int(time.monotonic() - int(start_us) / 1000000)) // 60} min" if state == "active" else "-"
+            except ValueError:
+                uptime = "unavailable"
+            _, service = self.command(["systemctl", "--user", "show", "v-link.service",
+                                       "-p", "ExecStart", "--value"], 2)
+            mode = "UI only" if "--no-hardware" in service else "Hardware"
+            summary = [f"Status: {state}", f"Uptime: {uptime}", f"Mode: {mode}",
+                       f"Console: {'Available' if state == 'active' else 'Not running'}"]
             if self.startup:
-                items = [("status", "Show service status"), ("logs", "View recent log"),
-                         ("back", "Back")]
-                heading = f"V-Link starts after Continue (now: {state})"
+                items = [("console", "Console"), ("logs", "Logs"),
+                         ("status", "Technical status"), ("back", "Back")]
+                heading = "V-Link starts after Continue"
             else:
-                items = [("start", "Start V-Link"), ("stop", "Stop V-Link"),
-                         ("restart", "Restart V-Link"), ("status", "Show service status"),
-                         ("logs", "View recent log"), ("back", "Back")]
-                heading = f"V-Link service: {state}"
-            choice = self.choose(heading, items)
+                items = [("console", "Console"), ("restart", "Restart V-Link"),
+                         ("stop", "Stop V-Link"), ("start", "Start V-Link"),
+                         ("logs", "Logs"), ("status", "Technical status"),
+                         ("back", "Back")]
+                heading = "V-Link"
+            choice = self.choose(heading, items, summary=summary)
             if choice in (None, "back"):
                 return
             if choice in ("start", "stop", "restart"):
@@ -393,11 +541,50 @@ class SetupUI:
                 _, output = self.command(["systemctl", "--user", "status",
                                           "v-link.service", "--no-pager"], 4)
                 self.view("V-Link service", output)
+            elif choice == "console":
+                self.console()
             elif choice == "logs":
                 self.busy("Reading V-Link logs")
                 _, output = self.command(["journalctl", "--user", "-u", "v-link.service",
                                           "-n", "80", "--no-pager"], 5)
                 self.view("V-Link recent log", output)
+
+    def console(self):
+        """Read a runtime snapshot; never attach to or control the V-Link PID."""
+        self.screen.timeout(1000)
+        try:
+            while True:
+                state = self.service_state("v-link.service", user=True)
+                _, pid_text = self.command(["systemctl", "--user", "show", "v-link.service",
+                                            "-p", "MainPID", "--value"], 2)
+                try:
+                    pid = int(pid_text)
+                except ValueError:
+                    pid = 0
+                snapshot = read_snapshot(self.uid, pid) if state == "active" and pid else None
+                if self.frame("V-Link Console", "Q / Esc: Back   (updates every second)"):
+                    if state != "active":
+                        self.put(7, 5, "V-Link is not running.")
+                    elif not snapshot:
+                        self.put(7, 5, "Status unavailable.")
+                    else:
+                        lines = [f"V-Link {snapshot.get('version', '?')} | Boosted Moose",
+                                 f"Device: {snapshot.get('device', 'unavailable')}",
+                                 f"RTI: {'Up' if snapshot.get('rti') else 'Down'}   "
+                                 f"IGN: {'High' if snapshot.get('ign') else 'Low'}", "",
+                                 "Thread          Status"]
+                        for name, running in snapshot.get("threads", []):
+                            lines.append(f"{str(name).upper():<15} {'running' if running else 'stopped'}")
+                        lines += ["", "Recent warnings"]
+                        lines += snapshot.get("warnings", []) or ["No recent warnings."]
+                        height, _ = self.screen.getmaxyx()
+                        for row, line in enumerate(lines[:max(0, height - 9)]):
+                            self.put(6 + row, 5, line)
+                self.flush()
+                if self.screen.getch() in (27, ord("q"), ord("Q")):
+                    return
+        finally:
+            self.screen.timeout(-1)
 
     def diagnostics(self):
         self.busy("Running quick diagnostics")
@@ -429,6 +616,78 @@ class SetupUI:
             f"Uptime: {uptime or 'unavailable'}",
         ])
 
+    def diagnostics_menu(self):
+        while True:
+            self.busy("Reading system diagnostics")
+            data = system_details(self.command)
+            power = data["power"]
+            if power is None or power["unknown_bits"]:
+                throttle = "unavailable"
+            else:
+                throttle = "ACTIVE" if power["throttled_now"] or power["frequency_capped_now"] else "OK"
+            total = data["ram_total"]
+            used = data["ram_used"]
+            disk_total = data["disk_total"]
+            disk_used = data["disk_used"]
+            summary = [
+                f"CPU: {data['cpu']} %" if data["cpu"] is not None else "CPU: unavailable",
+                f"Temperature: {data['temperature']:.1f} °C" if data["temperature"] is not None else "Temperature: unavailable",
+                f"RAM: {round(100 * used / total)} %" if total and used is not None else "RAM: unavailable",
+                f"Root disk: {round(100 * disk_used / disk_total)} %" if disk_total else "Root disk: unavailable",
+                f"Throttling: {throttle}   Undervoltage: " +
+                ("unavailable" if power is None or power["unknown_bits"] else
+                 "ACTIVE" if power["undervoltage_now"] else "No"),
+            ]
+            choice = self.choose("Diagnostics", [
+                ("system", "System details"), ("network", "Network details"),
+                ("audio", "Audio details"), ("storage", "Storage details"),
+                ("vlink", "V-Link details"), ("back", "Back")], summary=summary)
+            if choice in (None, "back"):
+                return
+            if choice == "system":
+                self.view("System details", self.format_system_details(data))
+            elif choice == "network":
+                self.view("Network details", self.network_status())
+            elif choice == "audio":
+                _, output = self.command(["wpctl", "status"], 3)
+                self.view("Audio details", output)
+            elif choice == "storage":
+                self.view("Storage details", self.storage_status())
+            else:
+                self.view("V-Link details", self.diagnostics())
+
+    @staticmethod
+    def format_system_details(data):
+        power = data["power"]
+        def yes_no(value):
+            return "Yes" if value else "No"
+        def ratio(used, total):
+            return (f"{format_size(used)} / {format_size(total)} "
+                    f"({round(100 * used / total)} %)") if used is not None and total else "unavailable"
+        lines = [
+            f"Model: {data['model']}", f"CPU cores: {data['cores']}",
+            f"CPU usage: {data['cpu']} %" if data["cpu"] is not None else "CPU usage: unavailable",
+            f"Load: {data['load']}",
+            f"Temperature: {data['temperature']:.1f} °C" if data["temperature"] is not None else "Temperature: unavailable",
+            f"RAM used / total: {ratio(data['ram_used'], data['ram_total'])}",
+            f"RAM available: {format_size(data['ram_available'])}",
+            f"Root used / total: {ratio(data['disk_used'], data['disk_total'])}",
+            f"Uptime: {data['uptime'] // 60} min" if data["uptime"] is not None else "Uptime: unavailable",
+        ]
+        if power is None or power["unknown_bits"]:
+            lines.append("Power/throttling: unavailable")
+        else:
+            lines.extend([
+                f"Current throttling: {yes_no(power['throttled_now'])}",
+                f"Current undervoltage: {yes_no(power['undervoltage_now'])}",
+                f"Throttling since boot: {yes_no(power['throttled_seen'])}",
+                f"Undervoltage since boot: {yes_no(power['undervoltage_seen'])}",
+                f"Frequency capped now/since boot: {yes_no(power['frequency_capped_now'])} / {yes_no(power['frequency_capped_seen'])}",
+                f"Soft temp limit now/since boot: {yes_no(power['soft_temp_now'])} / {yes_no(power['soft_temp_seen'])}",
+                f"Technical power value: {power['raw']}",
+            ])
+        return "\n".join(lines)
+
     def display_available(self):
         display = self.env.get("WAYLAND_DISPLAY", "")
         path = Path(display) if display.startswith("/") else Path(self.env.get("XDG_RUNTIME_DIR", "/nonexistent")) / display
@@ -449,7 +708,7 @@ class SetupUI:
 
     def main_menu(self):
         items = [("network", "Network"), ("audio", "Audio"),
-                 ("display", "Display"), ("storage", "Storage / USB"),
+                 ("display", "Display / Input"), ("storage", "Storage / USB"),
                  ("vlink", "V-Link"), ("diagnostics", "Diagnostics"),
                  ("continue", "Continue to V-Link / Exit Setup"),
                  ("reboot", "Reboot"), ("shutdown", "Shutdown")]
@@ -462,15 +721,13 @@ class SetupUI:
             elif choice == "audio":
                 self.audio_menu()
             elif choice == "display":
-                self.busy("Reading display modes")
-                self.view("Display", self.display_status())
+                self.display_menu()
             elif choice == "storage":
-                self.busy("Reading storage devices")
-                self.view("Storage / USB", self.storage_status())
+                self.storage_menu()
             elif choice == "vlink":
                 self.vlink_menu()
             elif choice == "diagnostics":
-                self.view("Diagnostics", self.diagnostics())
+                self.diagnostics_menu()
             elif choice in ("reboot", "shutdown"):
                 result = self.power_action(choice)
                 if result is not None:

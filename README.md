@@ -92,6 +92,16 @@ a local terminal or SSH (`ssh -t user@host v-link-lite-setup`). It provides
 network (`nmtui`), audio, display and USB status, diagnostics, and V-Link
 service controls. Closing Setup with “Continue to V-Link” resumes normal
 startup; opening it manually does not stop a running V-Link service.
+`Display / Input` offers cursor Auto (hidden at start and again after five
+seconds idle) or Visible, plus a separate mouse Activated/Deactivated switch.
+Deactivated ignores mouse and touchpad input but leaves touch and keyboard
+available; verify that your touchscreen is detected as touch input before using
+it. Deactivated also hides the pointer even when cursor mode is Visible.
+Preferences live in `~/.config/v-link-lite/settings.conf` and survive a
+reinstall. Mouse-input changes take effect on the next graphical boot.
+`Diagnostics -> System details` shows CPU, memory, temperature, storage and Pi
+power status. `V-Link -> Console` shows live read-only service status; Logs
+remain separate.
 
 On a Pi 3, the HAT setup assigns the good PL011 UART to RTI and disables the
 integrated Bluetooth controller. HDMI, analog and USB audio remain available;

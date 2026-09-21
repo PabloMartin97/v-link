@@ -117,7 +117,7 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wtype wlr-randr foot lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
+for command_name in chromium labwc wtype swayidle wlr-randr foot lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
     check_command "$command_name"
 done
 if runuser -u "$TARGET_USER" -- python3 -c 'import curses' >/dev/null 2>&1; then
@@ -137,7 +137,7 @@ else
     warn "nmtui is unavailable; the Network summary still works"
 fi
 
-for helper in /usr/local/libexec/v-link-lite-boot /usr/local/bin/v-link-lite-setup; do
+for helper in /usr/local/libexec/v-link-lite-boot /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor; do
     if [[ -f "$helper" && -x "$helper" ]] && \
        [[ "$(stat -c '%u:%g' "$helper")" == '0:0' ]] && \
        [[ "$(stat -c '%a' "$helper")" == 755 ]]; then
@@ -151,6 +151,36 @@ if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
     pass "Lite boot gate shell syntax is valid"
 else
     fail "Lite boot gate shell syntax is invalid"
+fi
+if [[ -f /usr/local/bin/v_link_lite_support.py ]] && \
+   [[ "$(stat -c '%u:%g:%a' /usr/local/bin/v_link_lite_support.py)" == '0:0:644' ]]; then
+    pass "Lite support module is installed root:root 0644"
+else
+    fail "Lite support module is missing or has incorrect owner/mode"
+fi
+SETTINGS_DIR="$TARGET_HOME/.config/v-link-lite"
+SETTINGS_FILE="$SETTINGS_DIR/settings.conf"
+if [[ -d "$SETTINGS_DIR" && ! -L "$SETTINGS_DIR" ]] && \
+   [[ "$(stat -c '%u:%g:%a' "$SETTINGS_DIR")" == "$USER_ID:$USER_GROUP_ID:700" ]]; then
+    pass "Lite settings directory is user-owned and private"
+else
+    fail "Lite settings directory is missing or has incorrect owner/mode"
+fi
+if [[ -f "$SETTINGS_FILE" && ! -L "$SETTINGS_FILE" ]] && \
+   [[ "$(stat -c '%u:%g:%a' "$SETTINGS_FILE")" == "$USER_ID:$USER_GROUP_ID:600" ]] && \
+   runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$TARGET_HOME/.config" python3 -c \
+       'import sys; sys.path.insert(0,"/usr/local/bin"); from v_link_lite_support import load_settings; load_settings(sys.argv[1])' \
+       "$TARGET_HOME" >/dev/null 2>&1; then
+    pass "Lite settings are safe and valid"
+else
+    fail "Lite settings are missing, unsafe, or invalid"
+fi
+if [[ -f /usr/local/bin/v-link-lite-cursor ]] && \
+   runuser -u "$TARGET_USER" -- python3 -c \
+       'import ast, pathlib; ast.parse(pathlib.Path("/usr/local/bin/v-link-lite-cursor").read_text())' >/dev/null 2>&1; then
+    pass "Lite cursor helper syntax is valid"
+else
+    fail "Lite cursor helper is unavailable or invalid"
 fi
 if [[ -f /usr/local/bin/v-link-lite-setup ]] && \
    runuser -u "$TARGET_USER" -- python3 -c \
@@ -225,9 +255,12 @@ fi
 
 LABWC_RC="$TARGET_HOME/.config/labwc/rc.xml"
 LABWC_AUTOSTART="$TARGET_HOME/.config/labwc/autostart"
+MOUSE_SETTING="$(runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$TARGET_HOME/.config" python3 -c \
+    'import sys; sys.path.insert(0,"/usr/local/bin"); from v_link_lite_support import load_settings; print(load_settings(sys.argv[1])["MOUSE_ENABLED"])' \
+    "$TARGET_HOME" 2>/dev/null || true)"
 if [[ -f "$LABWC_RC" ]]; then
     pass "labwc rc.xml is installed"
-    if python3 - "$LABWC_RC" <<'PY'
+    if python3 - "$LABWC_RC" "$MOUSE_SETTING" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -247,6 +280,14 @@ for binding in root.findall('./keyboard/keybind'):
             and actions[1].get('name') == 'WarpCursor'
             and actions[1].get('x') == '-1'
             and actions[1].get('y') == '-1'):
+        disabled = root.findall('./libinput/device')
+        categories = {device.get('category') for device in disabled
+                      if device.findtext('sendEventsMode') == 'no'}
+        mouse_off = sys.argv[2] == 'no'
+        if mouse_off and categories != {'non-touch', 'touchpad'}:
+            raise SystemExit(1)
+        if not mouse_off and disabled:
+            raise SystemExit(1)
         raise SystemExit(0)
 raise SystemExit(1)
 PY
@@ -260,28 +301,48 @@ PY
     else
         fail "$TARGET_USER cannot read labwc rc.xml"
     fi
+    if [[ ! -L "$LABWC_RC" ]] && \
+       [[ "$(stat -c '%u:%g:%a' "$LABWC_RC")" == "$USER_ID:$USER_GROUP_ID:644" ]]; then
+        pass "labwc rc.xml is user-owned 0644"
+    else
+        fail "labwc rc.xml has incorrect owner or mode"
+    fi
 else
     fail "missing $LABWC_RC"
 fi
+IDLE_UNIT="$TARGET_HOME/.config/systemd/user/v-link-lite-cursor-idle.service"
+if [[ -f "$IDLE_UNIT" ]] && \
+   [[ "$(stat -c '%u:%g:%a' "$IDLE_UNIT")" == "$USER_ID:$USER_GROUP_ID:644" ]] && \
+   grep -Fq 'ExecStart=/usr/bin/swayidle -C /dev/null -w timeout 5 "/usr/local/bin/v-link-lite-cursor hide"' "$IDLE_UNIT"; then
+    pass "one managed event-driven cursor idle service is installed"
+else
+    fail "cursor idle service is missing or invalid"
+fi
+if [[ -f "$LABWC_AUTOSTART" ]] && ! grep -Eq '^[[:space:]]*(wtype|swayidle)[[:space:]]' "$LABWC_AUTOSTART"; then
+    pass "labwc autostart has no duplicate cursor process or shortcut"
+else
+    fail "labwc autostart duplicates cursor policy"
+fi
 
 if [[ -f "$LABWC_AUTOSTART" ]] && awk '
-    /^[[:space:]]*wtype[[:space:]]+-M[[:space:]]+alt[[:space:]]+-M[[:space:]]+logo[[:space:]]+-P[[:space:]]+h([[:space:]]|$)/ { if (!hide) hide = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { if (!imported) imported = NR }
+    /^[[:space:]]*\/usr\/local\/bin\/v-link-lite-cursor apply/ { policy++; applied = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service([[:space:]]|$)/ { if (!started) started = NR }
-    END { exit !(hide && imported > hide && started > imported) }
+    END { exit !(imported && policy == 1 && applied > imported && started > applied) }
 ' "$LABWC_AUTOSTART"; then
-    pass "labwc autostart hides the cursor before V-Link starts"
+    pass "labwc autostart applies cursor policy once before V-Link starts"
 else
-    fail "labwc autostart is missing the ordered wtype cursor shortcut"
+    fail "labwc autostart is missing the ordered cursor policy"
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
     /^udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &$/ { automounter = NR }
     /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
+    /^[[:space:]]*\/usr\/local\/bin\/v-link-lite-cursor apply/ { policy = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { starts++; started = NR }
     /^fi$/ { if (gate && NR > gate) closed = NR }
     END { exit !(imported && automounter > imported && gate > automounter &&
-                  started > gate && closed > started && starts == 1) }
+                  policy > gate && started > policy && closed > started && starts == 1) }
 ' "$LABWC_AUTOSTART"; then
     pass "labwc boot gate runs before the single V-Link service start"
 else
@@ -370,6 +431,13 @@ for session_setting in user-session=labwc autologin-session=labwc; do
 done
 
 printf '\nApplication\n'
+if [[ -r "$APP_DIR/backend/shared/lite_console.py" ]] && \
+   grep -qs 'from backend.shared.lite_console import build_payload' "$APP_DIR/V-Link.py" && \
+   grep -qs '_write_lite_console_snapshot' "$APP_DIR/V-Link.py"; then
+    pass "V-Link Console snapshot producer is installed"
+else
+    fail "V-Link Console snapshot producer is missing"
+fi
 for required_path in \
     "$APP_DIR/V-Link.py" \
     "$APP_DIR/Check-Lite.sh" \
@@ -485,6 +553,15 @@ if [[ "$PRE_REBOOT" != true && -S "$RUNTIME_DIR/bus" ]]; then
     USER_ENV=(env "XDG_RUNTIME_DIR=$RUNTIME_DIR" "DBUS_SESSION_BUS_ADDRESS=unix:path=$RUNTIME_DIR/bus")
     if runuser -u "$TARGET_USER" -- "${USER_ENV[@]}" systemctl --user is-active --quiet v-link.service; then
         pass "v-link.service is running"
+        MAIN_PID="$(runuser -u "$TARGET_USER" -- "${USER_ENV[@]}" systemctl --user show v-link.service -p MainPID --value 2>/dev/null || true)"
+        if [[ "$MAIN_PID" =~ ^[1-9][0-9]*$ ]] && \
+           runuser -u "$TARGET_USER" -- python3 -c \
+             'import sys; sys.path.insert(0,"/usr/local/bin"); from v_link_lite_support import read_snapshot; raise SystemExit(0 if read_snapshot(int(sys.argv[1]), int(sys.argv[2])) else 1)' \
+             "$USER_ID" "$MAIN_PID" >/dev/null 2>&1; then
+            pass "V-Link Console runtime snapshot is fresh and private"
+        else
+            warn "V-Link Console snapshot is unavailable or stale"
+        fi
     else
         fail "v-link.service is not running"
     fi
@@ -510,6 +587,8 @@ if [[ "$PRE_REBOOT" != true && -S "$RUNTIME_DIR/bus" ]]; then
     fi
 elif [[ "$PRE_REBOOT" != true ]]; then
     fail "user runtime bus is unavailable at $RUNTIME_DIR/bus"
+else
+    warn "V-Link Console runtime snapshot check deferred until reboot"
 fi
 
 if [[ "$PRE_REBOOT" != true ]]; then

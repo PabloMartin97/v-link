@@ -39,6 +39,9 @@ class FakeScreen:
     def touchwin(self):
         pass
 
+    def timeout(self, *_args):
+        pass
+
     def getch(self):
         return next(self.keys)
 
@@ -83,14 +86,14 @@ def test_startup_service_menu_does_not_offer_start_or_restart():
     ui, _ = make_ui([], startup=True)
     seen = []
 
-    def choose(_heading, items):
+    def choose(_heading, items, **_kwargs):
         seen.extend(tag for tag, _label in items)
         return "back"
 
     ui.choose = choose
     ui.service_state = lambda *_args, **_kwargs: "inactive"
     ui.vlink_menu()
-    assert seen == ["status", "logs", "back"]
+    assert seen == ["console", "logs", "status", "back"]
 
 
 def test_power_command_uses_only_existing_limited_sudoers():
@@ -124,3 +127,27 @@ def test_nmtui_failure_restores_persistent_screen():
         ui.open_nmtui()
     restore.assert_called_once()
     assert messages == ["nmtui is unavailable."]
+
+
+def test_console_only_reads_running_service_and_never_controls_it():
+    ui, _ = make_ui([ord("q")])
+    ui.service_state = lambda *_args, **_kwargs: "active"
+    commands = []
+
+    def command(args, _timeout):
+        commands.append(args)
+        return 0, "123"
+
+    ui.command = command
+    with patch.object(curses, "doupdate"), patch.object(SETUP, "read_snapshot", return_value={
+        "version": "3.0", "device": "Pi 4", "rti": False, "ign": True,
+        "threads": [["server", True]], "warnings": [],
+    }):
+        ui.console()
+    assert commands == [["systemctl", "--user", "show", "v-link.service",
+                         "-p", "MainPID", "--value"]]
+
+
+def test_ssh_display_has_recoverable_unavailable_message():
+    ui, _ = make_ui([])
+    assert ui.display_status() == "Wayland display unavailable in this session."

@@ -517,7 +517,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -866,7 +866,7 @@ log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    labwc wtype wlr-randr foot lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
+    labwc wtype swayidle wlr-randr foot lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
@@ -1096,9 +1096,11 @@ show_phase 6 7 "System configuration"
 
 log "Installing root-owned Lite maintenance helpers"
 install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
 for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
-    'lite/V-Link-Lite-Setup.py:/usr/local/bin/v-link-lite-setup'; do
+    'lite/V-Link-Lite-Setup.py:/usr/local/bin/v-link-lite-setup' \
+    'lite/V-Link-Lite-Cursor.py:/usr/local/bin/v-link-lite-cursor'; do
     HELPER_SOURCE="${helper_spec%%:*}"
     HELPER_DESTINATION="${helper_spec#*:}"
     HELPER_STAGING="$(mktemp "${HELPER_DESTINATION}.new.XXXXXX")"
@@ -1243,22 +1245,25 @@ if [[ -L "$USER_SERVICE_LINK" ]]; then
     rm -f -- "$USER_SERVICE_LINK"
 fi
 
-cat >"$USER_CONFIG_DIR/labwc/rc.xml" <<'EOF'
-<?xml version="1.0"?>
-<labwc_config>
-  <keyboard>
-    <keybind key="A-W-h">
-      <action name="HideCursor" />
-      <action name="WarpCursor" x="-1" y="-1" />
-    </keybind>
-  </keyboard>
-</labwc_config>
+[[ ! -L "$USER_CONFIG_DIR/v-link-lite" ]] || die "unsafe Lite settings directory symlink"
+install -d -o "$TARGET_USER" -g "$TARGET_GROUP" -m 0700 "$USER_CONFIG_DIR/v-link-lite"
+runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$USER_CONFIG_DIR" python3 -c \
+    'import sys; sys.path.insert(0, "/usr/local/bin"); from v_link_lite_support import save_settings, DEFAULT_SETTINGS; save_settings(sys.argv[1], DEFAULT_SETTINGS, create_only=True)' \
+    "$TARGET_HOME"
+runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$USER_CONFIG_DIR" /usr/local/bin/v-link-lite-cursor sync-config
+
+cat >"$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service" <<'EOF'
+[Unit]
+Description=V-Link Lite cursor idle policy
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/swayidle -C /dev/null -w timeout 5 "/usr/local/bin/v-link-lite-cursor hide"
+Restart=on-failure
+RestartSec=2
 EOF
 
 cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
-# Hide the pointer at kiosk startup. Moving a mouse makes it visible again.
-wtype -M alt -M logo -P h
-
 # Make the Wayland session environment available to user services.
 systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 
@@ -1268,12 +1273,15 @@ udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-ter
 # The foreground gate holds V-Link until its three-second timeout or Setup exit.
 # A confirmed reboot/shutdown skips the service launch.
 if /usr/local/libexec/v-link-lite-boot; then
+    # One policy application after Setup, before the only V-Link start.
+    /usr/local/bin/v-link-lite-cursor apply || printf 'V-Link Lite: cursor policy failed.\n' >&2
     systemctl --user start v-link.service &
 fi
 EOF
 
 chown -R "$TARGET_USER:$TARGET_GROUP" "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link.service"
+chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
 chmod 0644 "$USER_CONFIG_DIR/labwc/rc.xml"
 chmod 0755 "$USER_CONFIG_DIR/labwc/autostart"
 

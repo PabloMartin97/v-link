@@ -54,11 +54,15 @@ import threading
 import time
 import argparse
 import collections
+import json
 import logging
+import stat
+import tempfile
 
 from pathlib import Path
 
 from backend.version import VERSION
+from backend.shared.lite_console import build_payload
 
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -452,6 +456,36 @@ def _get_display_snapshot():
     )
 
 
+def _write_lite_console_snapshot(snapshot, device, protocol):
+    if not shared_state.liteMode:
+        return
+    runtime = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+    if not runtime.is_dir() or runtime.stat().st_uid != os.getuid() or stat.S_IMODE(runtime.stat().st_mode) != 0o700:
+        return
+    path = runtime / 'v-link-lite-console.json'
+    descriptor, temporary = tempfile.mkstemp(prefix='.v-link-console.', dir=runtime)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            json.dump(build_payload(snapshot, VERSION, device, protocol), stream)
+            stream.flush()
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _remove_lite_console_snapshot():
+    if not shared_state.liteMode:
+        return
+    path = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'v-link-lite-console.json'
+    try:
+        if json.loads(path.read_text(encoding='utf-8')).get('pid') == os.getpid():
+            path.unlink()
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+
+
 def display_thread_states():
     global _display_initialized, _prev_display_snapshot
 
@@ -533,6 +567,7 @@ if __name__ == '__main__':
     #vlink.print_thread_states()
 
     try:
+        next_lite_snapshot = 0
         while not vlink.exit_event.is_set():
             vlink.process_toggle_event()
             vlink.process_exit_event()
@@ -552,10 +587,19 @@ if __name__ == '__main__':
             else:
                 vlink.process_start_event()
 
+            if shared_state.liteMode and time.monotonic() >= next_lite_snapshot:
+                try:
+                    _write_lite_console_snapshot(_get_display_snapshot(),
+                                                 vlink.rpiModel, vlink.rpiProtocol)
+                except OSError:
+                    pass  # Console is optional; it must never stop V-Link.
+                next_lite_snapshot = time.monotonic() + 1
+
             time.sleep(.1)
     except KeyboardInterrupt:
             pass
     finally:
+            _remove_lite_console_snapshot()
             sys.stdout.write('\033[?25h\n')
             print('Exiting... Please wait.\n')
             sys.stdout.flush()
