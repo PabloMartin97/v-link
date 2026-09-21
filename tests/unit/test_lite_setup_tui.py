@@ -14,9 +14,12 @@ SPEC.loader.exec_module(SETUP)
 
 
 class FakeScreen:
-    def __init__(self, keys):
+    def __init__(self, keys, height=24, width=80):
         self.keys = iter(keys)
         self.draws = 0
+        self.height = height
+        self.width = width
+        self.writes = []
 
     def bkgd(self, *_args):
         pass
@@ -25,13 +28,13 @@ class FakeScreen:
         pass
 
     def getmaxyx(self):
-        return 24, 80
+        return self.height, self.width
 
     def erase(self):
         self.draws += 1
 
-    def addnstr(self, *_args):
-        pass
+    def addnstr(self, *args):
+        self.writes.append(args)
 
     def noutrefresh(self):
         pass
@@ -46,8 +49,8 @@ class FakeScreen:
         return next(self.keys)
 
 
-def make_ui(keys, startup=False):
-    screen = FakeScreen(keys)
+def make_ui(keys, startup=False, height=24, width=80):
+    screen = FakeScreen(keys, height, width)
     with patch.object(curses, "has_colors", return_value=False), \
          patch.object(curses, "curs_set"), \
          patch.object(curses, "doupdate"):
@@ -74,6 +77,34 @@ def test_menu_redraws_in_one_curses_session():
     assert choice == "two"
     assert screen.draws == 2
     endwin.assert_not_called()
+
+
+def test_setup_panel_is_centered_on_large_terminal():
+    ui, screen = make_ui([27], height=40, width=120)
+    with patch.object(curses, "doupdate"):
+        assert ui.choose("Menu", [("one", "One")]) is None
+    assert ui.size() == (28, 84)
+    assert (ui.panel_top, ui.panel_left) == (6, 18)
+    assert any(row == 7 and col > 18 and value == SETUP.TITLE
+               for row, col, value, *_ in screen.writes)
+
+
+def test_menu_remembers_selection_and_supports_page_navigation():
+    ui, _ = make_ui([curses.KEY_NPAGE, 10, 10, curses.KEY_END, 10])
+    items = [(str(index), f"Choice {index}") for index in range(30)]
+    with patch.object(curses, "doupdate"):
+        assert ui.choose("Menu", items) == "12"
+        assert ui.choose("Menu", items) == "12"
+        assert ui.choose("Menu", items) == "29"
+
+
+def test_graphical_setup_launchers_use_larger_font_without_changing_boot_gate():
+    root = SCRIPT.parents[1]
+    gate = (root / "lite/V-Link-Lite-Boot.sh").read_text(encoding="utf-8")
+    overlay = (root / "lite/V-Link-Lite-Overlay.py").read_text(encoding="utf-8")
+    assert gate.count("--font=monospace:size=16") == 1
+    assert '"--font=monospace:size=16"' in overlay
+    assert "foot --fullscreen --title='V-Link Lite Boot'" in gate
 
 
 def test_volume_typing_replaces_initial_value():

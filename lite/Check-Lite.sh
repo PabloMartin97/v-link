@@ -142,7 +142,7 @@ else
     warn "nmtui is unavailable; the Network summary still works"
 fi
 
-for helper in /usr/local/libexec/v-link-lite-boot /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor; do
+for helper in /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay /usr/local/libexec/v-link-lite-prepare-splash /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor; do
     if [[ -f "$helper" && -x "$helper" ]] && \
        [[ "$(stat -c '%u:%g' "$helper")" == '0:0' ]] && \
        [[ "$(stat -c '%a' "$helper")" == 755 ]]; then
@@ -156,6 +156,23 @@ if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
     pass "Lite boot gate shell syntax is valid"
 else
     fail "Lite boot gate shell syntax is invalid"
+fi
+if python3 -c 'import gi; gi.require_version("Gtk", "3.0"); gi.require_version("GtkLayerShell", "0.1"); from gi.repository import Gtk, GtkLayerShell' >/dev/null 2>&1; then
+    pass "GTK layer-shell is available for the Lite splash overlay"
+else
+    fail "GTK layer-shell is unavailable"
+fi
+if [[ -f /usr/local/libexec/v-link-lite-overlay && -f /usr/local/libexec/v-link-lite-prepare-splash ]] && \
+   python3 -c 'import ast, pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in ("/usr/local/libexec/v-link-lite-overlay", "/usr/local/libexec/v-link-lite-prepare-splash")]' >/dev/null 2>&1; then
+    pass "Lite splash helpers have valid Python syntax"
+else
+    fail "Lite splash helpers are unavailable or invalid"
+fi
+if [[ -f /usr/local/share/v-link-lite/handoff.js ]] && \
+   [[ "$(stat -c '%u:%g:%a' /usr/local/share/v-link-lite/handoff.js)" == '0:0:644' ]]; then
+    pass "Lite splash handoff script is installed root:root 0644"
+else
+    fail "Lite splash handoff script is missing or unsafe"
 fi
 if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
    grep -Fq 's|S)' /usr/local/libexec/v-link-lite-boot && \
@@ -378,15 +395,19 @@ if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^swaybg -i \/usr\/local\/share\/v-link-lite\/splash[.]png -m fit -c 000000 &$/ { background = NR }
     /^udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &$/ { automounter = NR }
     /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
+    /^[[:space:]]*if \/usr\/local\/libexec\/v-link-lite-prepare-splash; then$/ { prepared = NR }
+    /^[[:space:]]*\/usr\/local\/libexec\/v-link-lite-overlay &$/ { overlay = NR }
+    /^[[:space:]]*if \[\[ -f "\$overlay_ready" \]\] && kill -0 "\$overlay_pid"/ { mapped = NR }
     /^[[:space:]]*\/usr\/local\/bin\/v-link-lite-cursor apply/ { policy = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { starts++; started = NR }
     /^fi$/ { if (gate && NR > gate) closed = NR }
     END { exit !(imported && background > imported && automounter > background && gate > automounter &&
-                  policy > gate && started > policy && closed > started && starts == 1) }
+                  prepared > gate && overlay > prepared && mapped > overlay && policy > mapped &&
+                  started > policy && closed > started && starts == 1) }
 ' "$LABWC_AUTOSTART"; then
-    pass "labwc splash and boot gate run before the single V-Link service start"
+    pass "labwc maps the splash overlay before the single V-Link service start"
 else
-    fail "labwc boot gate is missing, unordered, or bypassed"
+    fail "labwc boot gate or splash overlay is missing, unordered, or bypassed"
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && runuser -u "$TARGET_USER" -- test -x "$LABWC_AUTOSTART"; then
     pass "$TARGET_USER can execute labwc autostart"
@@ -495,6 +516,13 @@ for required_path in \
         fail "missing $required_path"
     fi
 done
+if grep -qFx '<!-- BEGIN V-LINK LITE SPLASH HANDOFF -->' "$APP_DIR/frontend/dist/index.html" 2>/dev/null && \
+   grep -qF '127.0.0.1:40777/ready' "$APP_DIR/frontend/dist/index.html" 2>/dev/null && \
+   grep -qFx '<!-- END V-LINK LITE SPLASH HANDOFF -->' "$APP_DIR/frontend/dist/index.html" 2>/dev/null; then
+    pass "Lite-only splash handoff is installed in the built HTML"
+else
+    fail "Lite-only splash handoff is missing from the built HTML"
+fi
 
 if grep -qsF "ExecStartPre=$TARGET_HOME/.local/libexec/v-link-recover-update $APP_DIR" \
     "$TARGET_HOME/.config/systemd/user/v-link.service"; then

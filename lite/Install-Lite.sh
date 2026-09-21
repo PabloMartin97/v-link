@@ -522,7 +522,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -872,6 +872,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
     labwc wtype swayidle wlr-randr foot swaybg librsvg2-bin python3-pil \
+    python3-gi gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 \
     lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
@@ -1105,6 +1106,8 @@ install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
 for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
+    'lite/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \
+    'lite/V-Link-Lite-Prepare-Splash.py:/usr/local/libexec/v-link-lite-prepare-splash' \
     'lite/V-Link-Lite-Setup.py:/usr/local/bin/v-link-lite-setup' \
     'lite/V-Link-Lite-Cursor.py:/usr/local/bin/v-link-lite-cursor'; do
     HELPER_SOURCE="${helper_spec%%:*}"
@@ -1117,6 +1120,8 @@ done
 
 log "Rendering V-Link branding for the graphical splash"
 install -d -o root -g root -m 0755 /usr/local/share/v-link-lite
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/V-Link-Lite-Handoff.js" \
+    /usr/local/share/v-link-lite/handoff.js
 SPLASH_WORK="$(mktemp -d /tmp/v-link-splash.XXXXXX)"
 python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
     --logos-dir "$SOURCE_DIR/frontend/public/assets/svg/logos" \
@@ -1127,6 +1132,7 @@ for splash_image in logo.png splash.png; do
 done
 rm -r -- "$SPLASH_WORK"
 SPLASH_WORK=""
+runuser -u "$TARGET_USER" -- /usr/local/libexec/v-link-lite-prepare-splash --app-dir "$APP_DIR"
 
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
@@ -1295,6 +1301,28 @@ udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-ter
 # The foreground gate holds V-Link until its three-second timeout or Setup exit.
 # A confirmed reboot/shutdown skips the service launch.
 if /usr/local/libexec/v-link-lite-boot; then
+    # Reapply the Lite-only HTML hook after any headless V-Link update.
+    if /usr/local/libexec/v-link-lite-prepare-splash; then
+        # Wait for the overlay to map, not for a guessed Chromium delay.
+        overlay_ready="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/v-link-lite-overlay-visible"
+        rm -f -- "$overlay_ready"
+        /usr/local/libexec/v-link-lite-overlay &
+        overlay_pid=$!
+        overlay_mapped=false
+        for attempt in {1..50}; do
+            if [[ -f "$overlay_ready" ]] && kill -0 "$overlay_pid" 2>/dev/null; then
+                overlay_mapped=true
+                break
+            fi
+            kill -0 "$overlay_pid" 2>/dev/null || break
+            sleep 0.1
+        done
+        if [[ "$overlay_mapped" != true ]]; then
+            printf 'V-Link Lite: splash overlay did not map; continuing startup.\n' >&2
+        fi
+    else
+        printf 'V-Link Lite: splash handoff unavailable; continuing startup.\n' >&2
+    fi
     # One policy application after Setup, before the only V-Link start.
     /usr/local/bin/v-link-lite-cursor apply || printf 'V-Link Lite: cursor policy failed.\n' >&2
     systemctl --user start v-link.service &

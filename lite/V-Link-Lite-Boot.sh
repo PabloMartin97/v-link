@@ -34,7 +34,8 @@ for _ in 1 2 3; do
             s|S)
                 # Setup gets its own normal, opaque terminal; the boot gate
                 # stays transparent behind it until Setup exits.
-                foot --fullscreen --title='V-Link Lite Setup' --app-id=v-link-lite-setup \
+                foot --fullscreen --font=monospace:size=16 \
+                    --title='V-Link Lite Setup' --app-id=v-link-lite-setup \
                     /usr/local/bin/v-link-lite-setup --startup
                 exit $?
                 ;;

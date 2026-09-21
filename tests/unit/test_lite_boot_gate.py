@@ -1,6 +1,8 @@
 """The Lite startup gate keeps Settings available without overlay text."""
 
 from pathlib import Path
+import subprocess
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,3 +38,43 @@ def test_html_has_black_first_paint_before_react():
     html = (ROOT / "frontend/index.html").read_text(encoding="utf-8")
     assert html.index("background: #000") < html.index('<div id="root">')
     assert html.index('id="boot-mark"') < html.index('src="/src/main.tsx"')
+
+
+def test_overlay_covers_browser_until_react_signals_ready():
+    install = (ROOT / "lite/Install-Lite.sh").read_text(encoding="utf-8")
+    overlay = (ROOT / "lite/V-Link-Lite-Overlay.py").read_text(encoding="utf-8")
+    handoff = (ROOT / "lite/V-Link-Lite-Handoff.js").read_text(encoding="utf-8")
+
+    assert "gir1.2-gtklayershell-0.1" in install
+    assert "v-link-lite-overlay &" in install
+    assert install.index("v-link-lite-overlay &") < install.index("systemctl --user start v-link.service &")
+    assert "GtkLayerShell.Layer.OVERLAY" in overlay
+    assert 'HTTPServer(("127.0.0.1", 40777)' in overlay
+    assert "READY.is_set()" in overlay
+    assert "MutationObserver(ready)" in handoff
+    assert "127.0.0.1:40777/ready" in handoff
+    assert "Press S for Settings" in overlay
+
+
+def test_lite_handoff_reapplies_after_frontend_update_without_duplicates():
+    helper = ROOT / "lite/V-Link-Lite-Prepare-Splash.py"
+    script = ROOT / "lite/V-Link-Lite-Handoff.js"
+    with tempfile.TemporaryDirectory() as directory:
+        app = Path(directory)
+        dist = app / "frontend/dist"
+        dist.mkdir(parents=True)
+        index = dist / "index.html"
+        original = "<html><body><div id='root'></div></body></html>"
+        index.write_text(original, encoding="utf-8")
+        command = ["python3", str(helper), "--app-dir", str(app), "--script", str(script)]
+
+        subprocess.run(command, check=True)
+        first = index.read_text(encoding="utf-8")
+        subprocess.run(command, check=True)
+        assert index.read_text(encoding="utf-8") == first
+        assert first.count("<!-- BEGIN V-LINK LITE SPLASH HANDOFF -->") == 1
+        assert "127.0.0.1:40777/ready" in first
+
+        index.write_text(original, encoding="utf-8")  # A headless update replaces dist.
+        subprocess.run(command, check=True)
+        assert index.read_text(encoding="utf-8") == first

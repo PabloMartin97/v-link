@@ -84,6 +84,11 @@ class SetupUI:
         self.username = username
         self.env = env
         self.home = Path(env.get("HOME") or Path.home())
+        self.menu_positions = {}
+        self.panel_top = 0
+        self.panel_left = 0
+        self.panel_height = 0
+        self.panel_width = 0
         self.normal = curses.A_NORMAL
         self.selected = curses.A_REVERSE | curses.A_BOLD
         if curses.has_colors():
@@ -96,7 +101,7 @@ class SetupUI:
                 self.selected = curses.color_pair(2) | curses.A_BOLD
             except curses.error:
                 pass
-        self.screen.bkgd(" ", self.normal)
+        self.screen.bkgd(" ", curses.A_NORMAL)
         self.screen.keypad(True)
         try:
             curses.curs_set(0)
@@ -104,28 +109,39 @@ class SetupUI:
             pass
 
     def put(self, row, col, value, attribute=None):
-        height, width = self.screen.getmaxyx()
-        if not (0 <= row < height and 0 <= col < width - 1):
+        if not (0 <= row < self.panel_height and 0 <= col < self.panel_width - 1):
             return
         try:
-            self.screen.addnstr(row, col, str(value), width - col - 1,
+            self.screen.addnstr(self.panel_top + row, self.panel_left + col,
+                                  str(value), self.panel_width - col - 1,
                                   self.normal if attribute is None else attribute)
         except curses.error:
             pass
+
+    def size(self):
+        return self.panel_height, self.panel_width
 
     def frame(self, heading, footer="Arrows: move   Enter: select   Esc: back"):
         self.screen.erase()
         height, width = self.screen.getmaxyx()
         if height < 14 or width < 48:
-            self.put(0, 0, "Resize terminal to at least 48x14 (Esc exits).")
+            self.screen.addnstr(0, 0, "Resize terminal to at least 48x14 (Esc exits).",
+                                max(0, width - 1))
             self.screen.noutrefresh()
             curses.doupdate()
             return False
-        self.put(1, max(2, (width - len(TITLE)) // 2), TITLE,
+        self.panel_height = min(height - 2, 28)
+        self.panel_width = min(width - 2, 84)
+        self.panel_top = (height - self.panel_height) // 2
+        self.panel_left = (width - self.panel_width) // 2
+        panel_height, panel_width = self.size()
+        for row in range(panel_height):
+            self.put(row, 0, " " * (panel_width - 1))
+        self.put(1, max(2, (panel_width - len(TITLE)) // 2), TITLE,
                  self.normal | curses.A_BOLD)
-        self.put(2, 2, "-" * (width - 5))
+        self.put(2, 2, "-" * (panel_width - 5))
         self.put(4, 4, heading, self.normal | curses.A_BOLD)
-        self.put(height - 2, 2, footer)
+        self.put(panel_height - 2, 2, footer)
         return True
 
     def flush(self):
@@ -134,16 +150,17 @@ class SetupUI:
 
     def choose(self, heading, items, summary=None):
         """One curses session across all menus; no terminal teardown."""
-        selected = 0
+        selected = min(self.menu_positions.get(heading, 0), len(items) - 1)
         while True:
             if self.frame(heading):
-                height, width = self.screen.getmaxyx()
+                height, width = self.size()
                 summary_lines = (summary or [])[:max(0, min(5, height - 11))]
                 for row, line in enumerate(summary_lines):
                     self.put(6 + row, 5, line)
                 start = 7 + len(summary_lines) if summary_lines else 6
                 visible = max(1, height - start - 3)
-                first = max(0, selected - visible + 1)
+                first = min(max(0, selected - visible // 2),
+                            max(0, len(items) - visible))
                 for offset, (_, label) in enumerate(items[first:first + visible]):
                     index = first + offset
                     prefix = "> " if index == selected else "  "
@@ -156,11 +173,21 @@ class SetupUI:
             if key in (27, curses.KEY_BACKSPACE, 127, 8):
                 return None
             if key in (curses.KEY_UP, ord("k")):
-                selected = (selected - 1) % len(items)
+                selected = max(0, selected - 1)
             elif key in (curses.KEY_DOWN, ord("j")):
-                selected = (selected + 1) % len(items)
-            elif key in (10, 13, curses.KEY_ENTER):
+                selected = min(len(items) - 1, selected + 1)
+            elif key == curses.KEY_HOME:
+                selected = 0
+            elif key == curses.KEY_END:
+                selected = len(items) - 1
+            elif key == curses.KEY_PPAGE:
+                selected = max(0, selected - max(1, self.panel_height - 10))
+            elif key == curses.KEY_NPAGE:
+                selected = min(len(items) - 1, selected + max(1, self.panel_height - 10))
+            elif key in (10, 13, curses.KEY_ENTER, curses.KEY_RIGHT):
+                self.menu_positions[heading] = selected
                 return items[selected][0]
+            self.menu_positions[heading] = selected
 
     def busy(self, action):
         if self.frame(action, "Please wait..."):
@@ -173,7 +200,7 @@ class SetupUI:
         left = 0
         while True:
             if self.frame(heading, "Up/Down: scroll   PgUp/PgDn: page   Esc/Enter: back"):
-                height, width = self.screen.getmaxyx()
+                height, width = self.size()
                 visible = max(1, height - 9)
                 for offset, line in enumerate(lines[top:top + visible]):
                     self.put(6 + offset, 4, line[left:left + width - 9])
@@ -196,7 +223,7 @@ class SetupUI:
                 left += 8
 
     def message(self, message):
-        wrapped = textwrap.wrap(str(message), width=max(30, self.screen.getmaxyx()[1] - 12))
+        wrapped = textwrap.wrap(str(message), width=max(30, self.panel_width - 12))
         self.view(TITLE, "\n".join(wrapped))
 
     def input_number(self, heading, initial="75"):
@@ -577,7 +604,7 @@ class SetupUI:
                             lines.append(f"{str(name).upper():<15} {'running' if running else 'stopped'}")
                         lines += ["", "Recent warnings"]
                         lines += snapshot.get("warnings", []) or ["No recent warnings."]
-                        height, _ = self.screen.getmaxyx()
+                        height, _ = self.size()
                         for row, line in enumerate(lines[:max(0, height - 9)]):
                             self.put(6 + row, 5, line)
                 self.flush()
