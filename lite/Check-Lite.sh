@@ -117,9 +117,14 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wtype swayidle wlr-randr foot lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
+for command_name in chromium labwc wtype swayidle wlr-randr foot chafa swaybg plymouth-set-default-theme lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
     check_command "$command_name"
 done
+if python3 -c 'from PIL import Image' >/dev/null 2>&1 && command -v rsvg-convert >/dev/null 2>&1; then
+    pass "Lite splash renderer dependencies are available"
+else
+    warn "python3-pil or rsvg-convert is missing; installed splash still works, but regeneration needs them"
+fi
 if runuser -u "$TARGET_USER" -- python3 -c 'import curses' >/dev/null 2>&1; then
     pass "Python curses is available for the persistent Lite Setup interface"
 else
@@ -151,6 +156,54 @@ if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
     pass "Lite boot gate shell syntax is valid"
 else
     fail "Lite boot gate shell syntax is invalid"
+fi
+if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
+   grep -Fq 'Press S for Settings' /usr/local/libexec/v-link-lite-boot && \
+   grep -Fq 'chafa --format sixels' /usr/local/libexec/v-link-lite-boot; then
+    pass "branded boot gate still offers the Settings shortcut"
+else
+    fail "boot gate branding or Settings shortcut is missing"
+fi
+for splash_asset in \
+    /usr/local/share/v-link-lite/logo.png \
+    /usr/local/share/v-link-lite/splash.png \
+    /usr/local/share/v-link-lite/splash.tga \
+    /usr/share/plymouth/themes/v-link-lite/logo.png \
+    /usr/share/plymouth/themes/v-link-lite/v-link-lite.plymouth \
+    /usr/share/plymouth/themes/v-link-lite/v-link-lite.script; do
+    if [[ -s "$splash_asset" && ! -L "$splash_asset" ]] && \
+       [[ "$(stat -c '%u:%g:%a' "$splash_asset")" == '0:0:644' ]]; then
+        pass "Lite splash asset is installed: $splash_asset"
+    else
+        fail "Lite splash asset is missing or unsafe: $splash_asset"
+    fi
+done
+if [[ "$(plymouth-set-default-theme 2>/dev/null)" == v-link-lite ]]; then
+    pass "V-Link Lite Plymouth theme is selected"
+else
+    fail "V-Link Lite Plymouth theme is not selected"
+fi
+if [[ -f /boot/firmware/config.txt ]] && \
+   grep -qFx '# BEGIN V-LINK LITE SPLASH' /boot/firmware/config.txt && \
+   grep -qFx 'disable_splash=1' /boot/firmware/config.txt && \
+   grep -qFx 'auto_initramfs=1' /boot/firmware/config.txt && \
+   grep -qFx '# END V-LINK LITE SPLASH' /boot/firmware/config.txt; then
+    pass "rainbow splash is disabled and initramfs splash is enabled"
+else
+    fail "V-Link Lite boot splash configuration is missing"
+fi
+if [[ -f /boot/firmware/cmdline.txt ]] && \
+   grep -Eq '(^| )quiet( |$)' /boot/firmware/cmdline.txt && \
+   grep -Eq '(^| )splash( |$)' /boot/firmware/cmdline.txt && \
+   grep -Eq '(^| )vt.global_cursor_default=0( |$)' /boot/firmware/cmdline.txt; then
+    pass "kernel command line requests the V-Link Lite boot splash"
+else
+    fail "kernel command line is missing splash options"
+fi
+if grep -Eq '(^| )fullscreen_logo=1( |$)' /boot/firmware/cmdline.txt 2>/dev/null; then
+    pass "V-Link mark is configured for the earliest boot screen"
+else
+    warn "earliest boot image unavailable on this OS; Plymouth follows a black screen"
 fi
 if [[ -f /usr/local/bin/v_link_lite_support.py ]] && \
    [[ "$(stat -c '%u:%g:%a' /usr/local/bin/v_link_lite_support.py)" == '0:0:644' ]]; then
@@ -336,15 +389,16 @@ else
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
+    /^swaybg -i \/usr\/local\/share\/v-link-lite\/splash[.]png -m fit -c 000000 &$/ { background = NR }
     /^udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &$/ { automounter = NR }
     /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
     /^[[:space:]]*\/usr\/local\/bin\/v-link-lite-cursor apply/ { policy = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { starts++; started = NR }
     /^fi$/ { if (gate && NR > gate) closed = NR }
-    END { exit !(imported && automounter > imported && gate > automounter &&
+    END { exit !(imported && background > imported && automounter > background && gate > automounter &&
                   policy > gate && started > policy && closed > started && starts == 1) }
 ' "$LABWC_AUTOSTART"; then
-    pass "labwc boot gate runs before the single V-Link service start"
+    pass "labwc splash and boot gate run before the single V-Link service start"
 else
     fail "labwc boot gate is missing, unordered, or bypassed"
 fi

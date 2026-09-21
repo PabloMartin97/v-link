@@ -92,6 +92,10 @@ a local terminal or SSH (`ssh -t user@host v-link-lite-setup`). It provides
 network (`nmtui`), audio, display and USB status, diagnostics, and V-Link
 service controls. Closing Setup with “Continue to V-Link” resumes normal
 startup; opening it manually does not stop a running V-Link service.
+Lite renders the existing V-Link logos on a black boot splash, uses the same
+branding for the Settings gate, and keeps a matching Wayland background until
+Chromium shows its own splash. The firmware rainbow is disabled; the earliest
+custom image is enabled when Raspberry Pi OS provides its splash-support tool.
 `Display / Input` offers cursor Auto (hidden at start and again after five
 seconds idle) or Visible, plus a separate mouse Activated/Deactivated switch.
 Deactivated ignores mouse and touchpad input but leaves touch and keyboard

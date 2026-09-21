@@ -9,6 +9,8 @@ readonly REPOSITORY="PabloMartin97/v-link"
 readonly APP_NAME="v-link"
 readonly CONFIG_BEGIN="# BEGIN V-LINK LITE"
 readonly CONFIG_END="# END V-LINK LITE"
+readonly SPLASH_CONFIG_BEGIN="# BEGIN V-LINK LITE SPLASH"
+readonly SPLASH_CONFIG_END="# END V-LINK LITE SPLASH"
 readonly NODE_VERSION="v22.23.2"
 readonly NODE_MIN_MINOR=12
 readonly PYTHON_BUILD_PIP="24.3.1"
@@ -36,6 +38,7 @@ NODE_STAGE=""
 NODE_BIN_DIR=""
 NODE_BUILD_PATH=""
 HELPER_STAGING=""
+SPLASH_WORK=""
 VENV_BACKUP=""
 VENV_TRANSACTION=false
 APP_TRANSACTION=false
@@ -76,6 +79,7 @@ cleanup() {
     [[ -z "$NODE_TEMP" || ! -d "$NODE_TEMP" ]] || rm -rf -- "$NODE_TEMP"
     [[ -z "$NODE_STAGE" || ! -d "$NODE_STAGE" ]] || rm -rf -- "$NODE_STAGE"
     [[ -z "$HELPER_STAGING" || ! -e "$HELPER_STAGING" ]] || rm -f -- "$HELPER_STAGING"
+    [[ -z "$SPLASH_WORK" || ! -d "$SPLASH_WORK" ]] || rm -r -- "$SPLASH_WORK"
 
     exit "$status"
 }
@@ -478,13 +482,14 @@ The installer will make these major system changes:
   - install Chromium kiosk plus PipeWire/WirePlumber audio
   - create a V-Link user systemd service and kiosk autostart
   - install/update the V-Link runtime and Python virtual environment
+  - brand the boot splash (backs up and updates config.txt/cmdline.txt)
 EOF
 
     if [[ "$CONFIGURE_HARDWARE" == true ]]; then
         cat <<'EOF'
 
 Hardware mode will ALSO:
-  - modify /boot/firmware/config.txt and release serial ports in cmdline.txt
+  - configure V-Link HAT boot options and release serial ports in cmdline.txt
   - install V-Link/CAN device-tree overlays and configure SPI/I2C/UART/GPIO
   - install CAN helper services, udev rules and limited sudo permissions
   - on Raspberry Pi 3, disable the onboard Bluetooth controller for the UART
@@ -517,7 +522,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/Render-Lite-Splash.py lite/splash/v-link-lite.plymouth lite/splash/v-link-lite.script frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -866,7 +871,8 @@ log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    labwc wtype swayidle wlr-randr foot lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
+    labwc wtype swayidle wlr-randr foot chafa swaybg plymouth librsvg2-bin python3-pil \
+    lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
@@ -1109,6 +1115,25 @@ for helper_spec in \
     HELPER_STAGING=""
 done
 
+log "Rendering V-Link branding for the graphical and boot splash"
+install -d -o root -g root -m 0755 /usr/local/share/v-link-lite /usr/share/plymouth/themes/v-link-lite
+SPLASH_WORK="$(mktemp -d /tmp/v-link-splash.XXXXXX)"
+python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
+    --logos-dir "$SOURCE_DIR/frontend/public/assets/svg/logos" \
+    --output-dir "$SPLASH_WORK"
+for splash_image in logo.png splash.png splash.tga; do
+    install -o root -g root -m 0644 "$SPLASH_WORK/$splash_image" \
+        "/usr/local/share/v-link-lite/$splash_image"
+done
+rm -r -- "$SPLASH_WORK"
+SPLASH_WORK=""
+install -o root -g root -m 0644 /usr/local/share/v-link-lite/logo.png \
+    /usr/share/plymouth/themes/v-link-lite/logo.png
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/splash/v-link-lite.plymouth" \
+    /usr/share/plymouth/themes/v-link-lite/v-link-lite.plymouth
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/splash/v-link-lite.script" \
+    /usr/share/plymouth/themes/v-link-lite/v-link-lite.script
+
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
     if getent group "$group" >/dev/null; then
@@ -1267,6 +1292,9 @@ cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
 # Make the Wayland session environment available to user services.
 systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 
+# Keep the V-Link mark visible while the boot gate and Chromium start.
+swaybg -i /usr/local/share/v-link-lite/splash.png -m fit -c 000000 &
+
 # Automount removable media within the kiosk user's graphical session.
 udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &
 
@@ -1341,7 +1369,6 @@ dtoverlay=v-link,cs2_spidev=off
 dtoverlay=mcp2515-can1,oscillator=16000000,interrupt=24
 dtoverlay=mcp2515-can2,oscillator=16000000,interrupt=22
 dtoverlay=gpio-poweroff,gpiopin=0
-disable_splash=1
 EOF
         case "$RPI_GENERATION" in
             3)
@@ -1554,6 +1581,62 @@ else
         systemctl unmask "serial-getty@$serial_unit.service" >/dev/null 2>&1 || true
     done
     udevadm control --reload-rules
+fi
+
+# Build the branded initramfs before changing the active boot options.
+plymouth-set-default-theme -R v-link-lite
+
+log "Configuring the V-Link Lite boot splash for both hardware modes"
+BOOT_CONFIG=/boot/firmware/config.txt
+CMDLINE_FILE=/boot/firmware/cmdline.txt
+[[ -f "$BOOT_CONFIG" && -f "$CMDLINE_FILE" ]] || \
+    die "Bookworm boot configuration is missing under /boot/firmware"
+SPLASH_BEGIN_COUNT="$(grep -cFx "$SPLASH_CONFIG_BEGIN" "$BOOT_CONFIG" || true)"
+SPLASH_END_COUNT="$(grep -cFx "$SPLASH_CONFIG_END" "$BOOT_CONFIG" || true)"
+if [[ "$SPLASH_BEGIN_COUNT" != "$SPLASH_END_COUNT" || "$SPLASH_BEGIN_COUNT" -gt 1 ]]; then
+    die "$BOOT_CONFIG contains an incomplete or duplicated V-Link splash block"
+fi
+[[ -e "$BOOT_CONFIG.v-link.bak" ]] || cp "$BOOT_CONFIG" "$BOOT_CONFIG.v-link.bak"
+BOOT_TEMP="$(mktemp "$BOOT_CONFIG.v-link.XXXXXX")"
+if [[ "$SPLASH_BEGIN_COUNT" -eq 1 ]]; then
+    sed "\|$SPLASH_CONFIG_BEGIN|,\|$SPLASH_CONFIG_END|d" "$BOOT_CONFIG" >"$BOOT_TEMP"
+else
+    cp "$BOOT_CONFIG" "$BOOT_TEMP"
+fi
+printf '\n%s\n[all]\ndisable_splash=1\nauto_initramfs=1\n%s\n' \
+    "$SPLASH_CONFIG_BEGIN" "$SPLASH_CONFIG_END" >>"$BOOT_TEMP"
+chmod --reference="$BOOT_CONFIG" "$BOOT_TEMP"
+mv -f -- "$BOOT_TEMP" "$BOOT_CONFIG"
+BOOT_TEMP=""
+
+if ! awk 'NF { lines++ } END { exit(lines == 1 ? 0 : 1) }' "$CMDLINE_FILE"; then
+    die "refusing to install splash on an invalid multi-line kernel command line"
+fi
+CMDLINE_CONTENT="$(<"$CMDLINE_FILE")"
+for option in quiet splash vt.global_cursor_default=0; do
+    if [[ " $CMDLINE_CONTENT " != *" $option "* ]]; then
+        CMDLINE_CONTENT+=" $option"
+    fi
+done
+[[ -e "$CMDLINE_FILE.v-link.bak" ]] || cp "$CMDLINE_FILE" "$CMDLINE_FILE.v-link.bak"
+CMDLINE_TEMP="$(mktemp "$CMDLINE_FILE.v-link.XXXXXX")"
+printf '%s\n' "$CMDLINE_CONTENT" >"$CMDLINE_TEMP"
+chmod --reference="$CMDLINE_FILE" "$CMDLINE_TEMP"
+mv -f -- "$CMDLINE_TEMP" "$CMDLINE_FILE"
+CMDLINE_TEMP=""
+
+# Newer Raspberry Pi OS images also support a branded image before Plymouth.
+# Keep the proven Plymouth + Wayland path if this optional package is absent.
+if apt-cache show rpi-splash-screen-support >/dev/null 2>&1; then
+    if apt-get install -y --no-install-recommends rpi-splash-screen-support && \
+       command -v configure-splash >/dev/null 2>&1 && \
+       configure-splash /usr/local/share/v-link-lite/splash.tga; then
+        log "V-Link image also replaces the early firmware/kernel splash"
+    else
+        log "WARNING: early splash unavailable; Plymouth and the graphical gate remain configured"
+    fi
+else
+    log "Early splash package unavailable on this OS image; rainbow remains disabled"
 fi
 
 systemctl daemon-reload

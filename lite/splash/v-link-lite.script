@@ -1,0 +1,7 @@
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+logo = Image("logo.png");
+logo_sprite = Sprite(logo);
+logo_sprite.SetPosition((Window.GetWidth() - logo.GetWidth()) / 2,
+                        (Window.GetHeight() - logo.GetHeight()) / 2, 0);

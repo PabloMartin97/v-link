@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=V-Link Lite
+Description=V-Link Lite boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/v-link-lite
+ScriptFile=/usr/share/plymouth/themes/v-link-lite/v-link-lite.script

@@ -21,9 +21,17 @@ fi
 
 [[ $# -eq 1 ]] || exit 2
 [[ -t 0 && -t 1 ]] || exit 0
+printf '\033[2J\033[H'
+if [[ -r /usr/local/share/v-link-lite/logo.png ]] && command -v chafa >/dev/null 2>&1; then
+    printf '\n\n'
+    chafa --format sixels --size 40x12 --bg 000000 \
+        /usr/local/share/v-link-lite/logo.png || printf '        V-Link Lite\n'
+else
+    printf '\n        V-Link Lite\n'
+fi
+printf '\n        Starting V-Link...\n\n        Press S for Settings\n\n'
 for remaining in 3 2 1; do
-    printf '\033[2J\033[H'
-    printf '\n        V-Link Lite\n\n        Starting V-Link...\n\n        Press S for Setup\n\n        %s...\n' "$remaining"
+    printf '\r        %s...\033[K' "$remaining"
     key=''
     if IFS= read -r -s -n 1 -t 1 key; then
         case "$key" in
@@ -34,4 +42,5 @@ for remaining in 3 2 1; do
         esac
     fi
 done
+printf '\n'
 exit 0
