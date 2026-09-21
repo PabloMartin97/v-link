@@ -1288,6 +1288,15 @@ Restart=on-failure
 RestartSec=2
 EOF
 
+cat >"$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service" <<'EOF'
+[Unit]
+Description=V-Link Lite Setup window
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/foot --fullscreen --font=monospace:size=16 "--title=V-Link Lite Setup" --app-id=v-link-lite-setup /usr/local/bin/v-link-lite-setup
+EOF
+
 cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
 # Make the Wayland session environment available to user services.
 systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
@@ -1332,6 +1341,7 @@ EOF
 chown -R "$TARGET_USER:$TARGET_GROUP" "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link.service"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
+chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
 chmod 0644 "$USER_CONFIG_DIR/labwc/rc.xml"
 chmod 0755 "$USER_CONFIG_DIR/labwc/autostart"
 

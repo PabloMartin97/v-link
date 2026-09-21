@@ -11,6 +11,26 @@ from pathlib import Path
 from v_link_lite_support import load_settings
 
 
+# Labwc consumes these bindings before Chromium sees them. "None" is not a
+# blocker in labwc: it removes the binding and forwards the key to the client.
+BLOCKED_BROWSER_KEYS = (
+    *(f"F{number}" for number in range(1, 13)),
+    "Menu", "S-F10", "S-Escape",
+    "A-Tab", "A-S-Tab", "A-F4", "A-Space", "A-Home", "A-Left", "A-Right",
+    "A-f", "A-e", "A-d", "A-S-t", "A-S-i", "A-S-a", "A-S-n",
+    "C-Tab", "C-S-Tab", "C-Prior", "C-Next", "C-S-Prior", "C-S-Next",
+    "C-F4", "C-F5", "C-F6",
+    *(f"C-{number}" for number in range(10)),
+    "C-n", "C-S-n", "C-t", "C-S-t", "C-w", "C-S-w",
+    "C-r", "C-S-r", "C-l", "C-k", "C-e", "C-f", "C-g", "C-S-g",
+    "C-h", "C-j", "C-p", "C-s", "C-o", "C-u", "C-d", "C-S-d",
+    "C-S-b", "C-S-o", "C-S-j", "C-S-i", "C-S-c", "C-S-m",
+    "C-S-Delete", "C-plus", "C-minus", "C-equal",
+)
+BLOCKED_BROWSER_BINDINGS = "".join(
+    f'    <keybind key="{key}"><action name="Execute" command="/usr/bin/true" /></keybind>\n'
+    for key in BLOCKED_BROWSER_KEYS
+)
 KEYBIND = '''<?xml version="1.0"?>
 <labwc_config>
   <keyboard>
@@ -18,7 +38,27 @@ KEYBIND = '''<?xml version="1.0"?>
       <action name="HideCursor" />
       <action name="WarpCursor" x="-1" y="-1" />
     </keybind>
-  </keyboard>
+{browser_bindings}  </keyboard>
+  <mouse>
+    <!-- No <default />: labwc's desktop and window menus are unnecessary
+         in the kiosk. Ordinary clicks inside clients still pass through. -->
+    <context name="Frame">
+      <mousebind button="Right" action="Press">
+        <action name="Execute" command="/usr/bin/true" />
+      </mousebind>
+    </context>
+    <context name="Root">
+      <mousebind button="Left" action="Press">
+        <action name="Execute" command="/usr/bin/true" />
+      </mousebind>
+      <mousebind button="Middle" action="Press">
+        <action name="Execute" command="/usr/bin/true" />
+      </mousebind>
+      <mousebind button="Right" action="Press">
+        <action name="Execute" command="/usr/bin/true" />
+      </mousebind>
+    </context>
+  </mouse>
 {input_policy}</labwc_config>
 '''
 DISABLE_MOUSE = '''  <libinput>
@@ -35,7 +75,8 @@ def sync_config(home, settings):
     directory.mkdir(parents=True, exist_ok=True)
     if directory.stat().st_uid != os.getuid():
         raise ValueError("labwc configuration directory must belong to this user")
-    content = KEYBIND.format(input_policy=DISABLE_MOUSE if settings["MOUSE_ENABLED"] == "no" else "")
+    content = KEYBIND.format(browser_bindings=BLOCKED_BROWSER_BINDINGS,
+                             input_policy=DISABLE_MOUSE if settings["MOUSE_ENABLED"] == "no" else "")
     path = directory / "rc.xml"
     if path.is_symlink():
         raise ValueError("Unsafe labwc configuration file")

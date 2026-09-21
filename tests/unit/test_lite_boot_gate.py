@@ -25,6 +25,20 @@ def test_settings_shortcut_is_hidden_but_still_available():
     assert "grep -Fq 'Press S for Settings'" not in check
 
 
+def test_lite_setup_window_runs_on_demand_outside_v_link_service():
+    install = (ROOT / "lite/Install-Lite.sh").read_text(encoding="utf-8")
+    check = (ROOT / "lite/Check-Lite.sh").read_text(encoding="utf-8")
+    settings = (ROOT / "frontend/src/app/pages/settings/Settings.tsx").read_text(encoding="utf-8")
+    server = (ROOT / "backend/server.py").read_text(encoding="utf-8")
+
+    assert 'v-link-lite-setup.service' in install
+    assert 'ExecStart=/usr/bin/foot --fullscreen --font=monospace:size=16' in install
+    assert 'on-demand Lite Setup window is installed and not enabled at login' in check
+    assert "systemTask(liteMode ? 'lite_setup' : 'quit')" in settings
+    assert "liteMode ? 'Open Setup' : 'Quit'" in settings
+    assert "['systemctl', '--user', 'start', 'v-link-lite-setup.service']" in server
+
+
 def test_early_splash_hooks_are_not_installed():
     install = (ROOT / "lite/Install-Lite.sh").read_text(encoding="utf-8")
     check = (ROOT / "lite/Check-Lite.sh").read_text(encoding="utf-8")

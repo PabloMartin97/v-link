@@ -8,6 +8,7 @@ backend/server.py is imported, so no ServerThread instantiation is required.
 conftest.py injects all hardware mocks before this file is loaded.
 """
 import json
+import importlib
 import shutil
 from pathlib import Path
 
@@ -29,6 +30,39 @@ def test_restart_requests_full_application_restart(monkeypatch):
         assert restart_event.is_set()
         assert shared_state.rtiStatus is True
         assert not any(event['name'] == 'restartProjection' for event in client.get_received('/sys'))
+    finally:
+        client.disconnect(namespace='/sys')
+
+
+@pytest.mark.parametrize('lite_mode', [False, True])
+def test_lite_setup_opens_separate_user_unit_without_exiting_v_link(monkeypatch, lite_mode):
+    from backend.server import server, socketio
+    from backend.shared.shared_state import shared_state
+    import threading
+
+    server_module = importlib.import_module('backend.server')
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return type('Result', (), {'returncode': 0, 'stderr': ''})()
+
+    monkeypatch.setattr(server_module.subprocess, 'run', fake_run)
+    monkeypatch.setattr(shared_state, 'liteMode', lite_mode)
+    exit_event = threading.Event()
+    restart_event = threading.Event()
+    monkeypatch.setattr(shared_state, 'exit_event', exit_event)
+    monkeypatch.setattr(shared_state, 'restart_event', restart_event)
+    client = socketio.test_client(server, namespace='/sys')
+    try:
+        client.emit('systemTask', 'lite_setup', namespace='/sys')
+        if lite_mode:
+            assert len(calls) == 1
+            assert calls[0][0] == ['systemctl', '--user', 'start', 'v-link-lite-setup.service']
+        else:
+            assert calls == []
+        assert not exit_event.is_set()
+        assert not restart_event.is_set()
     finally:
         client.disconnect(namespace='/sys')
 

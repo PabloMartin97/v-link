@@ -344,13 +344,31 @@ for binding in root.findall('./keyboard/keybind'):
             raise SystemExit(1)
         if not mouse_off and disabled:
             raise SystemExit(1)
+        required = ('F1', 'F5', 'F11', 'F12', 'Menu', 'S-F10', 'A-F4', 'A-Tab',
+                    'A-Space', 'A-f', 'A-e', 'C-w', 'C-t', 'C-l', 'C-S-j')
+        keybinds = {item.get('key'): item for item in root.findall('./keyboard/keybind')}
+        for key in required:
+            blocker = keybinds.get(key)
+            if blocker is None or len(blocker.findall('action')) != 1:
+                raise SystemExit(1)
+            action = blocker.find('action')
+            if action.get('name') != 'Execute' or action.get('command') != '/usr/bin/true':
+                raise SystemExit(1)
+        for context, buttons in (('Frame', ('Right',)),
+                                 ('Root', ('Left', 'Middle', 'Right'))):
+            for button in buttons:
+                blocker = root.find(f'./mouse/context[@name="{context}"]/mousebind[@button="{button}"][@action="Press"]/action')
+                if blocker is None or blocker.get('name') != 'Execute' or blocker.get('command') != '/usr/bin/true':
+                    raise SystemExit(1)
+        if root.find('./mouse/default') is not None:
+            raise SystemExit(1)
         raise SystemExit(0)
 raise SystemExit(1)
 PY
     then
-        pass "labwc cursor keybind and actions are valid"
+        pass "labwc cursor policy and Chromium shortcut blockers are valid"
     else
-        fail "labwc rc.xml is invalid or missing the HideCursor/WarpCursor keybind"
+        fail "labwc rc.xml is invalid or missing cursor/kiosk bindings"
     fi
     if runuser -u "$TARGET_USER" -- test -r "$LABWC_RC"; then
         pass "$TARGET_USER can read labwc rc.xml"
@@ -373,6 +391,15 @@ if [[ -f "$IDLE_UNIT" ]] && \
     pass "one managed event-driven cursor idle service is installed"
 else
     fail "cursor idle service is missing or invalid"
+fi
+SETUP_UNIT="$TARGET_HOME/.config/systemd/user/v-link-lite-setup.service"
+if [[ -f "$SETUP_UNIT" && ! -L "$SETUP_UNIT" ]] && \
+   [[ "$(stat -c '%u:%g:%a' "$SETUP_UNIT")" == "$USER_ID:$USER_GROUP_ID:644" ]] && \
+   grep -Fq 'ExecStart=/usr/bin/foot --fullscreen --font=monospace:size=16 "--title=V-Link Lite Setup" --app-id=v-link-lite-setup /usr/local/bin/v-link-lite-setup' "$SETUP_UNIT" && \
+   [[ ! -L "$TARGET_HOME/.config/systemd/user/default.target.wants/v-link-lite-setup.service" ]]; then
+    pass "on-demand Lite Setup window is installed and not enabled at login"
+else
+    fail "on-demand Lite Setup window is missing or invalid"
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && ! grep -Eq '^[[:space:]]*(wtype|swayidle)[[:space:]]' "$LABWC_AUTOSTART"; then
     pass "labwc autostart has no duplicate cursor process or shortcut"

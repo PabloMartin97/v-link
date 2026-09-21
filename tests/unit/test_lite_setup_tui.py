@@ -107,6 +107,26 @@ def test_graphical_setup_launchers_use_larger_font_without_changing_boot_gate():
     assert "foot --fullscreen --title='V-Link Lite Boot'" in gate
 
 
+def test_mouse_toggle_applies_immediately_in_running_lite_session():
+    ui, _ = make_ui([])
+    settings = {"CURSOR_MODE": "visible", "MOUSE_ENABLED": "yes"}
+    choices = iter(("mouse", "back"))
+    summaries = []
+    commands = []
+    messages = []
+    ui.choose = lambda _heading, _items, summary: (summaries.append(summary), next(choices))[1]
+    ui.display_available = lambda: True
+    ui.command = lambda args, timeout: (commands.append((args, timeout)), (0, ""))[1]
+    ui.message = messages.append
+    with patch.object(SETUP, "load_settings", side_effect=lambda _home: settings.copy()), \
+         patch.object(SETUP, "save_settings", side_effect=lambda _home, value: settings.update(value)):
+        ui.cursor_menu()
+    assert settings["MOUSE_ENABLED"] == "no"
+    assert commands == [(["/usr/local/bin/v-link-lite-cursor", "apply"], 12)]
+    assert "Cursor mode: Hidden (mouse deactivated)" in summaries[-1]
+    assert messages == ["Preference saved and applied."]
+
+
 def test_volume_typing_replaces_initial_value():
     ui, _ = make_ui([ord("5"), ord("0"), 10])
     with patch.object(curses, "doupdate"):

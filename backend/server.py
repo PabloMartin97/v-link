@@ -388,6 +388,21 @@ class ServerThread(threading.Thread):
             logger.info(f'[Server] Shutdown system')
             subprocess.run(['sudo', '/usr/sbin/shutdown', '-h', 'now'], check=False)
 
+        elif args == 'lite_setup':
+            # Run Setup in its own user unit so V-Link and Chromium stay alive.
+            if not shared_state.liteMode:
+                logger.warning('[Server] Lite Setup requested outside Lite mode')
+                return
+            try:
+                result = subprocess.run(
+                    ['systemctl', '--user', 'start', 'v-link-lite-setup.service'],
+                    capture_output=True, text=True, timeout=5, check=False,
+                )
+                if result.returncode:
+                    logger.error('[Server] Could not open Lite Setup: %s', result.stderr.strip())
+            except (OSError, subprocess.TimeoutExpired) as error:
+                logger.error('[Server] Could not open Lite Setup: %s', error)
+
         elif args == 'reset':
             # Resets settings to default and restarts the application
             logger.info(f'[Server] Reset settings to default')

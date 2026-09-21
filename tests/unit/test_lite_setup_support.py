@@ -92,6 +92,30 @@ def test_mouse_off_never_starts_idle_service():
     assert commands[-1] == ["wtype", "-M", "alt", "-M", "logo", "-P", "h"]
 
 
+def test_labwc_consumes_browser_escape_shortcuts_and_context_menu():
+    from xml.etree import ElementTree
+
+    with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+        "XDG_CONFIG_HOME": str(Path(directory) / ".config"),
+    }):
+        cursor.sync_config(directory, {"MOUSE_ENABLED": "yes"})
+        root = ElementTree.parse(Path(directory) / ".config/labwc/rc.xml").getroot()
+    bindings = {item.get("key"): item for item in root.findall("./keyboard/keybind")}
+    assert len(bindings) == len(cursor.BLOCKED_BROWSER_KEYS) + 1
+    for key in ("F1", "F5", "F11", "F12", "S-F10", "A-F4", "C-w", "C-t", "C-l"):
+        action = bindings[key].find("action")
+        assert action.get("name") == "Execute"
+        assert action.get("command") == "/usr/bin/true"
+    for context, buttons in (("Frame", ("Right",)),
+                             ("Root", ("Left", "Middle", "Right"))):
+        for button in buttons:
+            action = root.find(
+                f'./mouse/context[@name="{context}"]/mousebind[@button="{button}"][@action="Press"]/action'
+            )
+            assert action is not None and action.get("command") == "/usr/bin/true"
+    assert root.find("./mouse/default") is None
+
+
 def test_snapshot_rejects_stale_or_wrong_pid():
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "console.json"

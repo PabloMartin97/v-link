@@ -432,6 +432,10 @@ const Settings = () => {
 
   // System Tasks
   function systemTask(request: string) {
+    if (request === 'lite_setup') {
+      socket.sys.emit('systemTask', request);
+      return;
+    }
     const waitMessages: Record<string, [string, string]> = {
       quit: ['Exiting...', 'Please wait while V-Link is closing.'],
       shutdown: ['Shutting down...', 'Please wait while the system is shutting down.'],
@@ -880,7 +884,7 @@ const Settings = () => {
           <>
             <div style={{ display: 'flex', width: '100%', height: '90%', gap: '10px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '10px' }}>
-                <Button onClick={() => { systemTask(liteMode ? 'shutdown' : 'quit') }} style={{ height: '100%' }}> {liteMode ? 'Shutdown' : 'Quit'} </Button>
+                <Button onClick={() => { systemTask(liteMode ? 'lite_setup' : 'quit') }} style={{ height: '100%' }}> {liteMode ? 'Open Setup' : 'Quit'} </Button>
                 <Button onClick={() => { systemTask('restart') }} style={{ height: '100%' }}> Restart </Button>
                 <Button onClick={() => { systemTask("rti") }} style={{ height: '100%' }}> {rtiState ? "Close RTI" : "Open RTI"} </Button>
               </div>

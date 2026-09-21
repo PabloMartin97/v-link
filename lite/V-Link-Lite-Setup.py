@@ -461,15 +461,18 @@ class SetupUI:
             except ValueError as error:
                 self.message(f"Invalid Lite settings: {error}")
                 return
-            mode = settings["CURSOR_MODE"].title()
+            mode = ("Hidden (mouse deactivated)" if settings["MOUSE_ENABLED"] == "no"
+                    else settings["CURSOR_MODE"].title())
             mouse = "Activated" if settings["MOUSE_ENABLED"] == "yes" else "Deactivated"
+            apply_now = not self.startup and self.display_available()
             choice = self.choose("Cursor and mouse", [
                 ("auto", "Cursor: Auto"), ("visible", "Cursor: Visible"),
                 ("mouse", "Toggle mouse activated / deactivated"),
                 ("test", "Hide cursor now (test)"), ("back", "Back")],
                 summary=[f"Cursor mode: {mode}", f"Mouse: {mouse}",
                          "Mouse off also hides the pointer, regardless of cursor mode.",
-                         "Changes to mouse input take effect at next boot."])
+                         "Changes apply now." if apply_now else
+                         "Changes apply after Continue or the next graphical boot."])
             if choice in (None, "back"):
                 return
             if choice in ("auto", "visible", "mouse"):
@@ -479,9 +482,12 @@ class SetupUI:
                     settings["CURSOR_MODE"] = choice
                 try:
                     save_settings(self.home, settings)
-                    status, output = self.command(["/usr/local/bin/v-link-lite-cursor", "sync-config"], 3)
+                    action = "apply" if apply_now else "sync-config"
+                    status, output = self.command(["/usr/local/bin/v-link-lite-cursor", action],
+                                                  12 if apply_now else 3)
                     if status == 0:
-                        self.message("Preference saved. It applies after Continue or the next graphical boot.")
+                        self.message("Preference saved and applied." if apply_now else
+                                     "Preference saved. It applies after Continue or the next graphical boot.")
                     else:
                         self.message(f"Preference saved, but labwc configuration failed: {output}")
                 except (OSError, ValueError) as error:
