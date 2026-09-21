@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the existing frontend marks for the Lite boot stages."""
+"""Render the existing frontend marks for the Lite graphical splash."""
 
 import argparse
 import io
@@ -47,10 +47,6 @@ def main():
     logo, splash = build_images(moose, wordmark)
     logo.save(args.output_dir / "logo.png")
     splash.save(args.output_dir / "splash.png")
-    # Raspberry Pi's early-logo reader requires an uncompressed 24-bit TGA
-    # with at most 224 colours. Quantisation keeps the antialiased edges.
-    splash.transpose(Image.Transpose.FLIP_TOP_BOTTOM).quantize(colors=64).convert("RGB").save(
-        args.output_dir / "splash.tga", format="TGA", compression=None)
 
 
 if __name__ == "__main__":

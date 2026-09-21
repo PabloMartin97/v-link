@@ -482,7 +482,7 @@ The installer will make these major system changes:
   - install Chromium kiosk plus PipeWire/WirePlumber audio
   - create a V-Link user systemd service and kiosk autostart
   - install/update the V-Link runtime and Python virtual environment
-  - brand the boot splash (backs up and updates config.txt/cmdline.txt)
+  - disable the firmware rainbow and show the V-Link mark in labwc
 EOF
 
     if [[ "$CONFIGURE_HARDWARE" == true ]]; then
@@ -522,7 +522,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/Render-Lite-Splash.py lite/splash/v-link-lite.plymouth lite/splash/v-link-lite.script frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -871,7 +871,7 @@ log "Installing the minimal Wayland, browser, audio and runtime packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    labwc wtype swayidle wlr-randr foot chafa swaybg plymouth librsvg2-bin python3-pil \
+    labwc wtype swayidle wlr-randr foot swaybg librsvg2-bin python3-pil \
     lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
     pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
@@ -1115,24 +1115,18 @@ for helper_spec in \
     HELPER_STAGING=""
 done
 
-log "Rendering V-Link branding for the graphical and boot splash"
-install -d -o root -g root -m 0755 /usr/local/share/v-link-lite /usr/share/plymouth/themes/v-link-lite
+log "Rendering V-Link branding for the graphical splash"
+install -d -o root -g root -m 0755 /usr/local/share/v-link-lite
 SPLASH_WORK="$(mktemp -d /tmp/v-link-splash.XXXXXX)"
 python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
     --logos-dir "$SOURCE_DIR/frontend/public/assets/svg/logos" \
     --output-dir "$SPLASH_WORK"
-for splash_image in logo.png splash.png splash.tga; do
+for splash_image in logo.png splash.png; do
     install -o root -g root -m 0644 "$SPLASH_WORK/$splash_image" \
         "/usr/local/share/v-link-lite/$splash_image"
 done
 rm -r -- "$SPLASH_WORK"
 SPLASH_WORK=""
-install -o root -g root -m 0644 /usr/local/share/v-link-lite/logo.png \
-    /usr/share/plymouth/themes/v-link-lite/logo.png
-install -o root -g root -m 0644 "$SOURCE_DIR/lite/splash/v-link-lite.plymouth" \
-    /usr/share/plymouth/themes/v-link-lite/v-link-lite.plymouth
-install -o root -g root -m 0644 "$SOURCE_DIR/lite/splash/v-link-lite.script" \
-    /usr/share/plymouth/themes/v-link-lite/v-link-lite.script
 
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
@@ -1583,10 +1577,7 @@ else
     udevadm control --reload-rules
 fi
 
-# Build the branded initramfs before changing the active boot options.
-plymouth-set-default-theme -R v-link-lite
-
-log "Configuring the V-Link Lite boot splash for both hardware modes"
+log "Keeping the Lite boot path independent of splash initramfs hooks"
 BOOT_CONFIG=/boot/firmware/config.txt
 CMDLINE_FILE=/boot/firmware/cmdline.txt
 [[ -f "$BOOT_CONFIG" && -f "$CMDLINE_FILE" ]] || \
@@ -1603,41 +1594,32 @@ if [[ "$SPLASH_BEGIN_COUNT" -eq 1 ]]; then
 else
     cp "$BOOT_CONFIG" "$BOOT_TEMP"
 fi
-printf '\n%s\n[all]\ndisable_splash=1\nauto_initramfs=1\n%s\n' \
+printf '\n%s\n[all]\ndisable_splash=1\n%s\n' \
     "$SPLASH_CONFIG_BEGIN" "$SPLASH_CONFIG_END" >>"$BOOT_TEMP"
 chmod --reference="$BOOT_CONFIG" "$BOOT_TEMP"
 mv -f -- "$BOOT_TEMP" "$BOOT_CONFIG"
 BOOT_TEMP=""
 
 if ! awk 'NF { lines++ } END { exit(lines == 1 ? 0 : 1) }' "$CMDLINE_FILE"; then
-    die "refusing to install splash on an invalid multi-line kernel command line"
+    die "refusing to edit an invalid multi-line kernel command line"
 fi
-CMDLINE_CONTENT="$(<"$CMDLINE_FILE")"
-for option in quiet splash vt.global_cursor_default=0; do
-    if [[ " $CMDLINE_CONTENT " != *" $option "* ]]; then
-        CMDLINE_CONTENT+=" $option"
-    fi
+# Remove only the splash arguments used by older V-Link Lite installs. In
+# particular, keep root=, console=, and unrelated boot options intact.
+read -r -a CMDLINE_OPTIONS <<<"$(<"$CMDLINE_FILE")"
+SAFE_CMDLINE_OPTIONS=()
+for option in "${CMDLINE_OPTIONS[@]}"; do
+    case "$option" in
+        quiet|splash|vt.global_cursor_default=0|fullscreen_logo=1|fullscreen_logo_name=logo.tga) ;;
+        *) SAFE_CMDLINE_OPTIONS+=("$option") ;;
+    esac
 done
+[[ ${#SAFE_CMDLINE_OPTIONS[@]} -gt 0 ]] || die "refusing to empty $CMDLINE_FILE"
 [[ -e "$CMDLINE_FILE.v-link.bak" ]] || cp "$CMDLINE_FILE" "$CMDLINE_FILE.v-link.bak"
 CMDLINE_TEMP="$(mktemp "$CMDLINE_FILE.v-link.XXXXXX")"
-printf '%s\n' "$CMDLINE_CONTENT" >"$CMDLINE_TEMP"
+printf '%s\n' "${SAFE_CMDLINE_OPTIONS[*]}" >"$CMDLINE_TEMP"
 chmod --reference="$CMDLINE_FILE" "$CMDLINE_TEMP"
 mv -f -- "$CMDLINE_TEMP" "$CMDLINE_FILE"
 CMDLINE_TEMP=""
-
-# Newer Raspberry Pi OS images also support a branded image before Plymouth.
-# Keep the proven Plymouth + Wayland path if this optional package is absent.
-if apt-cache show rpi-splash-screen-support >/dev/null 2>&1; then
-    if apt-get install -y --no-install-recommends rpi-splash-screen-support && \
-       command -v configure-splash >/dev/null 2>&1 && \
-       configure-splash /usr/local/share/v-link-lite/splash.tga; then
-        log "V-Link image also replaces the early firmware/kernel splash"
-    else
-        log "WARNING: early splash unavailable; Plymouth and the graphical gate remain configured"
-    fi
-else
-    log "Early splash package unavailable on this OS image; rainbow remains disabled"
-fi
 
 systemctl daemon-reload
 

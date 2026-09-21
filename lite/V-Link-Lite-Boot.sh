@@ -9,7 +9,10 @@ if [[ "${1:-}" != --gate ]]; then
         printf 'V-Link Lite: foot is unavailable; continuing startup.\n' >&2
         exit 0
     fi
-    foot --fullscreen --title='V-Link Lite Setup' --app-id=v-link-lite-setup \
+    # The gate only captures S; labwc's persistent swaybg remains the visible
+    # splash instead of a second, separately rendered terminal image.
+    foot --fullscreen --title='V-Link Lite Boot' --app-id=v-link-lite-boot \
+        --override=colors.alpha=0 --override=colors.background=000000 \
         /usr/local/libexec/v-link-lite-boot --gate
     result=$?
     case "$result" in
@@ -21,26 +24,21 @@ fi
 
 [[ $# -eq 1 ]] || exit 2
 [[ -t 0 && -t 1 ]] || exit 0
-printf '\033[2J\033[H'
-if [[ -r /usr/local/share/v-link-lite/logo.png ]] && command -v chafa >/dev/null 2>&1; then
-    printf '\n\n'
-    chafa --format sixels --size 40x12 --bg 000000 \
-        /usr/local/share/v-link-lite/logo.png || printf '        V-Link Lite\n'
-else
-    printf '\n        V-Link Lite\n'
-fi
-printf '\n        Starting V-Link...\n\n        Press S for Settings\n\n'
-for remaining in 3 2 1; do
-    printf '\r        %s...\033[K' "$remaining"
+# Keep the Settings shortcut available during the startup gate without
+# changing the splash image or drawing a countdown/prompt over it.
+printf '\033[?25l'
+for _ in 1 2 3; do
     key=''
     if IFS= read -r -s -n 1 -t 1 key; then
         case "$key" in
             s|S)
-                /usr/local/bin/v-link-lite-setup --startup
+                # Setup gets its own normal, opaque terminal; the boot gate
+                # stays transparent behind it until Setup exits.
+                foot --fullscreen --title='V-Link Lite Setup' --app-id=v-link-lite-setup \
+                    /usr/local/bin/v-link-lite-setup --startup
                 exit $?
                 ;;
         esac
     fi
 done
-printf '\n'
 exit 0

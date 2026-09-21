@@ -4,10 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/assets/svg/logo.svg#volvo" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <style>
+      html, body, #root { width: 100%; height: 100%; margin: 0; background: #000; }
+      #boot-mark { position: fixed; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 5px; color: #fff; }
+      #boot-mark svg:first-child { width: 20vh; height: 20vh; }
+      #boot-mark svg:last-child { width: 40vh; height: 10vh; }
+    </style>
     <title>V-LINK</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-mark" aria-hidden="true">
+        <svg><use href="/assets/svg/logos/moose.svg#moose"></use></svg>
+        <svg><use href="/assets/svg/logos/vlink.svg#vlink"></use></svg>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
