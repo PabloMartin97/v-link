@@ -1,6 +1,7 @@
 """The Lite startup gate keeps Settings available without overlay text."""
 
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -74,7 +75,30 @@ def test_lite_handoff_reapplies_after_frontend_update_without_duplicates():
         assert index.read_text(encoding="utf-8") == first
         assert first.count("<!-- BEGIN V-LINK LITE SPLASH HANDOFF -->") == 1
         assert "127.0.0.1:40777/ready" in first
+        check = (ROOT / "lite/Check-Lite.sh").read_text(encoding="utf-8")
+        for marker in ("<!-- BEGIN V-LINK LITE SPLASH HANDOFF -->",
+                       "<!-- END V-LINK LITE SPLASH HANDOFF -->"):
+            assert f"grep -qF '{marker}'" in check
+            assert subprocess.run(["grep", "-qF", marker, str(index)],
+                                  check=False).returncode == 0
 
         index.write_text(original, encoding="utf-8")  # A headless update replaces dist.
         subprocess.run(command, check=True)
         assert index.read_text(encoding="utf-8") == first
+
+
+def test_automount_check_ignores_overlay_dev_null_but_rejects_manual_mounts():
+    check = (ROOT / "lite/Check-Lite.sh").read_text(encoding="utf-8")
+    expressions = re.findall(r"! grep -Eq '([^']+)' \"\$LABWC_AUTOSTART\"", check)
+    expression = next(pattern for pattern in expressions if "mount" in pattern)
+    with tempfile.TemporaryDirectory() as directory:
+        autostart = Path(directory) / "autostart"
+        autostart.write_text(
+            "udiskie --no-config --automount --no-notify &\n"
+            "kill -0 \"$overlay_pid\" 2>/dev/null || break\n",
+            encoding="utf-8",
+        )
+        command = ["grep", "-Eq", expression, str(autostart)]
+        assert subprocess.run(command, check=False).returncode == 1
+        autostart.write_text("sudo mount /dev/sda1 /media/volvo\n", encoding="utf-8")
+        assert subprocess.run(command, check=False).returncode == 0

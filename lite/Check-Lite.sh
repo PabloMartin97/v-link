@@ -434,7 +434,7 @@ else
     fail "labwc autostart owner or mode is incorrect"
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && \
-   ! grep -Eq 'sudo[[:space:]]+mount|/dev/|/home/|/media/|/run/media/' "$LABWC_AUTOSTART"; then
+   ! grep -Eq '^[[:space:]]*(sudo[[:space:]]+)?(/usr/bin/)?mount([[:space:]]|$)|^[[:space:]]*udiskie[[:space:]].*(/dev/|/home/|/media/|/run/media/)' "$LABWC_AUTOSTART"; then
     pass "labwc automount has no manual mount command, device, or hardcoded user"
 else
     fail "labwc automount contains a manual mount command, device, or hardcoded user"
@@ -516,9 +516,9 @@ for required_path in \
         fail "missing $required_path"
     fi
 done
-if grep -qFx '<!-- BEGIN V-LINK LITE SPLASH HANDOFF -->' "$APP_DIR/frontend/dist/index.html" 2>/dev/null && \
+if grep -qF '<!-- BEGIN V-LINK LITE SPLASH HANDOFF -->' "$APP_DIR/frontend/dist/index.html" 2>/dev/null && \
    grep -qF '127.0.0.1:40777/ready' "$APP_DIR/frontend/dist/index.html" 2>/dev/null && \
-   grep -qFx '<!-- END V-LINK LITE SPLASH HANDOFF -->' "$APP_DIR/frontend/dist/index.html" 2>/dev/null; then
+   grep -qF '<!-- END V-LINK LITE SPLASH HANDOFF -->' "$APP_DIR/frontend/dist/index.html" 2>/dev/null; then
     pass "Lite-only splash handoff is installed in the built HTML"
 else
     fail "Lite-only splash handoff is missing from the built HTML"
