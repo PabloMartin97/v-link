@@ -522,7 +522,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -874,7 +874,7 @@ apt-get install -y --no-install-recommends \
     labwc wtype swayidle wlr-randr foot swaybg librsvg2-bin python3-pil \
     python3-gi gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 \
     lightdm lightdm-gtk-greeter chromium chromium-sandbox rpi-chromium-mods \
-    pipewire-audio pipewire pipewire-pulse wireplumber alsa-utils libgl1-mesa-dri \
+    pipewire-audio pipewire pipewire-pulse wireplumber libspa-0.2-modules libpipewire-0.3-modules alsa-utils libgl1-mesa-dri \
     dbus-user-session libinput-tools fonts-dejavu fonts-liberation \
     curl unzip ca-certificates python3 python3-dev python3-pip python3-venv \
     libudev-dev build-essential can-utils iproute2 network-manager udisks2 udiskie
@@ -883,6 +883,7 @@ FOOT_VERSION="$(dpkg-query -W -f='${Version}' foot)" || die "installed foot pack
 dpkg --compare-versions "$FOOT_VERSION" ge 1.13.1 || \
     die "foot $FOOT_VERSION is too old for the verified Bookworm Setup options"
 command -v pw-dump >/dev/null 2>&1 || die "PipeWire pw-dump is required for Lite Setup audio selection"
+command -v pw-record >/dev/null 2>&1 || die "PipeWire pw-record is required for Lite microphone level and calibration"
 python3 -c 'import curses' >/dev/null 2>&1 || die "Python curses support is required for Lite Setup"
 
 LABWC_VERSION="$(labwc --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
@@ -1104,6 +1105,7 @@ show_phase 6 7 "System configuration"
 log "Installing root-owned Lite maintenance helpers"
 install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_audio.py" /usr/local/bin/v_link_lite_audio.py
 for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
     'lite/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \

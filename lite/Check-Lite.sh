@@ -117,7 +117,7 @@ else
     warn "Raspberry Pi model cannot be read"
 fi
 
-for command_name in chromium labwc wtype swayidle wlr-randr foot swaybg lightdm pipewire wireplumber wpctl pw-dump nmcli udiskie udisksctl; do
+for command_name in chromium labwc wtype swayidle wlr-randr foot swaybg lightdm pipewire wireplumber wpctl pw-dump pw-record nmcli udiskie udisksctl; do
     check_command "$command_name"
 done
 if python3 -c 'from PIL import Image' >/dev/null 2>&1 && command -v rsvg-convert >/dev/null 2>&1; then
@@ -213,6 +213,34 @@ if [[ -f /usr/local/bin/v_link_lite_support.py ]] && \
     pass "Lite support module is installed root:root 0644"
 else
     fail "Lite support module is missing or has incorrect owner/mode"
+fi
+if [[ -f /usr/local/bin/v_link_lite_audio.py && ! -L /usr/local/bin/v_link_lite_audio.py ]] && \
+   [[ "$(stat -c '%u:%g:%a' /usr/local/bin/v_link_lite_audio.py)" == '0:0:644' ]] && \
+   python3 -c 'import ast; ast.parse(open("/usr/local/bin/v_link_lite_audio.py", encoding="utf-8").read())' >/dev/null 2>&1; then
+    pass "Lite microphone helper is installed and valid"
+else
+    fail "Lite microphone helper is missing, unsafe, or invalid"
+fi
+if compgen -G '/usr/lib/*/spa-0.2/aec/libspa-aec-webrtc.so' >/dev/null && \
+   compgen -G '/usr/lib/*/pipewire-0.3/libpipewire-module-echo-cancel.so' >/dev/null; then
+    pass "local WebRTC AEC and PipeWire echo-cancel modules are installed"
+elif [[ -f "$TARGET_HOME/.config/pipewire/pipewire.conf.d/90-v-link-microphone.conf" ]]; then
+    fail "Lite microphone processing is configured but its local AEC module is missing"
+else
+    warn "local AEC module is missing; microphone processing is Off"
+fi
+MICROPHONE_CONFIG="$TARGET_HOME/.config/pipewire/pipewire.conf.d/90-v-link-microphone.conf"
+if [[ -f /usr/local/bin/v_link_lite_audio.py ]] && \
+   runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$TARGET_HOME/.config" python3 -c \
+      'import sys; sys.path.insert(0,"/usr/local/bin"); from v_link_lite_audio import validate_installed_config; validate_installed_config(sys.argv[1])' \
+      "$TARGET_HOME" >/dev/null 2>&1; then
+    if [[ -e "$MICROPHONE_CONFIG" ]]; then
+        pass "Lite PipeWire microphone fragment is valid and private"
+    else
+        pass "Lite microphone processing is Off (no managed PipeWire fragment)"
+    fi
+else
+    fail "Lite PipeWire microphone fragment is invalid or unsafe"
 fi
 SETTINGS_DIR="$TARGET_HOME/.config/v-link-lite"
 SETTINGS_FILE="$SETTINGS_DIR/settings.conf"
