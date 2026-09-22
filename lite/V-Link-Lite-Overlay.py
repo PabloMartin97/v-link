@@ -19,6 +19,8 @@ RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 VISIBLE = RUNTIME_DIR / "v-link-lite-overlay-visible"
 LOGO = Path("/usr/local/share/v-link-lite/logo.png")
 READY = threading.Event()
+SLOW_BOOT_SECONDS = 45
+MAX_COVER_SECONDS = 120
 PIXEL = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01"
          b"\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 
@@ -75,11 +77,16 @@ class Overlay:
         )
         self.message.set_no_show_all(True)
         content.pack_start(self.message, False, False, 0)
+        self.continue_button = Gtk.Button(label="Continue to V-Link")
+        self.continue_button.set_no_show_all(True)
+        self.continue_button.connect("clicked", lambda *_: self.window.destroy())
+        content.pack_start(self.continue_button, False, False, 0)
         self.window.add(content)
         self.window.show_all()
 
         GLib.timeout_add(50, self.check_handoff)
-        GLib.timeout_add_seconds(45, self.show_timeout)
+        GLib.timeout_add_seconds(SLOW_BOOT_SECONDS, self.show_timeout)
+        GLib.timeout_add_seconds(MAX_COVER_SECONDS, self.absolute_timeout)
 
     def on_map(self, *_):
         # The installer waits for the overlay to map before starting V-Link.
@@ -99,6 +106,9 @@ class Overlay:
                 self.window.show_all()
                 return True
             GLib.timeout_add(100, self.check_setup)
+            return True
+        if self.timed_out and event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.window.destroy()
             return True
         return False
 
@@ -123,7 +133,15 @@ class Overlay:
         if not READY.is_set():
             self.timed_out = True
             self.message.show()
+            self.continue_button.show()
             GtkLayerShell.set_keyboard_mode(self.window, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        return False
+
+    def absolute_timeout(self):
+        # Normal handoff wins. A changed frontend must not leave a working
+        # kiosk permanently hidden; Setup keeps its own window if open.
+        if not READY.is_set():
+            self.window.destroy()
         return False
 
 

@@ -71,10 +71,15 @@ fi
 printf '\nSelected: %s\n' "$BOOT_VOLUME"
 
 CMDLINE="$BOOT_VOLUME/cmdline.txt"
-ALREADY_PREPARED=false
-if grep -Eq 'systemd\.run=/boot(/firmware)?/V-Link-FirstBoot\.sh' "$CMDLINE" || \
-        [[ -f "$BOOT_VOLUME/$CONFIG_NAME" && -f "$CMDLINE.v-link-prep.bak" ]]; then
-    ALREADY_PREPARED=true
+[[ -f "$CMDLINE" && ! -L "$CMDLINE" ]] || fail "cmdline.txt must be a regular file, not a symlink"
+for managed_name in firstrun.sh "$INSTALLER_NAME" "$BOOTSTRAP_NAME" "$CONFIG_NAME" cmdline.txt.v-link-prep.bak; do
+    [[ ! -L "$BOOT_VOLUME/$managed_name" ]] || fail "refusing a symlink at $BOOT_VOLUME/$managed_name"
+done
+CMDLINE_TEXT="$(LC_ALL=C awk '
+    NR == 1 { sub(/\r$/, ""); if ($0 == "" || index($0, "\r") || index($0, "\t")) bad = 1; line = $0 }
+    END { if (NR != 1 || bad) exit 1; print line }
+' "$CMDLINE")" || fail "cmdline.txt must contain exactly one non-empty line (CRLF is allowed)"
+if [[ -f "$BOOT_VOLUME/$CONFIG_NAME" || -f "$CMDLINE.v-link-prep.bak" ]]; then
     printf '\nUpdating an already prepared V-Link SD card.\n'
 fi
 
@@ -102,45 +107,47 @@ fi
 grep -qFx 'readonly V_LINK_FIRST_BOOT_PROTOCOL=2' "$TMPDIR_VLINK/$BOOTSTRAP_NAME" || \
     fail "$BOOTSTRAP_NAME is too old for this SD preparation helper"
 
-[[ -f "$CMDLINE.v-link-prep.bak" ]] || cp "$CMDLINE" "$CMDLINE.v-link-prep.bak"
-cp "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME"
-cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME"
-cmp -s "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME" || \
-    fail "Could not verify the copied $INSTALLER_NAME"
-cmp -s "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" || \
-    fail "Could not verify the copied $BOOTSTRAP_NAME"
-chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/null || true
-printf 'SOURCE=%s\nINSTALLER_SHA256=%s\nBOOTSTRAP_SHA256=%s\n' \
-    "$FILE_SOURCE" \
-    "$(/usr/bin/shasum -a 256 "$TMPDIR_VLINK/$INSTALLER_NAME" | awk '{print $1}')" \
-    "$(/usr/bin/shasum -a 256 "$TMPDIR_VLINK/$BOOTSTRAP_NAME" | awk '{print $1}')" \
-    >"$BOOT_VOLUME/$CONFIG_NAME"
-
-CMDLINE_TEXT="$(tr -d '\r\n' <"$CMDLINE")"
-FIRSTRUN_RUNTIME="$(grep -oE 'systemd\.run=/boot(/firmware)?/firstrun\.sh' "$CMDLINE" | head -n1 | cut -d= -f2- || true)"
+FIRSTRUN_RUNTIME=""
+RUN_COUNT=0
+read -r -a CMDLINE_OPTIONS <<<"$CMDLINE_TEXT"
+SAFE_OPTIONS=()
+for option in "${CMDLINE_OPTIONS[@]}"; do
+    case "$option" in
+        systemd.run=/boot/firstrun.sh|systemd.run=/boot/firmware/firstrun.sh)
+            ((RUN_COUNT += 1))
+            FIRSTRUN_RUNTIME="${option#systemd.run=}"
+            ;;
+        systemd.run=/boot/V-Link-FirstBoot.sh|systemd.run=/boot/firmware/V-Link-FirstBoot.sh)
+            ((RUN_COUNT += 1))
+            ;;
+        systemd.run=*) fail "Unknown systemd.run hook '$option'; cmdline.txt was not changed" ;;
+        systemd.run_success_action=*|systemd.run_failure_action=*|systemd.unit=kernel-command-line.target|systemd.wants=kernel-command-line.target) ;;
+        *) SAFE_OPTIONS+=("$option") ;;
+    esac
+done
+((RUN_COUNT <= 1)) || fail "cmdline.txt has multiple systemd.run hooks; refusing to choose one"
+if ((RUN_COUNT == 0)); then
+    for option in "${CMDLINE_OPTIONS[@]}"; do
+        case "$option" in
+            systemd.run_success_action=*|systemd.run_failure_action=*|systemd.unit=kernel-command-line.target|systemd.wants=kernel-command-line.target)
+                fail "Orphaned systemd first-boot option '$option'; cmdline.txt was not changed" ;;
+        esac
+    done
+fi
+(( ${#SAFE_OPTIONS[@]} > 0 )) || fail "refusing to empty cmdline.txt"
 if [[ -z "$FIRSTRUN_RUNTIME" ]]; then
     FIRSTRUN_RUNTIME="$DEFAULT_BOOT_RUNTIME/firstrun.sh"
 fi
 BOOTSTRAP_RUNTIME="$(dirname -- "$FIRSTRUN_RUNTIME")/$BOOTSTRAP_NAME"
-CMDLINE_TEXT="$(printf '%s\n' "$CMDLINE_TEXT" | sed -E \
-    -e 's/(^| )systemd\.run=[^ ]+//g' \
-    -e 's/(^| )systemd\.run_success_action=[^ ]+//g' \
-    -e 's/(^| )systemd\.run_failure_action=[^ ]+//g' \
-    -e 's/(^| )systemd\.unit=kernel-command-line\.target//g' \
-    -e 's/(^| )systemd\.wants=kernel-command-line\.target//g' \
-    -e 's/  +/ /g' \
-    -e 's/^ //' \
-    -e 's/ $//')"
-
 if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
-    CMDLINE_TEXT+=" systemd.run=$FIRSTRUN_RUNTIME systemd.run_success_action=reboot systemd.unit=kernel-command-line.target"
-elif [[ ! -f "$BOOT_VOLUME/firstrun.sh" ]]; then
+    SAFE_OPTIONS+=("systemd.run=$FIRSTRUN_RUNTIME" "systemd.run_success_action=reboot" "systemd.unit=kernel-command-line.target")
+else
+    [[ "$FIRSTRUN_RUNTIME" == "$DEFAULT_BOOT_RUNTIME/firstrun.sh" ]] || \
+        fail "Imager firstrun.sh hook exists, but firstrun.sh is missing; cmdline.txt was not changed"
     BOOTSTRAP_RUNTIME="$DEFAULT_BOOT_RUNTIME/$BOOTSTRAP_NAME"
-    CMDLINE_TEXT+=" systemd.run=$BOOTSTRAP_RUNTIME systemd.run_success_action=reboot systemd.run_failure_action=reboot systemd.unit=kernel-command-line.target"
+    SAFE_OPTIONS+=("systemd.run=$BOOTSTRAP_RUNTIME" "systemd.run_success_action=reboot" "systemd.run_failure_action=reboot" "systemd.unit=kernel-command-line.target")
 fi
-RUN_COUNT="$(printf '%s\n' "$CMDLINE_TEXT" | grep -o 'systemd\.run=' | wc -l | tr -d '[:space:]')"
-[[ "$RUN_COUNT" == 1 ]] || fail "Prepared cmdline.txt must contain exactly one systemd.run entry"
-[[ "$CMDLINE_TEXT" != *$'\n'* ]] || fail "Prepared cmdline.txt must remain a single line"
+CMDLINE_TEXT="${SAFE_OPTIONS[*]}"
 
 if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
     FIRSTRUN_TEMP="$TMPDIR_VLINK/firstrun.sh"
@@ -156,12 +163,31 @@ if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
         END { if (!inserted) exit 1 }
     ' "$BOOT_VOLUME/firstrun.sh" >"$FIRSTRUN_TEMP" || \
         fail "Could not add the V-Link hook to Raspberry Pi Imager firstrun.sh"
+fi
+
+[[ -f "$CMDLINE.v-link-prep.bak" ]] || cp "$CMDLINE" "$CMDLINE.v-link-prep.bak"
+cp "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME"
+cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME"
+cmp -s "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME" || \
+    fail "Could not verify the copied $INSTALLER_NAME"
+cmp -s "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" || \
+    fail "Could not verify the copied $BOOTSTRAP_NAME"
+chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/null || true
+printf 'SOURCE=%s\nINSTALLER_SHA256=%s\nBOOTSTRAP_SHA256=%s\n' \
+    "$FILE_SOURCE" \
+    "$(/usr/bin/shasum -a 256 "$TMPDIR_VLINK/$INSTALLER_NAME" | awk '{print $1}')" \
+    "$(/usr/bin/shasum -a 256 "$TMPDIR_VLINK/$BOOTSTRAP_NAME" | awk '{print $1}')" \
+    >"$BOOT_VOLUME/$CONFIG_NAME"
+if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
     cp "$FIRSTRUN_TEMP" "$BOOT_VOLUME/firstrun.sh"
 fi
 
 # Commit cmdline.txt last. If any validation above fails, the card retains its
 # previous boot command line and cannot be left at kernel-command-line.target.
-printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE"
+CMDLINE_TEMP="$(mktemp "$BOOT_VOLUME/.cmdline.v-link.XXXXXX")"
+printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE_TEMP"
+chmod --reference="$CMDLINE" "$CMDLINE_TEMP" 2>/dev/null || true
+mv -f "$CMDLINE_TEMP" "$CMDLINE"
 
 printf '\nSD card prepared successfully.\n\n'
 printf 'First boot flow:\n'

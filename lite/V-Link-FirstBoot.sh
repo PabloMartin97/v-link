@@ -28,6 +28,8 @@ INSTALL_HELPER="$SYSTEM_ROOT/usr/local/sbin/v-link-firstboot-installer"
 INSTALL_LOG="$SYSTEM_ROOT/var/log/v-link-firstboot-installer.log"
 BOOT_LOG="$BOOT_ROOT/v-link-firstboot.log"
 BOOT_INSTALL_LOG="$BOOT_ROOT/v-link-firstboot-installer.log"
+MANIFEST="$BOOT_ROOT/v-link-firstboot.conf"
+USER_HELPER="$SYSTEM_ROOT/usr/local/sbin/v-link-firstboot-user"
 
 # A read-only boot partition must not prevent the cmdline cleanup attempt.
 if : >>"$BOOT_LOG" 2>/dev/null; then
@@ -41,6 +43,14 @@ log() {
 die() {
     printf '[V-Link first boot] ERROR: %s\n' "$*" >&2
     exit 1
+}
+
+file_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    else
+        shasum -a 256 "$1" | cut -d' ' -f1
+    fi
 }
 
 RUNNING_FROM_CMDLINE=false
@@ -63,6 +73,31 @@ if [[ "$RUNNING_FROM_CMDLINE" == true ]]; then
     log "Temporary kernel command-line arguments removed"
 fi
 
+[[ -f "$MANIFEST" && ! -L "$MANIFEST" ]] || die "missing or unsafe $MANIFEST"
+[[ -f "$INSTALLER_SOURCE" && ! -L "$INSTALLER_SOURCE" ]] || die "missing or unsafe $INSTALLER_SOURCE"
+[[ -f "$SCRIPT_DIR/V-Link-FirstBoot.sh" && ! -L "$SCRIPT_DIR/V-Link-FirstBoot.sh" ]] || die "missing or unsafe first-boot script"
+INSTALLER_SHA256=""
+BOOTSTRAP_SHA256=""
+SOURCE_TAG=""
+while IFS='=' read -r key value; do
+    case "$key" in
+        SOURCE) [[ -z "$SOURCE_TAG" && -n "$value" ]] || die "missing or duplicate SOURCE in first-boot manifest"; SOURCE_TAG="$value" ;;
+        INSTALLER_SHA256) [[ -z "$INSTALLER_SHA256" ]] || die "duplicate installer hash"; INSTALLER_SHA256="$value" ;;
+        BOOTSTRAP_SHA256) [[ -z "$BOOTSTRAP_SHA256" ]] || die "duplicate bootstrap hash"; BOOTSTRAP_SHA256="$value" ;;
+        *) die "unexpected first-boot manifest field: $key" ;;
+    esac
+done <"$MANIFEST"
+[[ -n "$SOURCE_TAG" ]] || die "missing SOURCE in first-boot manifest"
+[[ "$INSTALLER_SHA256" =~ ^[[:xdigit:]]{64}$ && "$BOOTSTRAP_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || \
+    die "invalid SHA256 in first-boot manifest"
+INSTALLER_SHA256="$(printf '%s' "$INSTALLER_SHA256" | tr '[:upper:]' '[:lower:]')"
+BOOTSTRAP_SHA256="$(printf '%s' "$BOOTSTRAP_SHA256" | tr '[:upper:]' '[:lower:]')"
+[[ "$(file_sha256 "$INSTALLER_SOURCE")" == "$INSTALLER_SHA256" ]] || \
+    die "installer SHA256 mismatch; nothing was staged"
+[[ "$(file_sha256 "$SCRIPT_DIR/V-Link-FirstBoot.sh")" == "$BOOTSTRAP_SHA256" ]] || \
+    die "bootstrap SHA256 mismatch; nothing was staged"
+log "Installer and bootstrap SHA256 verified"
+
 [[ -f "$INSTALLER_SOURCE" ]] || die "missing $INSTALLER_SOURCE"
 install -d \
     "$(dirname -- "$INSTALLER_STAGED")" \
@@ -71,6 +106,32 @@ install -d \
     "$(dirname -- "$INSTALL_LOG")"
 install -m 0755 "$INSTALLER_SOURCE" "$INSTALLER_STAGED"
 log "Installer staged at $INSTALLER_STAGED"
+
+cat >"$USER_HELPER" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+uid_min="$(awk '$1 == "UID_MIN" { print $2; exit }' /etc/login.defs 2>/dev/null || true)"
+uid_max="$(awk '$1 == "UID_MAX" { print $2; exit }' /etc/login.defs 2>/dev/null || true)"
+[[ "$uid_min" =~ ^[0-9]+$ ]] || uid_min=1000
+[[ "$uid_max" =~ ^[0-9]+$ ]] || uid_max=60000
+candidates=()
+while IFS=: read -r name _ uid _ _ home shell; do
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    ((uid >= uid_min && uid <= uid_max)) || continue
+    [[ "$name" != root && "$home" == /* && -d "$home" && "$shell" == /* && -x "$shell" ]] || continue
+    case "$shell" in
+        */false|*/nologin|"") continue ;;
+    esac
+    candidates+=("$name")
+done < <(getent passwd)
+case "${#candidates[@]}" in
+    0) printf 'No eligible local user exists yet.\n' >&2; exit 2 ;;
+    1) printf '%s\n' "${candidates[0]}" ;;
+    *) printf 'Multiple eligible users: %s. Run Install-Lite.sh --user USER manually.\n' "${candidates[*]}" >&2; exit 3 ;;
+esac
+EOF
+chmod 0755 "$USER_HELPER"
 
 cat >"$INSTALL_HELPER" <<EOF
 #!/usr/bin/env bash
@@ -81,16 +142,8 @@ copy_log_to_boot_partition() {
 }
 trap copy_log_to_boot_partition EXIT
 
-target_user="\$(getent passwd 1000 | cut -d: -f1 || true)"
-[[ -n "\$target_user" ]] || {
-    printf '[V-Link first boot] ERROR: no UID 1000 user exists\n' >&2
-    exit 1
-}
-target_home="\$(getent passwd 1000 | cut -d: -f6 || true)"
-[[ -n "\$target_home" && -d "\$target_home" ]] || {
-    printf '[V-Link first boot] ERROR: home directory for UID 1000 is unavailable\n' >&2
-    exit 1
-}
+target_user="\$("$USER_HELPER")" || exit 1
+target_home="\$(getent passwd "\$target_user" | cut -d: -f6)"
 cd "\$target_home"
 "$INSTALLER_STAGED" --first-boot --user "\$target_user" 2>&1 | \
     tee -a "$INSTALL_LOG"
@@ -101,7 +154,10 @@ cat >"$WAIT_HELPER" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-while ! getent passwd 1000 >/dev/null; do
+while true; do
+    status=0
+    /usr/local/sbin/v-link-firstboot-user >/dev/null 2>&1 || status=$?
+    [[ "$status" -ne 2 ]] && break
     sleep 2
 done
 while systemctl is-active --quiet userconfig.service; do

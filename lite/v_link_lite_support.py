@@ -11,7 +11,10 @@ from pathlib import Path
 
 
 MODES = {"auto", "visible"}
-DEFAULT_SETTINGS = {"CURSOR_MODE": "auto", "MOUSE_ENABLED": "yes"}
+DISPLAY_OUTPUT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+DISPLAY_MODE_PATTERN = re.compile(r"^([1-9][0-9]{0,4})x([1-9][0-9]{0,4})@([0-9]{1,3}(?:\.[0-9]{1,6})?)$")
+DEFAULT_SETTINGS = {"CURSOR_MODE": "auto", "MOUSE_ENABLED": "yes",
+                    "DISPLAY_MODE": "auto", "DISPLAY_OUTPUT": ""}
 SNAPSHOT_NAME = "v-link-lite-console.json"
 
 
@@ -35,8 +38,16 @@ def parse_settings(content):
             raise ValueError("CURSOR_MODE must be auto or visible")
         if key == "MOUSE_ENABLED" and value not in {"yes", "no"}:
             raise ValueError("MOUSE_ENABLED must be yes or no")
+        if key == "DISPLAY_MODE" and value != "auto":
+            match = DISPLAY_MODE_PATTERN.fullmatch(value)
+            if not match or int(match.group(1)) > 10000 or int(match.group(2)) > 10000 or not 1 <= float(match.group(3)) <= 500:
+                raise ValueError("DISPLAY_MODE must be auto or WIDTHxHEIGHT@REFRESH")
+        if key == "DISPLAY_OUTPUT" and value and not DISPLAY_OUTPUT_PATTERN.fullmatch(value):
+            raise ValueError("DISPLAY_OUTPUT is invalid")
         seen.add(key)
         settings[key] = value
+    if settings["DISPLAY_MODE"] != "auto" and not settings["DISPLAY_OUTPUT"]:
+        raise ValueError("DISPLAY_OUTPUT is required for a fixed display mode")
     return settings
 
 
@@ -51,6 +62,9 @@ def load_settings(home):
 
 
 def save_settings(home, settings, create_only=False):
+    if set(settings) - set(DEFAULT_SETTINGS):
+        raise ValueError("Unknown Lite setting")
+    settings = {**DEFAULT_SETTINGS, **settings}
     path = settings_path(home)
     parent = path.parent
     if parent.is_symlink() or path.is_symlink():

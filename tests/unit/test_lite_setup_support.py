@@ -40,7 +40,7 @@ def test_default_creation_preserves_existing_preference():
         settings = {"CURSOR_MODE": "visible", "MOUSE_ENABLED": "no"}
         support.save_settings(directory, settings)
         assert not support.save_settings(directory, support.DEFAULT_SETTINGS, create_only=True)
-        assert support.load_settings(directory) == settings
+        assert support.load_settings(directory) == {**settings, "DISPLAY_MODE": "auto", "DISPLAY_OUTPUT": ""}
 
 
 def test_cpu_percentage_from_two_samples():

@@ -255,9 +255,9 @@ if [[ -f "$SETTINGS_FILE" && ! -L "$SETTINGS_FILE" ]] && \
    runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$TARGET_HOME/.config" python3 -c \
        'import sys; sys.path.insert(0,"/usr/local/bin"); from v_link_lite_support import load_settings; load_settings(sys.argv[1])' \
        "$TARGET_HOME" >/dev/null 2>&1; then
-    pass "Lite settings are safe and valid"
+    pass "Lite settings (including display mode/output) are safe and valid"
 else
-    fail "Lite settings are missing, unsafe, or invalid"
+    fail "Lite settings or display mode/output are missing, unsafe, or invalid"
 fi
 if [[ -f /usr/local/bin/v-link-lite-cursor ]] && \
    runuser -u "$TARGET_USER" -- python3 -c \
@@ -265,6 +265,14 @@ if [[ -f /usr/local/bin/v-link-lite-cursor ]] && \
     pass "Lite cursor helper syntax is valid"
 else
     fail "Lite cursor helper is unavailable or invalid"
+fi
+if [[ -f /usr/local/bin/v_link_lite_display.py && ! -L /usr/local/bin/v_link_lite_display.py ]] && \
+   [[ "$(stat -c '%u:%g:%a' /usr/local/bin/v_link_lite_display.py)" == '0:0:755' ]] && \
+   runuser -u "$TARGET_USER" -- python3 -c \
+       'import ast, pathlib; ast.parse(pathlib.Path("/usr/local/bin/v_link_lite_display.py").read_text(encoding="utf-8"))' >/dev/null 2>&1; then
+    pass "Lite display helper is installed root:root 0755 and valid"
+else
+    fail "Lite display helper is missing, unsafe, or invalid"
 fi
 if [[ -f /usr/local/bin/v-link-lite-setup ]] && \
    runuser -u "$TARGET_USER" -- python3 -c \
@@ -444,6 +452,17 @@ if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     pass "labwc autostart applies cursor policy once before V-Link starts"
 else
     fail "labwc autostart is missing the ordered cursor policy"
+fi
+if [[ -f "$LABWC_AUTOSTART" ]] && awk '
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
+    /^\/usr\/local\/bin\/v_link_lite_display[.]py apply/ { display++; applied = NR }
+    /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
+    /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { started = NR }
+    END { exit !(imported && display == 1 && applied > imported && gate > applied && started > gate) }
+' "$LABWC_AUTOSTART"; then
+    pass "labwc applies the Lite display policy before the boot gate and V-Link"
+else
+    fail "labwc autostart is missing the ordered Lite display policy"
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }

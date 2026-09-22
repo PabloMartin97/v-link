@@ -2,6 +2,7 @@
 """Persistent, unprivileged maintenance screen for V-Link Lite."""
 
 import curses
+from decimal import Decimal
 import fcntl
 import json
 import os
@@ -19,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from v_link_lite_support import (load_settings, save_settings, system_details,
                                  format_size, read_snapshot)
 import v_link_lite_audio as lite_audio
+import v_link_lite_display as lite_display
 
 
 TITLE = "V-Link Lite Setup"
@@ -57,6 +59,25 @@ def session_environment(uid):
         bus = login_runtime / "bus"
         if is_socket(bus):
             env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={bus}")
+        if not lite_display.wayland_available(env):
+            env.pop("WAYLAND_DISPLAY", None)
+            if is_socket(bus):
+                try:
+                    manager = subprocess.run(["systemctl", "--user", "show-environment"],
+                                             capture_output=True, text=True, timeout=2, env=env)
+                    for line in manager.stdout.splitlines():
+                        if line.startswith("WAYLAND_DISPLAY="):
+                            env["WAYLAND_DISPLAY"] = line.split("=", 1)[1]
+                            if lite_display.wayland_available(env):
+                                break
+                            env.pop("WAYLAND_DISPLAY", None)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            if not lite_display.wayland_available(env):
+                candidates = [path.name for path in login_runtime.glob("wayland-*")
+                              if not path.is_symlink() and path.is_socket() and path.stat().st_uid == uid]
+                if len(candidates) == 1:
+                    env["WAYLAND_DISPLAY"] = candidates[0]
     return env
 
 
@@ -570,7 +591,8 @@ class SetupUI:
                 f"Input level: {input_level}",
                 f"Processing: {profile['preset']}",
                 "Input level is PipeWire source volume, not analogue gain.",
-                config_error or ("Audio session unavailable; Off remains available." if not audio_available else "")])
+                config_error or ("Audio session unavailable; Off remains available." if not audio_available
+                                 else "For Lite calibration, use V-Link microphone gain 0 dB.")])
             if choice in (None, "back"):
                 return
             if choice == "processing":
@@ -714,9 +736,7 @@ class SetupUI:
         self.message("Calibration applied. Test a new call; adjust Advanced processing if needed.")
 
     def display_status(self):
-        display = self.env.get("WAYLAND_DISPLAY", "")
-        path = Path(display) if display.startswith("/") else Path(self.env.get("XDG_RUNTIME_DIR", "/nonexistent")) / display
-        if not display or not is_socket(path):
+        if not self.display_available():
             return "Wayland display unavailable in this session."
         _, output = self.command(["wlr-randr"], 4)
         return output or "Could not query Wayland outputs."
@@ -724,22 +744,93 @@ class SetupUI:
     def display_menu(self):
         while True:
             raw = self.display_status()
-            lines = raw.splitlines()
-            active = next((line.strip() for line in lines if "(current)" in line), "unavailable")
-            output = ("unavailable" if raw.startswith("Wayland display unavailable") else
-                      next((line.split()[0] for line in lines if line and not line[0].isspace()), "unavailable"))
+            try:
+                active_outputs = lite_display.active_outputs(lite_display.parse_outputs(raw))
+            except lite_display.DisplayError:
+                active_outputs = []
+            output = active_outputs[0]["name"] if active_outputs else "unavailable"
+            active = next((mode["token"] for head in active_outputs for mode in head["modes"]
+                           if mode["current"]), "unavailable")
             choice = self.choose("Display / Input", [
-                ("status", "Display status"), ("cursor", "Cursor and mouse"),
+                ("status", "Display status"), ("resolution", "Resolution / refresh rate"),
+                ("cursor", "Cursor and mouse"),
                 ("details", "Technical details"), ("back", "Back")],
                 summary=[f"Display: {output}", f"Mode: {active[:60]}"])
             if choice in (None, "back"):
                 return
             if choice == "cursor":
                 self.cursor_menu()
+            elif choice == "resolution":
+                self.resolution_menu()
             elif choice == "details":
                 self.view("Display details", raw)
             else:
                 self.view("Display status", f"Display: {output}\nMode: {active}")
+
+    def resolution_menu(self):
+        try:
+            settings = load_settings(self.home)
+        except ValueError as error:
+            self.message(f"Invalid Lite settings: {error}")
+            return
+        outputs = []
+        if self.display_available():
+            try:
+                outputs = lite_display.active_outputs(lite_display.query_outputs(self.env))
+            except lite_display.DisplayError as error:
+                self.message(f"Could not read display modes: {error}")
+        selected = None
+        if outputs:
+            selected = lite_display.find_output(outputs, settings["DISPLAY_OUTPUT"])
+            if selected is None and len(outputs) == 1:
+                selected = outputs[0]
+            elif selected is None:
+                choice = self.choose("Select display output", [
+                    (output["name"], output["name"]) for output in outputs] + [("back", "Back")],
+                    summary=["Several outputs are active; choose the one to configure."])
+                if choice in (None, "back"):
+                    return
+                selected = lite_display.find_output(outputs, choice)
+        items = [("auto", "Auto / Preferred (next graphical login)")]
+        if selected:
+            items.extend((mode["token"],
+                          f"{mode['width']}x{mode['height']} @ {Decimal(mode['refresh']):.2f} Hz"
+                          f"{' [current]' if mode['current'] else ''}"
+                          f"{' [preferred]' if mode['preferred'] else ''}")
+                         for mode in selected["modes"])
+        items.append(("back", "Back"))
+        choice = self.choose("Resolution / refresh rate", items,
+                             summary=[f"Output: {selected['name'] if selected else 'no active Wayland output'}",
+                                      f"Saved: {settings['DISPLAY_MODE']}",
+                                      "Fixed modes require an active Wayland output." if not selected else
+                                      "Modes come from the connected display."])
+        if choice in (None, "back"):
+            return
+        if choice == "auto":
+            settings["DISPLAY_MODE"] = "auto"
+            settings["DISPLAY_OUTPUT"] = ""
+            try:
+                save_settings(self.home, settings)
+                self.message("Auto / Preferred saved. The compositor will choose the mode at the next graphical login.")
+            except (OSError, ValueError) as error:
+                self.message(f"Could not save display preference: {error}")
+            return
+        if selected is None:
+            self.message("No active Wayland output; no fixed mode was saved.")
+            return
+        try:
+            lite_display.apply_mode(selected["name"], choice, self.env)
+        except lite_display.DisplayError as error:
+            self.message(f"Display mode was not applied or saved: {error}")
+            return
+        settings["DISPLAY_MODE"] = choice
+        settings["DISPLAY_OUTPUT"] = selected["name"]
+        try:
+            save_settings(self.home, settings)
+        except (OSError, ValueError) as error:
+            self.message(f"Display changed now, but the preference could not be saved: {error}")
+            return
+        self.message("Display mode applied and saved. The next graphical boot will use it if still available.")
 
     def cursor_menu(self):
         while True:
@@ -1009,9 +1100,7 @@ class SetupUI:
         return "\n".join(lines)
 
     def display_available(self):
-        display = self.env.get("WAYLAND_DISPLAY", "")
-        path = Path(display) if display.startswith("/") else Path(self.env.get("XDG_RUNTIME_DIR", "/nonexistent")) / display
-        return bool(display and is_socket(path))
+        return lite_display.wayland_available(self.env)
 
     def power_action(self, action):
         choice = self.choose(f"Confirm {action}?", [("no", "Cancel"), ("yes", f"Yes, {action}")])

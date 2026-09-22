@@ -43,6 +43,10 @@ VENV_BACKUP=""
 VENV_TRANSACTION=false
 APP_TRANSACTION=false
 APP_CHANGED_PATHS=()
+PLATFORM_TRANSACTION=false
+PLATFORM_SEALED=false
+PLATFORM_BACKUP=""
+PLATFORM_PATHS=()
 FRONTEND_BUILD_REQUIRED=false
 FRONTEND_SOURCE_HASH=""
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,6 +57,9 @@ cleanup() {
     set +e
 
     if ((status != 0)); then
+        if [[ "$PLATFORM_TRANSACTION" == true ]]; then
+            rollback_platform_files
+        fi
         if [[ -n "$VENV_BACKUP" && -d "$VENV_BACKUP" ]]; then
             rm -rf -- "$APP_DIR/venv"
             mv "$VENV_BACKUP" "$APP_DIR/venv"
@@ -80,10 +87,127 @@ cleanup() {
     [[ -z "$NODE_STAGE" || ! -d "$NODE_STAGE" ]] || rm -rf -- "$NODE_STAGE"
     [[ -z "$HELPER_STAGING" || ! -e "$HELPER_STAGING" ]] || rm -f -- "$HELPER_STAGING"
     [[ -z "$SPLASH_WORK" || ! -d "$SPLASH_WORK" ]] || rm -r -- "$SPLASH_WORK"
+    [[ -z "$PLATFORM_BACKUP" || ! -d "$PLATFORM_BACKUP" ]] || rm -rf -- "$PLATFORM_BACKUP"
 
     exit "$status"
 }
 trap cleanup EXIT
+
+platform_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    else
+        shasum -a 256 "$1" | cut -d' ' -f1
+    fi
+}
+
+platform_fingerprint() {
+    local path="$1"
+    if [[ -L "$path" ]]; then
+        printf 'link:%s\n' "$(readlink -- "$path")"
+    elif [[ -f "$path" ]]; then
+        local mode
+        mode="$(stat -c '%u:%g:%a' "$path" 2>/dev/null)" || mode="$(stat -f '%u:%g:%Lp' "$path")"
+        printf 'file:%s:%s\n' "$mode" "$(platform_sha256 "$path")"
+    elif [[ ! -e "$path" ]]; then
+        printf 'absent\n'
+    else
+        printf 'other\n'
+    fi
+}
+
+begin_platform_files() {
+    local index path
+    PLATFORM_BACKUP="$(mktemp -d /tmp/v-link-lite-platform.XXXXXX)"
+    PLATFORM_PATHS=(
+        /usr/local/bin/v_link_lite_support.py /usr/local/bin/v_link_lite_audio.py
+        /usr/local/bin/v_link_lite_display.py
+        /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor
+        /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay
+        /usr/local/libexec/v-link-lite-prepare-splash
+        /usr/local/share/v-link-lite/handoff.js /usr/local/share/v-link-lite/logo.png
+        /usr/local/share/v-link-lite/splash.png
+        /etc/udev/rules.d/41-v-link-carplay.rules
+        /etc/udev/rules.d/42-v-link.rules /etc/modules-load.d/v-link.conf
+        /etc/systemd/system/default.target
+        /etc/systemd/system/display-manager.service
+        /etc/systemd/system/graphical.target.wants/lightdm.service
+        /etc/systemd/system/multi-user.target.wants/v-link-can.service
+        /etc/systemd/system/serial-getty@serial0.service
+        /etc/systemd/system/serial-getty@ttyAMA0.service
+        /etc/systemd/system/serial-getty@ttyAMA2.service
+        /etc/systemd/system/serial-getty@ttyAMA3.service
+        /etc/systemd/system/serial-getty@ttyS0.service
+        /etc/chromium/policies/managed/v-link-webusb.json
+        /etc/lightdm/lightdm.conf.d/50-v-link-lite.conf
+        /etc/sudoers.d/v-link-lite /etc/systemd/system/v-link-can.service
+        /usr/local/sbin/v-link-can-up /usr/local/sbin/v-link-can-set
+        /boot/firmware/config.txt /boot/firmware/cmdline.txt
+        /boot/firmware/overlays/v-link.dtbo
+        /boot/firmware/overlays/mcp2515-can1.dtbo
+        /boot/firmware/overlays/mcp2515-can2.dtbo
+        "$TARGET_HOME/.local/libexec/v-link-recover-update"
+        "$USER_CONFIG_DIR/systemd/user/v-link.service"
+        "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
+        "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
+        "$USER_CONFIG_DIR/systemd/user/default.target.wants/v-link.service"
+        "$USER_CONFIG_DIR/labwc/rc.xml" "$USER_CONFIG_DIR/labwc/autostart"
+        "$USER_CONFIG_DIR/v-link-lite/settings.conf"
+    )
+    for index in "${!PLATFORM_PATHS[@]}"; do
+        path="${PLATFORM_PATHS[index]}"
+        platform_fingerprint "$path" >"$PLATFORM_BACKUP/$index.original"
+        if [[ -e "$path" || -L "$path" ]]; then
+            [[ -f "$path" || -L "$path" ]] || die "managed platform path is not a file: $path"
+            cp -a -- "$path" "$PLATFORM_BACKUP/$index"
+        else
+            : >"$PLATFORM_BACKUP/$index.absent"
+        fi
+    done
+    PLATFORM_TRANSACTION=true
+}
+
+seal_platform_files() {
+    local index
+    for index in "${!PLATFORM_PATHS[@]}"; do
+        platform_fingerprint "${PLATFORM_PATHS[index]}" >"$PLATFORM_BACKUP/$index.expected"
+    done
+    PLATFORM_SEALED=true
+}
+
+rollback_platform_files() {
+    local index path current expected failed=0
+    for ((index=${#PLATFORM_PATHS[@]} - 1; index >= 0; index--)); do
+        path="${PLATFORM_PATHS[index]}"
+        if [[ "$PLATFORM_SEALED" != true ]]; then
+            printf '[V-Link Lite] WARNING: platform install stopped before its final checkpoint; preserving %s for manual review.\n' "$path" >&2
+            failed=1
+            continue
+        fi
+        current="$(platform_fingerprint "$path")"
+        if [[ "$current" == "$(<"$PLATFORM_BACKUP/$index.original")" ]]; then
+            continue
+        fi
+        expected="$(<"$PLATFORM_BACKUP/$index.expected")"
+        if [[ "$current" != "$expected" ]]; then
+            printf '[V-Link Lite] WARNING: %s changed after installation; not overwriting it.\n' "$path" >&2
+            failed=1
+            continue
+        fi
+        if [[ -f "$PLATFORM_BACKUP/$index.absent" ]]; then
+            rm -f -- "$path" || failed=1
+        else
+            rm -f -- "$path" && cp -a -- "$PLATFORM_BACKUP/$index" "$path" || failed=1
+        fi
+    done
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    udevadm control --reload-rules >/dev/null 2>&1 || true
+    if ((failed)); then
+        printf '[V-Link Lite] WARNING: platform rollback was partial; review the paths above.\n' >&2
+    else
+        printf '[V-Link Lite] Managed Lite platform files restored.\n' >&2
+    fi
+}
 
 usage() {
     cat <<'EOF'
@@ -295,6 +419,7 @@ set -Eeuo pipefail
         /etc/systemd/system/v-link-firstboot.service \
         /etc/systemd/system/v-link-firstboot-wait.service \
         /usr/local/sbin/v-link-firstboot-installer \
+        /usr/local/sbin/v-link-firstboot-user \
         /usr/local/sbin/v-link-firstboot-wait \
         /usr/local/libexec/v-link-install-lite
     rm -f -- \
@@ -304,6 +429,13 @@ set -Eeuo pipefail
         /boot/Install-Lite.sh \
         /boot/V-Link-FirstBoot.sh \
         /boot/v-link-firstboot.conf
+    # Keep /var/log/v-link-firstboot-installer.log as the durable record.
+    # Boot-partition copies are only temporary after a confirmed success.
+    rm -f -- \
+        /boot/firmware/v-link-firstboot.log \
+        /boot/firmware/v-link-firstboot-installer.log \
+        /boot/v-link-firstboot.log \
+        /boot/v-link-firstboot-installer.log
 rm -f -- \
     /etc/systemd/system/multi-user.target.wants/v-link-firstboot-cleanup.service \
     /etc/systemd/system/v-link-firstboot-cleanup.service
@@ -401,9 +533,8 @@ select_install_source() {
 
     printf '\nChoose what V-Link source to install:\n'
     printf '  1) GitHub branch             [recommended for development / testing]\n'
-    printf '  2) Latest published release  [packaged release, when available]\n'
     if [[ -n "$local_checkout" ]]; then
-        printf '  3) This local checkout       [%s]\n' "$local_checkout"
+        printf '  2) This local checkout       [%s]\n' "$local_checkout"
     fi
 
     while true; do
@@ -415,11 +546,6 @@ select_install_source() {
                 return
                 ;;
             2)
-                SOURCE_DIR=""
-                SOURCE_REF=""
-                return
-                ;;
-            3)
                 if [[ -n "$local_checkout" ]]; then
                     SOURCE_DIR="$local_checkout"
                     SOURCE_REF=""
@@ -455,7 +581,7 @@ show_install_plan() {
     elif [[ -n "$SOURCE_REF" ]]; then
         source_description="GitHub branch/tag: $SOURCE_REF"
     else
-        source_description="Latest published release"
+        source_description="No supported Lite source selected"
     fi
 
     printf '\n============================================================\n'
@@ -522,7 +648,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -773,6 +899,8 @@ if [[ "$ASSUME_YES" != true ]]; then
 elif [[ "$SOURCE_CHOICE_EXPLICIT" != true && -n "$LOCAL_SOURCE_CANDIDATE" ]]; then
     SOURCE_DIR="$LOCAL_SOURCE_CANDIDATE"
 fi
+[[ -n "$SOURCE_DIR" || -n "$SOURCE_REF" ]] || \
+    die "the current published release lacks the Lite installation payload; use --ref or --source-dir"
 
 [[ -z "$LIN_PORT" || "$CONFIGURE_HARDWARE" == true ]] || \
     die "--lin-port requires hardware mode"
@@ -904,9 +1032,6 @@ if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     select_or_install_node
 fi
 
-systemctl enable lightdm.service
-systemctl set-default graphical.target
-
 show_phase 3 7 "V-Link source"
 
 if [[ -n "$SOURCE_REF" ]]; then
@@ -973,11 +1098,17 @@ if [[ "$FRONTEND_BUILD_REQUIRED" == true ]]; then
     [[ -f "$SOURCE_DIR/frontend/package.json" ]] || die "frontend source is unavailable for the required build"
     [[ -n "$NODE_BUILD_PATH" ]] || die "a compatible Node.js build runtime was not selected"
     chown -R "$TARGET_USER:$TARGET_GROUP" "$SOURCE_DIR/frontend"
+    if [[ -z "$TEMP_DIR" ]]; then
+        TEMP_DIR="$(mktemp -d /tmp/v-link-lite.XXXXXX)"
+        chown "$TARGET_USER:$TARGET_GROUP" "$TEMP_DIR"
+    fi
+    install -d -o "$TARGET_USER" -g "$TARGET_GROUP" -m 0700 "$TEMP_DIR/npm-cache"
     runuser -u "$TARGET_USER" -- env \
         PATH="$NODE_BUILD_PATH" \
         NODE_OPTIONS=--max-old-space-size=768 \
         ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
         npm_config_engine_strict=true \
+        npm_config_cache="$TEMP_DIR/npm-cache" \
         bash -c \
         'cd "$1" && npm ci --legacy-peer-deps --no-audit --no-fund && npm run build' \
         bash "$SOURCE_DIR/frontend"
@@ -1039,6 +1170,9 @@ for required_path in \
     "$APP_DIR/frontend/dist/index.html"; do
     [[ -e "$required_path" ]] || die "installed application is incomplete: missing $required_path"
 done
+if [[ "$APP_TRANSACTION" == true ]]; then
+    begin_app_path "$APP_DIR/.v-link-lite-runtime"
+fi
 install -o "$TARGET_USER" -g "$TARGET_GROUP" -m 0644 /dev/null "$APP_DIR/.v-link-lite-runtime"
 
 log "Creating the Python virtual environment"
@@ -1063,7 +1197,7 @@ if [[ "$VENV_CURRENT" != true ]]; then
     runuser -u "$TARGET_USER" -- python3 -m venv "$VENV_WORK/builder"
     install -d -o "$TARGET_USER" -g "$TARGET_GROUP" "$VENV_WORK/wheels"
     runuser -u "$TARGET_USER" -- env \
-        PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 PIP_NO_CACHE_DIR=1 \
         "$VENV_WORK/builder/bin/python" -m pip install --upgrade \
         "pip==$PYTHON_BUILD_PIP" \
         "setuptools==$PYTHON_BUILD_SETUPTOOLS" \
@@ -1076,7 +1210,7 @@ if [[ "$VENV_CURRENT" != true ]]; then
     printf '  wheel:      %s\n' "$(runuser -u "$TARGET_USER" -- "$VENV_WORK/builder/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("wheel"))')"
 
     runuser -u "$TARGET_USER" -- env \
-        PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 PIP_NO_CACHE_DIR=1 \
         "$VENV_WORK/builder/bin/python" -m pip wheel \
         --wheel-dir "$VENV_WORK/wheels" \
         -r "$APP_DIR/requirements.txt"
@@ -1086,7 +1220,7 @@ if [[ "$VENV_CURRENT" != true ]]; then
     fi
     VENV_TRANSACTION=true
     runuser -u "$TARGET_USER" -- python3 -m venv "$APP_DIR/venv"
-    runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" -m pip install \
+    runuser -u "$TARGET_USER" -- env PIP_NO_CACHE_DIR=1 "$APP_DIR/venv/bin/python" -m pip install \
         --no-index --find-links "$VENV_WORK/wheels" \
         -r "$APP_DIR/requirements.txt"
     runuser -u "$TARGET_USER" -- "$APP_DIR/venv/bin/python" -m pip check
@@ -1101,11 +1235,16 @@ else
 fi
 
 show_phase 6 7 "System configuration"
+begin_platform_files
+seal_platform_files
+systemctl enable lightdm.service
+systemctl set-default graphical.target
 
 log "Installing root-owned Lite maintenance helpers"
 install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_audio.py" /usr/local/bin/v_link_lite_audio.py
+install -o root -g root -m 0755 "$SOURCE_DIR/lite/v_link_lite_display.py" /usr/local/bin/v_link_lite_display.py
 for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
     'lite/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \
@@ -1134,7 +1273,9 @@ for splash_image in logo.png splash.png; do
 done
 rm -r -- "$SPLASH_WORK"
 SPLASH_WORK=""
+seal_platform_files
 runuser -u "$TARGET_USER" -- /usr/local/libexec/v-link-lite-prepare-splash --app-dir "$APP_DIR"
+seal_platform_files
 
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
@@ -1176,6 +1317,7 @@ autologin-user-timeout=0
 user-session=labwc
 autologin-session=labwc
 EOF
+seal_platform_files
 
 install -d -o "$TARGET_USER" -g "$TARGET_GROUP" \
     "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd/user" \
@@ -1303,6 +1445,9 @@ cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
 # Make the Wayland session environment available to user services.
 systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 
+# Apply a saved Lite display mode before the boot gate and Chromium start.
+/usr/local/bin/v_link_lite_display.py apply || printf 'V-Link Lite: display policy failed; keeping compositor mode.\n' >&2
+
 # Keep the V-Link mark visible while the boot gate and Chromium start.
 swaybg -i /usr/local/share/v-link-lite/splash.png -m fit -c 000000 &
 
@@ -1346,6 +1491,7 @@ chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
 chmod 0644 "$USER_CONFIG_DIR/labwc/rc.xml"
 chmod 0755 "$USER_CONFIG_DIR/labwc/autostart"
+seal_platform_files
 
 # The settings screen exposes only these two privileged power operations.
 SUDOERS_TEMP="$(mktemp /tmp/v-link-sudoers.XXXXXX)"
@@ -1362,6 +1508,7 @@ visudo -cf "$SUDOERS_TEMP" >/dev/null
 install -o root -g root -m 0440 "$SUDOERS_TEMP" /etc/sudoers.d/v-link-lite
 rm -f -- "$SUDOERS_TEMP"
 SUDOERS_TEMP=""
+seal_platform_files
 
 if [[ "$CONFIGURE_HARDWARE" == true ]]; then
     log "Configuring the V-Link HAT, CAN, UART and GPIO"
@@ -1618,6 +1765,7 @@ else
 fi
 
 log "Keeping the Lite boot path independent of splash initramfs hooks"
+seal_platform_files
 BOOT_CONFIG=/boot/firmware/config.txt
 CMDLINE_FILE=/boot/firmware/cmdline.txt
 [[ -f "$BOOT_CONFIG" && -f "$CMDLINE_FILE" ]] || \
@@ -1666,6 +1814,7 @@ systemctl daemon-reload
 show_phase 7 7 "Final checks"
 
 log "Running pre-reboot health checks"
+seal_platform_files
 [[ -x "$APP_DIR/Check-Lite.sh" ]] || die "installed application is missing executable Check-Lite.sh"
 if ! "$APP_DIR/Check-Lite.sh" --user "$TARGET_USER" --pre-reboot; then
     die "installation checks failed; review the failures above before rebooting"
@@ -1681,6 +1830,7 @@ if [[ "$VENV_TRANSACTION" == true ]]; then
     VENV_BACKUP=""
     VENV_TRANSACTION=false
 fi
+PLATFORM_TRANSACTION=false
 
 if [[ "$FIRST_BOOT_MODE" == true ]]; then
     cleanup_first_boot_stage
