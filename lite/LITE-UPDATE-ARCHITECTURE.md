@@ -21,9 +21,11 @@ The release version is authoritative. An internal Lite schema/platform revision
 may select migrations (for example, V-Link 3.2.0 and Lite schema 4), but there
 must be no second “V-Link Lite version” or `V-Link-Lite.zip`. A single common
 release archive must eventually support installation and updates for both modes.
-The current published `V-Link.zip` lacks the full Lite installation payload;
-the Lite installer therefore temporarily offers branches or a local checkout,
-not that release. Do not change `Package.sh` merely to work around this.
+The common release payload must include everything needed to install and
+migrate Lite. That is broader than `lite/`: the current installer also consumes
+`resources/dtoverlays/` and `frontend/public/assets/svg/logos/`. Review the
+complete installer input set when integrating Lite with `Package.sh`; do not
+change `Package.sh` as part of this design note.
 
 ## Versioned code versus deployed infrastructure
 
@@ -52,12 +54,15 @@ staging and precedes the final health check; it is **not implemented here**.
 
 ## Integration with the common updater
 
-BoostedMoose/v-link has an `updater` branch under development. At the time of
-this note it contains `updater/releases.py`, `updater/keepalive.py`, release
-selection, stable/prerelease and version choices, `.vlink-release.json`, and
-release installation/downgrade. Its final implementation may change. When it
-lands in `dev`, review the merged code first and extend its normal transaction;
-do not replace it or create a Lite updater.
+The common updater has now been merged into `BoostedMoose/v-link` `dev`. Before
+implementing Lite migration, synchronize `little-os-test` with the current
+upstream `dev`, review the updater and packager as merged, and extend their
+normal transaction. Do not replace them or create an independent Lite updater.
+
+The old Lite download path expects `V-Link.zip.sha256`. The updater/packager now
+present in `dev` uses the newer release digest/manifest mechanism instead.
+Future integration must adopt that common mechanism and review the full Lite
+payload described above; it must not preserve a parallel legacy checksum path.
 
 The desired transaction is:
 

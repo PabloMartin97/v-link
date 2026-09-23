@@ -44,9 +44,11 @@ VENV_TRANSACTION=false
 APP_TRANSACTION=false
 APP_CHANGED_PATHS=()
 PLATFORM_TRANSACTION=false
-PLATFORM_SEALED=false
 PLATFORM_BACKUP=""
 PLATFORM_PATHS=()
+HCIUART_TRACKED=false
+HCIUART_ORIGINAL=""
+HCIUART_EXPECTED=""
 FRONTEND_BUILD_REQUIRED=false
 FRONTEND_SOURCE_HASH=""
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -59,6 +61,7 @@ cleanup() {
     if ((status != 0)); then
         if [[ "$PLATFORM_TRANSACTION" == true ]]; then
             rollback_platform_files
+            rollback_hciuart_state
         fi
         if [[ -n "$VENV_BACKUP" && -d "$VENV_BACKUP" ]]; then
             rm -rf -- "$APP_DIR/venv"
@@ -167,25 +170,42 @@ begin_platform_files() {
     PLATFORM_TRANSACTION=true
 }
 
-seal_platform_files() {
-    local index
+platform_path_index() {
+    local wanted="$1" index
     for index in "${!PLATFORM_PATHS[@]}"; do
-        platform_fingerprint "${PLATFORM_PATHS[index]}" >"$PLATFORM_BACKUP/$index.expected"
+        if [[ "${PLATFORM_PATHS[index]}" == "$wanted" ]]; then
+            printf '%s\n' "$index"
+            return 0
+        fi
     done
-    PLATFORM_SEALED=true
+    return 1
+}
+
+platform_path_written() {
+    local path="$1" index
+    index="$(platform_path_index "$path")" || die "untracked Lite platform path: $path"
+    platform_fingerprint "$path" >"$PLATFORM_BACKUP/$index.expected"
+    : >"$PLATFORM_BACKUP/$index.written"
+}
+
+platform_paths_written() {
+    local path
+    for path in "$@"; do
+        platform_path_written "$path"
+    done
 }
 
 rollback_platform_files() {
     local index path current expected failed=0
     for ((index=${#PLATFORM_PATHS[@]} - 1; index >= 0; index--)); do
         path="${PLATFORM_PATHS[index]}"
-        if [[ "$PLATFORM_SEALED" != true ]]; then
-            printf '[V-Link Lite] WARNING: platform install stopped before its final checkpoint; preserving %s for manual review.\n' "$path" >&2
-            failed=1
-            continue
-        fi
         current="$(platform_fingerprint "$path")"
         if [[ "$current" == "$(<"$PLATFORM_BACKUP/$index.original")" ]]; then
+            continue
+        fi
+        if [[ ! -f "$PLATFORM_BACKUP/$index.written" ]]; then
+            printf '[V-Link Lite] WARNING: %s changed before an installer write was recorded; not overwriting it.\n' "$path" >&2
+            failed=1
             continue
         fi
         expected="$(<"$PLATFORM_BACKUP/$index.expected")"
@@ -206,6 +226,89 @@ rollback_platform_files() {
         printf '[V-Link Lite] WARNING: platform rollback was partial; review the paths above.\n' >&2
     else
         printf '[V-Link Lite] Managed Lite platform files restored.\n' >&2
+    fi
+}
+
+hciuart_snapshot() {
+    local load_state unit_state active_state
+    load_state="$(systemctl show hciuart.service --property=LoadState --value 2>/dev/null || true)"
+    if [[ -z "$load_state" || "$load_state" == not-found ]]; then
+        printf 'not-found|-|-\n'
+        return
+    fi
+    unit_state="$(systemctl is-enabled hciuart.service 2>/dev/null || true)"
+    active_state="$(systemctl is-active hciuart.service 2>/dev/null || true)"
+    printf '%s|%s|%s\n' "$load_state" "${unit_state:-unknown}" "${active_state:-unknown}"
+}
+
+track_hciuart_state() {
+    if [[ "$HCIUART_TRACKED" != true ]]; then
+        HCIUART_ORIGINAL="$(hciuart_snapshot)"
+        HCIUART_TRACKED=true
+    fi
+}
+
+hciuart_state_written() {
+    HCIUART_EXPECTED="$(hciuart_snapshot)"
+}
+
+restore_hciuart_snapshot() {
+    local snapshot="$1" load_state unit_state active_state
+    IFS='|' read -r load_state unit_state active_state <<<"$snapshot"
+    [[ "$load_state" != not-found ]] || return 0
+
+    case "$unit_state" in
+        enabled|linked)
+            systemctl unmask hciuart.service >/dev/null 2>&1 || true
+            systemctl enable hciuart.service >/dev/null 2>&1 || true
+            ;;
+        enabled-runtime|linked-runtime)
+            systemctl unmask hciuart.service >/dev/null 2>&1 || true
+            systemctl enable --runtime hciuart.service >/dev/null 2>&1 || true
+            ;;
+        masked|masked-runtime)
+            # Restore activity before reapplying the mask so the unusual but
+            # valid masked+active state is not silently changed.
+            systemctl unmask hciuart.service >/dev/null 2>&1 || true
+            systemctl disable hciuart.service >/dev/null 2>&1 || true
+            ;;
+        disabled)
+            systemctl unmask hciuart.service >/dev/null 2>&1 || true
+            systemctl disable hciuart.service >/dev/null 2>&1 || true
+            ;;
+        *)
+            # Static/indirect units cannot be enabled directly; only remove a
+            # mask that the installer may have created.
+            systemctl unmask hciuart.service >/dev/null 2>&1 || true
+            ;;
+    esac
+    if [[ "$active_state" == active ]]; then
+        systemctl start hciuart.service >/dev/null 2>&1 || true
+    else
+        systemctl stop hciuart.service >/dev/null 2>&1 || true
+    fi
+    case "$unit_state" in
+        masked) systemctl mask hciuart.service >/dev/null 2>&1 || true ;;
+        masked-runtime) systemctl mask --runtime hciuart.service >/dev/null 2>&1 || true ;;
+    esac
+}
+
+rollback_hciuart_state() {
+    local current
+    [[ "$HCIUART_TRACKED" == true ]] || return 0
+    current="$(hciuart_snapshot)"
+    [[ "$current" != "$HCIUART_ORIGINAL" ]] || return 0
+    if [[ -z "$HCIUART_EXPECTED" || "$current" != "$HCIUART_EXPECTED" ]]; then
+        printf '[V-Link Lite] WARNING: hciuart changed after the installer update; not overwriting its state.\n' >&2
+        return 0
+    fi
+    restore_hciuart_snapshot "$HCIUART_ORIGINAL"
+    current="$(hciuart_snapshot)"
+    if [[ "$current" == "$HCIUART_ORIGINAL" ]]; then
+        printf '[V-Link Lite] Previous hciuart state restored.\n' >&2
+    else
+        printf '[V-Link Lite] WARNING: hciuart rollback was incomplete (wanted %s, found %s).\n' \
+            "$HCIUART_ORIGINAL" "$current" >&2
     fi
 }
 
@@ -1236,15 +1339,21 @@ fi
 
 show_phase 6 7 "System configuration"
 begin_platform_files
-seal_platform_files
 systemctl enable lightdm.service
+platform_paths_written \
+    /etc/systemd/system/display-manager.service \
+    /etc/systemd/system/graphical.target.wants/lightdm.service
 systemctl set-default graphical.target
+platform_path_written /etc/systemd/system/default.target
 
 log "Installing root-owned Lite maintenance helpers"
 install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
+platform_path_written /usr/local/bin/v_link_lite_support.py
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_audio.py" /usr/local/bin/v_link_lite_audio.py
+platform_path_written /usr/local/bin/v_link_lite_audio.py
 install -o root -g root -m 0755 "$SOURCE_DIR/lite/v_link_lite_display.py" /usr/local/bin/v_link_lite_display.py
+platform_path_written /usr/local/bin/v_link_lite_display.py
 for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
     'lite/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \
@@ -1257,12 +1366,14 @@ for helper_spec in \
     install -o root -g root -m 0755 "$SOURCE_DIR/$HELPER_SOURCE" "$HELPER_STAGING"
     mv -f -- "$HELPER_STAGING" "$HELPER_DESTINATION"
     HELPER_STAGING=""
+    platform_path_written "$HELPER_DESTINATION"
 done
 
 log "Rendering V-Link branding for the graphical splash"
 install -d -o root -g root -m 0755 /usr/local/share/v-link-lite
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/V-Link-Lite-Handoff.js" \
     /usr/local/share/v-link-lite/handoff.js
+platform_path_written /usr/local/share/v-link-lite/handoff.js
 SPLASH_WORK="$(mktemp -d /tmp/v-link-splash.XXXXXX)"
 python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
     --logos-dir "$SOURCE_DIR/frontend/public/assets/svg/logos" \
@@ -1270,12 +1381,11 @@ python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
 for splash_image in logo.png splash.png; do
     install -o root -g root -m 0644 "$SPLASH_WORK/$splash_image" \
         "/usr/local/share/v-link-lite/$splash_image"
+    platform_path_written "/usr/local/share/v-link-lite/$splash_image"
 done
 rm -r -- "$SPLASH_WORK"
 SPLASH_WORK=""
-seal_platform_files
 runuser -u "$TARGET_USER" -- /usr/local/libexec/v-link-lite-prepare-splash --app-dir "$APP_DIR"
-seal_platform_files
 
 log "Granting the kiosk user access to display, input, audio and V-Link hardware"
 for group in audio video render input plugdev dialout gpio i2c spi; do
@@ -1289,6 +1399,7 @@ cat >/etc/udev/rules.d/41-v-link-carplay.rules <<'EOF'
 SUBSYSTEM=="usb", ATTR{idVendor}=="1314", ATTR{idProduct}=="1520", MODE="0660", GROUP="plugdev"
 SUBSYSTEM=="usb", ATTR{idVendor}=="1314", ATTR{idProduct}=="1521", MODE="0660", GROUP="plugdev"
 EOF
+platform_path_written /etc/udev/rules.d/41-v-link-carplay.rules
 
 install -d -m 0755 /etc/chromium/policies/managed
 cat >/etc/chromium/policies/managed/v-link-webusb.json <<'EOF'
@@ -1304,7 +1415,9 @@ cat >/etc/chromium/policies/managed/v-link-webusb.json <<'EOF'
   ]
 }
 EOF
+platform_path_written /etc/chromium/policies/managed/v-link-webusb.json
 chmod 0644 /etc/chromium/policies/managed/v-link-webusb.json
+platform_path_written /etc/chromium/policies/managed/v-link-webusb.json
 udevadm control --reload-rules
 
 log "Configuring graphical autologin"
@@ -1317,7 +1430,7 @@ autologin-user-timeout=0
 user-session=labwc
 autologin-session=labwc
 EOF
-seal_platform_files
+platform_path_written /etc/lightdm/lightdm.conf.d/50-v-link-lite.conf
 
 install -d -o "$TARGET_USER" -g "$TARGET_GROUP" \
     "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd/user" \
@@ -1372,8 +1485,11 @@ done
 rm -f -- "$MARKER"
 rm -rf -- "$TRANSACTION_DIR"
 EOF
+platform_path_written "$TARGET_HOME/.local/libexec/v-link-recover-update"
 chown "$TARGET_USER:$TARGET_GROUP" "$TARGET_HOME/.local/libexec/v-link-recover-update"
+platform_path_written "$TARGET_HOME/.local/libexec/v-link-recover-update"
 chmod 0755 "$TARGET_HOME/.local/libexec/v-link-recover-update"
+platform_path_written "$TARGET_HOME/.local/libexec/v-link-recover-update"
 
 RUNTIME_ARGS=""
 if [[ "$CONFIGURE_HARDWARE" != true ]]; then
@@ -1406,12 +1522,14 @@ Environment=VLINK_MANAGED_CAN=1
 $LIN_ENVIRONMENT
 
 EOF
+platform_path_written "$USER_CONFIG_DIR/systemd/user/v-link.service"
 
 # The graphical boot gate is the only automatic starter of V-Link. Remove a
 # legacy user enable link if a previous installation created one.
 USER_SERVICE_LINK="$USER_CONFIG_DIR/systemd/user/default.target.wants/v-link.service"
 if [[ -L "$USER_SERVICE_LINK" ]]; then
     rm -f -- "$USER_SERVICE_LINK"
+    platform_path_written "$USER_SERVICE_LINK"
 fi
 
 [[ ! -L "$USER_CONFIG_DIR/v-link-lite" ]] || die "unsafe Lite settings directory symlink"
@@ -1419,7 +1537,9 @@ install -d -o "$TARGET_USER" -g "$TARGET_GROUP" -m 0700 "$USER_CONFIG_DIR/v-link
 runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$USER_CONFIG_DIR" python3 -c \
     'import sys; sys.path.insert(0, "/usr/local/bin"); from v_link_lite_support import save_settings, DEFAULT_SETTINGS; save_settings(sys.argv[1], DEFAULT_SETTINGS, create_only=True)' \
     "$TARGET_HOME"
+platform_path_written "$USER_CONFIG_DIR/v-link-lite/settings.conf"
 runuser -u "$TARGET_USER" -- env XDG_CONFIG_HOME="$USER_CONFIG_DIR" /usr/local/bin/v-link-lite-cursor sync-config
+platform_path_written "$USER_CONFIG_DIR/labwc/rc.xml"
 
 cat >"$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service" <<'EOF'
 [Unit]
@@ -1431,6 +1551,7 @@ ExecStart=/usr/bin/swayidle -C /dev/null -w timeout 5 "/usr/local/bin/v-link-lit
 Restart=on-failure
 RestartSec=2
 EOF
+platform_path_written "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
 
 cat >"$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service" <<'EOF'
 [Unit]
@@ -1440,6 +1561,7 @@ Description=V-Link Lite Setup window
 Type=exec
 ExecStart=/usr/bin/foot --fullscreen --font=monospace:size=16 "--title=V-Link Lite Setup" --app-id=v-link-lite-setup /usr/local/bin/v-link-lite-setup
 EOF
+platform_path_written "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
 
 cat >"$USER_CONFIG_DIR/labwc/autostart" <<'EOF'
 # Make the Wayland session environment available to user services.
@@ -1484,14 +1606,25 @@ if /usr/local/libexec/v-link-lite-boot; then
     systemctl --user start v-link.service &
 fi
 EOF
+platform_path_written "$USER_CONFIG_DIR/labwc/autostart"
 
 chown -R "$TARGET_USER:$TARGET_GROUP" "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd"
+platform_paths_written \
+    "$USER_CONFIG_DIR/systemd/user/v-link.service" \
+    "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service" \
+    "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service" \
+    "$USER_CONFIG_DIR/labwc/rc.xml" \
+    "$USER_CONFIG_DIR/labwc/autostart"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link.service"
+platform_path_written "$USER_CONFIG_DIR/systemd/user/v-link.service"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
+platform_path_written "$USER_CONFIG_DIR/systemd/user/v-link-lite-cursor-idle.service"
 chmod 0644 "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
+platform_path_written "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
 chmod 0644 "$USER_CONFIG_DIR/labwc/rc.xml"
+platform_path_written "$USER_CONFIG_DIR/labwc/rc.xml"
 chmod 0755 "$USER_CONFIG_DIR/labwc/autostart"
-seal_platform_files
+platform_path_written "$USER_CONFIG_DIR/labwc/autostart"
 
 # The settings screen exposes only these two privileged power operations.
 SUDOERS_TEMP="$(mktemp /tmp/v-link-sudoers.XXXXXX)"
@@ -1508,7 +1641,7 @@ visudo -cf "$SUDOERS_TEMP" >/dev/null
 install -o root -g root -m 0440 "$SUDOERS_TEMP" /etc/sudoers.d/v-link-lite
 rm -f -- "$SUDOERS_TEMP"
 SUDOERS_TEMP=""
-seal_platform_files
+platform_path_written /etc/sudoers.d/v-link-lite
 
 if [[ "$CONFIGURE_HARDWARE" == true ]]; then
     log "Configuring the V-Link HAT, CAN, UART and GPIO"
@@ -1521,6 +1654,7 @@ if [[ "$CONFIGURE_HARDWARE" == true ]]; then
         [[ -s "$APP_DIR/resources/dtoverlays/$overlay" ]] || \
             die "application package is missing hardware overlay $overlay"
         install -m 0644 "$APP_DIR/resources/dtoverlays/$overlay" "$OVERLAY_DIR/$overlay"
+        platform_path_written "$OVERLAY_DIR/$overlay"
     done
 
     CONFIG_BEGIN_COUNT="$(grep -cFx "$CONFIG_BEGIN" "$BOOT_CONFIG" || true)"
@@ -1570,6 +1704,7 @@ EOF
     chmod --reference="$BOOT_CONFIG" "$BOOT_TEMP"
     mv -f "$BOOT_TEMP" "$BOOT_CONFIG"
     BOOT_TEMP=""
+    platform_path_written "$BOOT_CONFIG"
 
     CMDLINE_FILE=/boot/firmware/cmdline.txt
     [[ -f "$CMDLINE_FILE" ]] || die "missing $CMDLINE_FILE"
@@ -1601,14 +1736,17 @@ EOF
     chmod --reference="$CMDLINE_FILE" "$CMDLINE_TEMP"
     mv -f "$CMDLINE_TEMP" "$CMDLINE_FILE"
     CMDLINE_TEMP=""
+    platform_path_written "$CMDLINE_FILE"
     for serial_unit in "${SERIAL_GETTY_UNITS[@]}"; do
         systemctl mask "serial-getty@$serial_unit.service" >/dev/null 2>&1 || true
+        platform_path_written "/etc/systemd/system/serial-getty@$serial_unit.service"
     done
 
     cat >/etc/modules-load.d/v-link.conf <<'EOF'
 uinput
 i2c-dev
 EOF
+    platform_path_written /etc/modules-load.d/v-link.conf
 
     cat >/etc/udev/rules.d/42-v-link.rules <<'EOF'
 KERNEL=="ttyS0", MODE="0660", GROUP="plugdev"
@@ -1617,6 +1755,7 @@ KERNEL=="ttyAMA2", MODE="0660", GROUP="plugdev"
 KERNEL=="ttyAMA3", MODE="0660", GROUP="plugdev"
 KERNEL=="uinput", MODE="0660", GROUP="plugdev"
 EOF
+    platform_path_written /etc/udev/rules.d/42-v-link.rules
 
 cat >/usr/local/sbin/v-link-can-up <<'EOF'
 #!/usr/bin/env bash
@@ -1668,7 +1807,9 @@ ip link set dev vlink-spi2 name can2
 ip link set dev can1 down
 ip link set dev can2 down
 EOF
+    platform_path_written /usr/local/sbin/v-link-can-up
     chmod 0755 /usr/local/sbin/v-link-can-up
+    platform_path_written /usr/local/sbin/v-link-can-up
 
     cat >/usr/local/sbin/v-link-can-set <<'EOF'
 #!/usr/bin/env bash
@@ -1695,7 +1836,9 @@ ip link set dev can2 down 2>/dev/null || true
 ip link set dev can2 type can bitrate "$4" restart-ms 100
 ip link set dev can2 up
 EOF
+    platform_path_written /usr/local/sbin/v-link-can-set
     chmod 0755 /usr/local/sbin/v-link-can-set
+    platform_path_written /usr/local/sbin/v-link-can-set
 
     cat >/etc/systemd/system/v-link-can.service <<'EOF'
 [Unit]
@@ -1712,22 +1855,30 @@ RestartSec=2
 [Install]
 WantedBy=multi-user.target
 EOF
+    platform_path_written /etc/systemd/system/v-link-can.service
     systemctl enable v-link-can.service
+    platform_path_written /etc/systemd/system/multi-user.target.wants/v-link-can.service
     udevadm control --reload-rules
 
     if [[ "$RPI_GENERATION" -eq 3 ]]; then
+        track_hciuart_state
         systemctl disable --now hciuart.service 2>/dev/null || true
         systemctl mask hciuart.service >/dev/null 2>&1 || true
+        hciuart_state_written
     fi
 else
     log "Removing any previously managed V-Link HAT configuration"
     systemctl disable --now v-link-can.service >/dev/null 2>&1 || true
-    rm -f -- \
+    for managed_path in \
         /etc/systemd/system/v-link-can.service \
         /usr/local/sbin/v-link-can-up \
         /usr/local/sbin/v-link-can-set \
         /etc/modules-load.d/v-link.conf \
-        /etc/udev/rules.d/42-v-link.rules
+        /etc/udev/rules.d/42-v-link.rules \
+        /etc/systemd/system/multi-user.target.wants/v-link-can.service; do
+        rm -f -- "$managed_path"
+        platform_path_written "$managed_path"
+    done
 
     BOOT_CONFIG=/boot/firmware/config.txt
     if [[ -f "$BOOT_CONFIG" ]]; then
@@ -1743,29 +1894,33 @@ else
             chmod --reference="$BOOT_CONFIG" "$BOOT_TEMP"
             mv -f "$BOOT_TEMP" "$BOOT_CONFIG"
             BOOT_TEMP=""
+            platform_path_written "$BOOT_CONFIG"
         fi
     fi
     for overlay in v-link.dtbo mcp2515-can1.dtbo mcp2515-can2.dtbo; do
         rm -f -- "/boot/firmware/overlays/$overlay"
+        platform_path_written "/boot/firmware/overlays/$overlay"
     done
 
     case "$RPI_GENERATION" in
         3)
             SERIAL_GETTY_UNITS=(serial0 ttyAMA0 ttyS0)
+            track_hciuart_state
             systemctl unmask hciuart.service >/dev/null 2>&1 || true
             systemctl enable hciuart.service >/dev/null 2>&1 || true
+            hciuart_state_written
             ;;
         4) SERIAL_GETTY_UNITS=(serial0 ttyAMA3 ttyS0) ;;
         5) SERIAL_GETTY_UNITS=(serial0 ttyAMA0 ttyAMA2) ;;
     esac
     for serial_unit in "${SERIAL_GETTY_UNITS[@]}"; do
         systemctl unmask "serial-getty@$serial_unit.service" >/dev/null 2>&1 || true
+        platform_path_written "/etc/systemd/system/serial-getty@$serial_unit.service"
     done
     udevadm control --reload-rules
 fi
 
 log "Keeping the Lite boot path independent of splash initramfs hooks"
-seal_platform_files
 BOOT_CONFIG=/boot/firmware/config.txt
 CMDLINE_FILE=/boot/firmware/cmdline.txt
 [[ -f "$BOOT_CONFIG" && -f "$CMDLINE_FILE" ]] || \
@@ -1787,6 +1942,7 @@ printf '\n%s\n[all]\ndisable_splash=1\n%s\n' \
 chmod --reference="$BOOT_CONFIG" "$BOOT_TEMP"
 mv -f -- "$BOOT_TEMP" "$BOOT_CONFIG"
 BOOT_TEMP=""
+platform_path_written "$BOOT_CONFIG"
 
 if ! awk 'NF { lines++ } END { exit(lines == 1 ? 0 : 1) }' "$CMDLINE_FILE"; then
     die "refusing to edit an invalid multi-line kernel command line"
@@ -1808,13 +1964,13 @@ printf '%s\n' "${SAFE_CMDLINE_OPTIONS[*]}" >"$CMDLINE_TEMP"
 chmod --reference="$CMDLINE_FILE" "$CMDLINE_TEMP"
 mv -f -- "$CMDLINE_TEMP" "$CMDLINE_FILE"
 CMDLINE_TEMP=""
+platform_path_written "$CMDLINE_FILE"
 
 systemctl daemon-reload
 
 show_phase 7 7 "Final checks"
 
 log "Running pre-reboot health checks"
-seal_platform_files
 [[ -x "$APP_DIR/Check-Lite.sh" ]] || die "installed application is missing executable Check-Lite.sh"
 if ! "$APP_DIR/Check-Lite.sh" --user "$TARGET_USER" --pre-reboot; then
     die "installation checks failed; review the failures above before rebooting"

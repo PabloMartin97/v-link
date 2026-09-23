@@ -209,7 +209,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable v-link-firstboot-wait.service >/dev/null
-log "Interactive V-Link installer staged; waiting for a UID 1000 user"
+log "Interactive V-Link installer staged; waiting for an eligible local user"
 if [[ "$RUNNING_FROM_CMDLINE" == true ]]; then
     log "Rebooting into the normal system to create or detect the local user"
 fi

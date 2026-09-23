@@ -253,27 +253,153 @@ def test_overlay_has_normal_handoff_and_bounded_fail_open():
     assert not instance.window.destroyed
 
 
-def test_platform_rollback_restores_only_unchanged_installer_output():
+def installer_transaction_functions():
     source = INSTALL.read_text()
     functions = source.split("platform_sha256() {", 1)[1].split("\nusage() {", 1)[0]
-    functions = "platform_sha256() {" + functions
+    return "platform_sha256() {" + functions
+
+
+def test_platform_rollback_restores_each_write_without_a_later_checkpoint():
+    functions = installer_transaction_functions()
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        first = root / "first.conf"
+        second = root / "second.conf"
+        backup = root / "backup"
+        backup.mkdir()
+        first.write_text("original A")
+        second.write_text("original B")
+        shutil.copy2(first, backup / "0")
+        shutil.copy2(second, backup / "1")
+        script = ("set -Eeuo pipefail\n" + functions + "\n"
+                  'PLATFORM_PATHS=("$1" "$2")\nPLATFORM_BACKUP="$3"\n'
+                  'platform_fingerprint "$1" >"$3/0.original"\n'
+                  'platform_fingerprint "$2" >"$3/1.original"\n'
+                  'printf "installer A" >"$1"\nplatform_path_written "$1"\n'
+                  'printf "installer B" >"$2"\nplatform_path_written "$2"\n'
+                  'rollback_platform_files\n')
+        result = subprocess.run(
+            ["bash", "-c", script, "bash", str(first), str(second), str(backup)],
+            text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        assert first.read_text() == "original A"
+        assert second.read_text() == "original B"
+        assert "Managed Lite platform files restored" in result.stderr
+
+
+def test_platform_rollback_preserves_external_change_after_installer_write():
+    functions = installer_transaction_functions()
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         target = root / "managed.conf"
         backup = root / "backup"
         backup.mkdir()
-        for edited_by_user in (False, True):
-            target.write_text("original")
-            shutil.copy2(target, backup / "0")
-            script = ("set -Eeuo pipefail\n" + functions + "\n"
-                      'PLATFORM_PATHS=("$1")\nPLATFORM_BACKUP="$2"\n'
-                      'PLATFORM_SEALED=true\n'
-                      'platform_fingerprint "$1" >"$2/0.original"\n'
-                      'printf installer >"$1"\nseal_platform_files\n')
-            if edited_by_user:
-                script += 'printf user >"$1"\n'
-            script += "rollback_platform_files\n"
-            result = subprocess.run(["bash", "-c", script, "bash", str(target), str(backup)],
-                                    text=True, capture_output=True)
-            assert result.returncode == 0, result.stderr
-            assert target.read_text() == ("user" if edited_by_user else "original")
+        target.write_text("original")
+        shutil.copy2(target, backup / "0")
+        script = ("set -Eeuo pipefail\n" + functions + "\n"
+                  'PLATFORM_PATHS=("$1")\nPLATFORM_BACKUP="$2"\n'
+                  'platform_fingerprint "$1" >"$2/0.original"\n'
+                  'printf installer >"$1"\nplatform_path_written "$1"\n'
+                  'printf external >"$1"\nrollback_platform_files\n')
+        result = subprocess.run(
+            ["bash", "-c", script, "bash", str(target), str(backup)],
+            text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        assert target.read_text() == "external"
+        assert "changed after installation" in result.stderr
+        assert "rollback was partial" in result.stderr
+
+
+def write_mock_systemctl(path):
+    path.write_text(r'''#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS='|' read -r load enabled active <"$MOCK_SYSTEMCTL_STATE"
+command="$1"
+shift
+case "$command" in
+    show) printf '%s\n' "$load"; exit 0 ;;
+    is-enabled) printf '%s\n' "$enabled"; exit 0 ;;
+    is-active) printf '%s\n' "$active"; exit 0 ;;
+esac
+[[ "$load" != not-found ]] || exit 1
+case "$command" in
+    unmask) [[ "$enabled" != masked && "$enabled" != masked-runtime ]] || enabled=disabled ;;
+    disable)
+        enabled=disabled
+        [[ " $* " != *" --now "* ]] || active=inactive
+        ;;
+    enable)
+        if [[ " $* " == *" --runtime "* ]]; then enabled=enabled-runtime; else enabled=enabled; fi
+        ;;
+    mask)
+        if [[ " $* " == *" --runtime "* ]]; then enabled=masked-runtime; else enabled=masked; fi
+        ;;
+    start) active=active ;;
+    stop) active=inactive ;;
+    *) exit 2 ;;
+esac
+printf '%s|%s|%s\n' "$load" "$enabled" "$active" >"$MOCK_SYSTEMCTL_STATE"
+''')
+    path.chmod(0o755)
+
+
+def run_hciuart_rollback(root, original, installer_commands, after_mark=""):
+    functions = installer_transaction_functions()
+    state = root / "systemctl.state"
+    state.write_text(original + "\n")
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    write_mock_systemctl(bin_dir / "systemctl")
+    script = ("set -Eeuo pipefail\n" + functions + "\n"
+              'HCIUART_TRACKED=false\nHCIUART_ORIGINAL=""\nHCIUART_EXPECTED=""\n'
+              'track_hciuart_state\n' + installer_commands + '\n'
+              'hciuart_state_written\n' + after_mark + '\n'
+              'rollback_hciuart_state\nhciuart_snapshot\n')
+    return subprocess.run(
+        ["bash", "-c", script], text=True, capture_output=True,
+        env={**os.environ, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+             "MOCK_SYSTEMCTL_STATE": str(state)})
+
+
+def test_hciuart_rollback_restores_previous_enabled_and_active_state():
+    with tempfile.TemporaryDirectory() as directory:
+        result = run_hciuart_rollback(
+            Path(directory), "loaded|enabled|active",
+            "systemctl disable --now hciuart.service\nsystemctl mask hciuart.service")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "loaded|enabled|active"
+        assert "Previous hciuart state restored" in result.stderr
+
+
+def test_hciuart_rollback_restores_previous_masked_and_inactive_state():
+    with tempfile.TemporaryDirectory() as directory:
+        result = run_hciuart_rollback(
+            Path(directory), "loaded|masked|inactive",
+            "systemctl unmask hciuart.service\nsystemctl enable hciuart.service")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "loaded|masked|inactive"
+        assert "Previous hciuart state restored" in result.stderr
+
+
+def test_hciuart_transaction_tolerates_missing_service():
+    with tempfile.TemporaryDirectory() as directory:
+        result = run_hciuart_rollback(
+            Path(directory), "not-found|-|-",
+            "systemctl disable --now hciuart.service 2>/dev/null || true\n"
+            "systemctl mask hciuart.service 2>/dev/null || true")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "not-found|-|-"
+        assert "Previous hciuart state restored" not in result.stderr
+
+
+def test_hciuart_rollback_preserves_concurrent_state_change():
+    with tempfile.TemporaryDirectory() as directory:
+        result = run_hciuart_rollback(
+            Path(directory), "loaded|disabled|inactive",
+            "systemctl disable --now hciuart.service\nsystemctl mask hciuart.service",
+            "systemctl unmask hciuart.service\nsystemctl enable hciuart.service\n"
+            "systemctl start hciuart.service")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "loaded|enabled|active"
+        assert "changed after the installer update" in result.stderr
+        assert "Previous hciuart state restored" not in result.stderr
