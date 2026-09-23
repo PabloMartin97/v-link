@@ -173,6 +173,8 @@ class SetupUI:
     def choose(self, heading, items, summary=None):
         """One curses session across all menus; no terminal teardown."""
         selected = min(self.menu_positions.get(heading, 0), len(items) - 1)
+        first = 0
+        visible = 1
         while True:
             if self.frame(heading):
                 height, width = self.size()
@@ -181,8 +183,12 @@ class SetupUI:
                     self.put(6 + row, 5, line)
                 start = 7 + len(summary_lines) if summary_lines else 6
                 visible = max(1, height - start - 3)
-                first = min(max(0, selected - visible // 2),
-                            max(0, len(items) - visible))
+                selected = min(max(0, selected), len(items) - 1)
+                first = min(max(0, first), max(0, len(items) - visible))
+                if selected < first:
+                    first = selected
+                elif selected >= first + visible:
+                    first = selected - visible + 1
                 for offset, (_, label) in enumerate(items[first:first + visible]):
                     index = first + offset
                     prefix = "> " if index == selected else "  "
@@ -203,9 +209,9 @@ class SetupUI:
             elif key == curses.KEY_END:
                 selected = len(items) - 1
             elif key == curses.KEY_PPAGE:
-                selected = max(0, selected - max(1, self.panel_height - 10))
+                selected = max(0, selected - visible)
             elif key == curses.KEY_NPAGE:
-                selected = min(len(items) - 1, selected + max(1, self.panel_height - 10))
+                selected = min(len(items) - 1, selected + visible)
             elif key in (10, 13, curses.KEY_ENTER, curses.KEY_RIGHT):
                 self.menu_positions[heading] = selected
                 return items[selected][0]
@@ -220,12 +226,20 @@ class SetupUI:
         lines = str(content).splitlines() or ["(no information)"]
         top = 0
         left = 0
+        visible = 1
+        max_top = 0
+        max_left = 0
         while True:
             if self.frame(heading, "Up/Down: scroll   PgUp/PgDn: page   Esc/Enter: back"):
                 height, width = self.size()
                 visible = max(1, height - 9)
+                content_width = max(1, width - 9)
+                max_top = max(0, len(lines) - visible)
+                max_left = max(0, max(map(len, lines)) - content_width)
+                top = min(max(0, top), max_top)
+                left = min(max(0, left), max_left)
                 for offset, line in enumerate(lines[top:top + visible]):
-                    self.put(6 + offset, 4, line[left:left + width - 9])
+                    self.put(6 + offset, 4, line[left:left + content_width])
                 self.put(height - 3, 4, f"Line {top + 1}/{len(lines)}")
             self.flush()
             key = self.screen.getch()
@@ -234,15 +248,15 @@ class SetupUI:
             if key == curses.KEY_UP:
                 top = max(0, top - 1)
             elif key == curses.KEY_DOWN:
-                top = min(max(0, len(lines) - 1), top + 1)
+                top = min(max_top, top + 1)
             elif key == curses.KEY_PPAGE:
-                top = max(0, top - 10)
+                top = max(0, top - visible)
             elif key == curses.KEY_NPAGE:
-                top = min(max(0, len(lines) - 1), top + 10)
+                top = min(max_top, top + visible)
             elif key == curses.KEY_LEFT:
                 left = max(0, left - 8)
             elif key == curses.KEY_RIGHT:
-                left += 8
+                left = min(max_left, left + 8)
 
     def message(self, message):
         wrapped = textwrap.wrap(str(message), width=max(30, self.panel_width - 12))
