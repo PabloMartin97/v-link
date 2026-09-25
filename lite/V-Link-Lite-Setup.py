@@ -25,6 +25,7 @@ import v_link_lite_display as lite_display
 
 TITLE = "V-Link Lite Setup"
 AUDIO_SAMPLE = "/usr/share/sounds/alsa/Front_Center.wav"
+TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"
 
 
 def is_socket(path):
@@ -320,6 +321,25 @@ class SetupUI:
             error = "" if result.returncode == 0 else f"nmtui exited with status {result.returncode}."
         except FileNotFoundError:
             error = "nmtui is unavailable."
+        except OSError as exc:
+            error = str(exc)
+        finally:
+            curses.reset_prog_mode()
+            self.screen.touchwin()
+        if error:
+            self.message(error)
+
+    def open_terminal(self):
+        curses.def_prog_mode()
+        curses.endwin()
+        try:
+            result = subprocess.run(
+                ["/bin/bash", "--noprofile", "--rcfile", TERMINAL_RC, "-i"],
+                env=self.env, check=False)
+            error = ("" if result.returncode == 0 else
+                     f"Terminal exited with status {result.returncode}.")
+        except FileNotFoundError:
+            error = "The Lite maintenance terminal is unavailable."
         except OSError as exc:
             error = str(exc)
         finally:
@@ -1139,6 +1159,7 @@ class SetupUI:
         items = [("network", "Network"), ("audio", "Audio"),
                  ("display", "Display / Input"), ("storage", "Storage / USB"),
                  ("vlink", "V-Link"), ("diagnostics", "Diagnostics"),
+                 ("terminal", "Terminal"),
                  ("continue", "Continue to V-Link / Exit Setup"),
                  ("reboot", "Reboot"), ("shutdown", "Shutdown")]
         while True:
@@ -1157,6 +1178,8 @@ class SetupUI:
                 self.vlink_menu()
             elif choice == "diagnostics":
                 self.diagnostics_menu()
+            elif choice == "terminal":
+                self.open_terminal()
             elif choice in ("reboot", "shutdown"):
                 result = self.power_action(choice)
                 if result is not None:

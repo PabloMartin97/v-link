@@ -304,6 +304,32 @@ def test_nmtui_failure_restores_persistent_screen():
     assert messages == ["nmtui is unavailable."]
 
 
+def test_terminal_runs_inside_foot_and_restores_persistent_screen():
+    ui, screen = make_ui([])
+    completed = SETUP.subprocess.CompletedProcess([], 0)
+    with patch.object(curses, "def_prog_mode") as save, \
+         patch.object(curses, "endwin") as suspend, \
+         patch.object(curses, "reset_prog_mode") as restore, \
+         patch.object(SETUP.subprocess, "run", return_value=completed) as run:
+        ui.open_terminal()
+    run.assert_called_once_with(
+        ["/bin/bash", "--noprofile", "--rcfile", SETUP.TERMINAL_RC, "-i"],
+        env=ui.env, check=False)
+    save.assert_called_once()
+    suspend.assert_called_once()
+    restore.assert_called_once()
+    assert screen.frames == []
+
+
+def test_main_menu_opens_terminal_without_exiting_setup():
+    ui, _ = make_ui([])
+    choices = iter(("terminal", "continue"))
+    ui.choose = lambda *_args, **_kwargs: next(choices)
+    with patch.object(ui, "open_terminal") as terminal:
+        assert ui.main_menu() == 0
+    terminal.assert_called_once()
+
+
 def test_console_only_reads_running_service_and_never_controls_it():
     ui, _ = make_ui([ord("q")])
     ui.service_state = lambda *_args, **_kwargs: "active"

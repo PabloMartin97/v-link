@@ -15,6 +15,7 @@ FIRSTBOOT = ROOT / "lite/V-Link-FirstBoot.sh"
 INSTALL = ROOT / "lite/Install-Lite.sh"
 SESSION = ROOT / "lite/V-Link-Lite-Session.sh"
 CHECK = ROOT / "lite/Check-Lite.sh"
+TERMINAL_RC = ROOT / "lite/V-Link-Lite-Terminal.bashrc"
 
 
 def prepare(boot, cmdline, firstrun=None):
@@ -347,6 +348,21 @@ def test_lite_session_asset_and_generated_desktop_are_valid():
     assert "autologin-session=v-link-lite" in install
     assert "WLR_SCENE_DISABLE_VISIBILITY=1" in check
     assert "running labwc has the wlroots visibility workaround" in check
+
+
+def test_lite_terminal_help_is_installed_and_managed():
+    install = INSTALL.read_text()
+    check = CHECK.read_text()
+    terminal = TERMINAL_RC.read_text()
+
+    assert "lite/V-Link-Lite-Terminal.bashrc" in install
+    assert "/usr/local/share/v-link-lite/terminal.bashrc" in install
+    assert "platform_path_written /usr/local/share/v-link-lite/terminal.bashrc" in install
+    assert "Lite maintenance terminal help is installed root:root 0644" in check
+    assert 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' in check
+    assert "help()" in terminal
+    assert "exit          Return to V-Link Lite Setup" in terminal
+    assert 'builtin help "$@"' in terminal
 
 
 def test_lite_session_is_installed_before_lightdm_selects_it():

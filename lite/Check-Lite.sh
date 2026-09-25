@@ -189,6 +189,17 @@ if [[ -f /usr/local/share/v-link-lite/handoff.js ]] && \
 else
     fail "Lite splash handoff script is missing or unsafe"
 fi
+if [[ -f /usr/local/share/v-link-lite/terminal.bashrc && \
+      ! -L /usr/local/share/v-link-lite/terminal.bashrc ]] && \
+   [[ "$(stat -c '%u:%g:%a' /usr/local/share/v-link-lite/terminal.bashrc)" == '0:0:644' ]] && \
+   grep -qF '_v_link_lite_help()' /usr/local/share/v-link-lite/terminal.bashrc && \
+   grep -qF 'exit          Return to V-Link Lite Setup' /usr/local/share/v-link-lite/terminal.bashrc && \
+   grep -qF 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' \
+       /usr/local/bin/v-link-lite-setup; then
+    pass "Lite maintenance terminal help is installed root:root 0644"
+else
+    fail "Lite maintenance terminal help is missing or unsafe"
+fi
 if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
    grep -Fq 's|S)' /usr/local/libexec/v-link-lite-boot && \
    grep -Fq '/usr/local/bin/v-link-lite-setup --startup' /usr/local/libexec/v-link-lite-boot && \

@@ -135,7 +135,8 @@ begin_platform_files() {
         /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay
         /usr/local/libexec/v-link-lite-prepare-splash /usr/local/libexec/v-link-lite-session
         /usr/local/libexec/v-link-lite-render-splash
-        /usr/local/share/v-link-lite/handoff.js /usr/local/share/v-link-lite/logo.png
+        /usr/local/share/v-link-lite/handoff.js
+        /usr/local/share/v-link-lite/terminal.bashrc /usr/local/share/v-link-lite/logo.png
         /usr/local/share/v-link-lite/splash.png
         /etc/udev/rules.d/41-v-link-carplay.rules
         /etc/udev/rules.d/42-v-link.rules /etc/modules-load.d/v-link.conf
@@ -820,7 +821,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Session.sh lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Session.sh lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Terminal.bashrc lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
 
@@ -1450,6 +1451,9 @@ install -d -o root -g root -m 0755 /usr/local/share/v-link-lite
 install -o root -g root -m 0644 "$SOURCE_DIR/lite/V-Link-Lite-Handoff.js" \
     /usr/local/share/v-link-lite/handoff.js
 platform_path_written /usr/local/share/v-link-lite/handoff.js
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/V-Link-Lite-Terminal.bashrc" \
+    /usr/local/share/v-link-lite/terminal.bashrc
+platform_path_written /usr/local/share/v-link-lite/terminal.bashrc
 SPLASH_WORK="$(mktemp -d /tmp/v-link-splash.XXXXXX)"
 python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
     --logos-dir "$SOURCE_DIR/frontend/public/assets/svg/logos" \
