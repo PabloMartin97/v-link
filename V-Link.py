@@ -87,6 +87,73 @@ from backend.shared.shared_state import shared_state
 rpiModel = ''
 rpiProtocol = ''
 
+LITE_OVERLAY = Path('/usr/local/libexec/v-link-lite-overlay')
+LITE_OVERLAY_MARKER = 'v-link-lite-overlay-visible'
+LITE_OVERLAY_TIMEOUT = 5.0
+PROC_ROOT = Path('/proc')
+
+
+def _lite_overlay_pid(marker):
+    """Return the PID only when the mapped marker belongs to our overlay."""
+    try:
+        if marker.is_symlink():
+            return None
+        pid = int(marker.read_text(encoding='ascii').strip())
+        if pid <= 0:
+            return None
+        os.kill(pid, 0)
+        raw_cmdline = (PROC_ROOT / str(pid) / 'cmdline').read_bytes()
+    except (OSError, ValueError):
+        return None
+
+    arguments = [os.fsdecode(value) for value in raw_cmdline.split(b'\0') if value]
+    expected = os.path.abspath(LITE_OVERLAY)
+    direct = bool(arguments) and os.path.abspath(arguments[0]) == expected
+    interpreted = (len(arguments) > 1
+                   and Path(arguments[0]).name.startswith('python')
+                   and os.path.abspath(arguments[1]) == expected)
+    return pid if direct or interpreted else None
+
+
+def ensure_lite_restart_overlay():
+    """Cover Chromium before a Lite restart, without making restart depend on it."""
+    runtime_dir = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}'))
+    marker = runtime_dir / LITE_OVERLAY_MARKER
+    if _lite_overlay_pid(marker) is not None:
+        return True
+
+    if marker.exists() or marker.is_symlink():
+        try:
+            marker.unlink()
+        except OSError as error:
+            logger.warning('[V-Link Lite] Could not remove stale overlay marker: %s', error)
+
+    if not LITE_OVERLAY.is_file() or not os.access(LITE_OVERLAY, os.X_OK):
+        logger.warning('[V-Link Lite] Restart overlay is unavailable; continuing restart')
+        return False
+
+    try:
+        subprocess.Popen(
+            [str(LITE_OVERLAY)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+    except OSError as error:
+        logger.warning('[V-Link Lite] Could not start restart overlay: %s', error)
+        return False
+
+    deadline = time.monotonic() + LITE_OVERLAY_TIMEOUT
+    while time.monotonic() < deadline:
+        if _lite_overlay_pid(marker) is not None:
+            return True
+        time.sleep(0.1)
+
+    logger.warning('[V-Link Lite] Restart overlay did not map in time; continuing restart')
+    return False
+
 class VLINK:
     def __init__(self):
         self.exit_event = shared_state.exit_event
@@ -336,6 +403,9 @@ class VLINK:
         if shared_state.restart_event.is_set():
             logger.info('[V-Link] Restarting App')
             shared_state.restart_event.clear()
+
+            if shared_state.liteMode:
+                ensure_lite_restart_overlay()
 
             # Release Chromium/WebUSB first, then hardware, then the server.
             # Re-exec the application so no RTI, ignition, event or sensor state

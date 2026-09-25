@@ -17,6 +17,12 @@ readonly PYTHON_BUILD_PIP="24.3.1"
 readonly PYTHON_BUILD_SETUPTOOLS="75.6.0"
 readonly PYTHON_BUILD_WHEEL="0.45.1"
 readonly SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+readonly LITE_SESSION_LAUNCHER="/usr/local/libexec/v-link-lite-session"
+readonly LITE_SESSION_DESKTOP="/usr/share/wayland-sessions/v-link-lite.desktop"
+readonly LIGHTDM_LITE_CONFIG="/etc/lightdm/lightdm.conf.d/50-v-link-lite.conf"
+readonly EXPERIMENTAL_LABWC_DESKTOP="/usr/share/wayland-sessions/labwc.desktop"
+readonly EXPERIMENTAL_VISIBILITY_WRAPPER="/usr/local/bin/v-link-labwc-visibility-test"
+readonly EXPERIMENTAL_VISIBILITY_WRAPPER_GOOD="/usr/local/bin/v-link-labwc-visibility-test.good"
 
 ASSUME_YES=false
 CONFIGURE_HARDWARE=true
@@ -127,7 +133,8 @@ begin_platform_files() {
         /usr/local/bin/v_link_lite_display.py
         /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor
         /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay
-        /usr/local/libexec/v-link-lite-prepare-splash
+        /usr/local/libexec/v-link-lite-prepare-splash /usr/local/libexec/v-link-lite-session
+        /usr/local/libexec/v-link-lite-render-splash
         /usr/local/share/v-link-lite/handoff.js /usr/local/share/v-link-lite/logo.png
         /usr/local/share/v-link-lite/splash.png
         /etc/udev/rules.d/41-v-link-carplay.rules
@@ -143,6 +150,10 @@ begin_platform_files() {
         /etc/systemd/system/serial-getty@ttyS0.service
         /etc/chromium/policies/managed/v-link-webusb.json
         /etc/lightdm/lightdm.conf.d/50-v-link-lite.conf
+        /usr/share/wayland-sessions/v-link-lite.desktop
+        /usr/share/wayland-sessions/labwc.desktop
+        /usr/local/bin/v-link-labwc-visibility-test
+        /usr/local/bin/v-link-labwc-visibility-test.good
         /etc/sudoers.d/v-link-lite /etc/systemd/system/v-link-can.service
         /usr/local/sbin/v-link-can-up /usr/local/sbin/v-link-can-set
         /boot/firmware/config.txt /boot/firmware/cmdline.txt
@@ -155,6 +166,7 @@ begin_platform_files() {
         "$USER_CONFIG_DIR/systemd/user/v-link-lite-setup.service"
         "$USER_CONFIG_DIR/systemd/user/default.target.wants/v-link.service"
         "$USER_CONFIG_DIR/labwc/rc.xml" "$USER_CONFIG_DIR/labwc/autostart"
+        "$USER_CONFIG_DIR/labwc/environment.d/90-v-link-direct-scanout-test.env"
         "$USER_CONFIG_DIR/v-link-lite/settings.conf"
     )
     for index in "${!PLATFORM_PATHS[@]}"; do
@@ -227,6 +239,63 @@ rollback_platform_files() {
     else
         printf '[V-Link Lite] Managed Lite platform files restored.\n' >&2
     fi
+}
+
+validate_lite_session_launcher() {
+    local path="$1"
+    [[ -f "$path" && ! -L "$path" && -x "$path" ]] && \
+        bash -n "$path" >/dev/null 2>&1 && \
+        grep -qFx 'export WLR_SCENE_DISABLE_VISIBILITY=1' "$path" && \
+        grep -qFx 'exec /usr/bin/labwc' "$path"
+}
+
+validate_lite_session_desktop() {
+    local path="$1"
+    [[ -f "$path" && ! -L "$path" ]] && \
+        grep -qFx '[Desktop Entry]' "$path" && \
+        grep -qFx 'Name=V-Link Lite' "$path" && \
+        grep -qFx 'Exec=/usr/local/libexec/v-link-lite-session' "$path" && \
+        grep -qFx 'Type=Application' "$path" && \
+        grep -qFx 'DesktopNames=labwc;wlroots' "$path"
+}
+
+validate_lite_lightdm_config() {
+    local path="$1" user="$2"
+    [[ -f "$path" && ! -L "$path" ]] && \
+        grep -qFx "autologin-user=$user" "$path" && \
+        grep -qFx 'user-session=v-link-lite' "$path" && \
+        grep -qFx 'autologin-session=v-link-lite' "$path"
+}
+
+file_matches_exact_content() {
+    local path="$1" expected="$2"
+    [[ -f "$path" && ! -L "$path" ]] && cmp -s -- "$path" "$expected"
+}
+
+restore_known_experimental_labwc_desktop() {
+    local path="$1" staging owner mode
+    [[ -f "$path" && ! -L "$path" ]] || return 0
+    grep -qFx 'Exec=/usr/local/bin/v-link-labwc-visibility-test' "$path" || return 0
+
+    staging="$(mktemp "$(dirname -- "$path")/.labwc.desktop.v-link-new.XXXXXX")"
+    sed 's|^Exec=/usr/local/bin/v-link-labwc-visibility-test$|Exec=labwc|' \
+        "$path" >"$staging"
+    owner="$(stat -c '%u:%g' "$path" 2>/dev/null)" || owner="$(stat -f '%u:%g' "$path")"
+    mode="$(stat -c '%a' "$path" 2>/dev/null)" || mode="$(stat -f '%Lp' "$path")"
+    chown "$owner" "$staging"
+    chmod "$mode" "$staging"
+    mv -f -- "$staging" "$path"
+    platform_path_written "$path"
+}
+
+remove_known_experimental_file() {
+    local path="$1" expected="$2"
+    if file_matches_exact_content "$path" "$expected"; then
+        rm -f -- "$path"
+        platform_path_written "$path"
+        return 0
+    fi
+    [[ ! -e "$path" && ! -L "$path" ]]
 }
 
 hciuart_snapshot() {
@@ -751,9 +820,12 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Session.sh lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
+
+    validate_lite_session_launcher "$source/lite/V-Link-Lite-Session.sh" || \
+        die "source is incomplete: invalid V-Link Lite Wayland session launcher"
 
     if [[ ! -f "$source/frontend/dist/index.html" && ! -f "$source/frontend/package.json" ]]; then
         die "source is incomplete: frontend/dist/index.html or frontend/package.json is required"
@@ -1358,6 +1430,8 @@ for helper_spec in \
     'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
     'lite/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \
     'lite/V-Link-Lite-Prepare-Splash.py:/usr/local/libexec/v-link-lite-prepare-splash' \
+    'lite/Render-Lite-Splash.py:/usr/local/libexec/v-link-lite-render-splash' \
+    'lite/V-Link-Lite-Session.sh:/usr/local/libexec/v-link-lite-session' \
     'lite/V-Link-Lite-Setup.py:/usr/local/bin/v-link-lite-setup' \
     'lite/V-Link-Lite-Cursor.py:/usr/local/bin/v-link-lite-cursor'; do
     HELPER_SOURCE="${helper_spec%%:*}"
@@ -1368,6 +1442,8 @@ for helper_spec in \
     HELPER_STAGING=""
     platform_path_written "$HELPER_DESTINATION"
 done
+validate_lite_session_launcher "$LITE_SESSION_LAUNCHER" || \
+    die "installed V-Link Lite Wayland session launcher is invalid"
 
 log "Rendering V-Link branding for the graphical splash"
 install -d -o root -g root -m 0755 /usr/local/share/v-link-lite
@@ -1420,17 +1496,79 @@ chmod 0644 /etc/chromium/policies/managed/v-link-webusb.json
 platform_path_written /etc/chromium/policies/managed/v-link-webusb.json
 udevadm control --reload-rules
 
+log "Installing the V-Link Lite Wayland session"
+install -d -o root -g root -m 0755 /usr/share/wayland-sessions
+HELPER_STAGING="$(mktemp "$LITE_SESSION_DESKTOP.new.XXXXXX")"
+cat >"$HELPER_STAGING" <<'EOF'
+[Desktop Entry]
+Name=V-Link Lite
+Comment=V-Link Lite Wayland session
+Exec=/usr/local/libexec/v-link-lite-session
+Type=Application
+DesktopNames=labwc;wlroots
+EOF
+chown root:root "$HELPER_STAGING"
+chmod 0644 "$HELPER_STAGING"
+validate_lite_session_desktop "$HELPER_STAGING" || \
+    die "generated V-Link Lite Wayland session is invalid"
+mv -f -- "$HELPER_STAGING" "$LITE_SESSION_DESKTOP"
+HELPER_STAGING=""
+platform_path_written "$LITE_SESSION_DESKTOP"
+
 log "Configuring graphical autologin"
 install -d /etc/lightdm/lightdm.conf.d
-cat >/etc/lightdm/lightdm.conf.d/50-v-link-lite.conf <<EOF
+HELPER_STAGING="$(mktemp "$LIGHTDM_LITE_CONFIG.new.XXXXXX")"
+cat >"$HELPER_STAGING" <<EOF
 [Seat:*]
 greeter-session=lightdm-gtk-greeter
 autologin-user=$TARGET_USER
 autologin-user-timeout=0
-user-session=labwc
-autologin-session=labwc
+user-session=v-link-lite
+autologin-session=v-link-lite
 EOF
-platform_path_written /etc/lightdm/lightdm.conf.d/50-v-link-lite.conf
+chown root:root "$HELPER_STAGING"
+chmod 0644 "$HELPER_STAGING"
+validate_lite_lightdm_config "$HELPER_STAGING" "$TARGET_USER" || \
+    die "generated V-Link Lite LightDM configuration is invalid"
+mv -f -- "$HELPER_STAGING" "$LIGHTDM_LITE_CONFIG"
+HELPER_STAGING=""
+platform_path_written "$LIGHTDM_LITE_CONFIG"
+
+log "Migrating recognized Lite display experiments"
+restore_known_experimental_labwc_desktop "$EXPERIMENTAL_LABWC_DESKTOP"
+
+HELPER_STAGING="$(mktemp /tmp/v-link-lite-visibility-wrapper.XXXXXX)"
+cat >"$HELPER_STAGING" <<'EOF'
+#!/bin/sh
+export WLR_SCENE_DISABLE_VISIBILITY=1
+exec /usr/bin/labwc
+EOF
+for experimental_wrapper in \
+    "$EXPERIMENTAL_VISIBILITY_WRAPPER" \
+    "$EXPERIMENTAL_VISIBILITY_WRAPPER_GOOD"; do
+    if [[ -e "$experimental_wrapper" || -L "$experimental_wrapper" ]]; then
+        if remove_known_experimental_file "$experimental_wrapper" "$HELPER_STAGING"; then
+            log "Removed recognized experimental wrapper: $experimental_wrapper"
+        else
+            log "Preserving unrecognized file at experimental wrapper path: $experimental_wrapper"
+        fi
+    fi
+done
+rm -f -- "$HELPER_STAGING"
+HELPER_STAGING=""
+
+DIRECT_SCANOUT_TEST="$USER_CONFIG_DIR/labwc/environment.d/90-v-link-direct-scanout-test.env"
+HELPER_STAGING="$(mktemp /tmp/v-link-lite-direct-scanout.XXXXXX)"
+printf '%s\n' 'WLR_SCENE_DISABLE_DIRECT_SCANOUT=1' >"$HELPER_STAGING"
+if [[ -e "$DIRECT_SCANOUT_TEST" || -L "$DIRECT_SCANOUT_TEST" ]]; then
+    if remove_known_experimental_file "$DIRECT_SCANOUT_TEST" "$HELPER_STAGING"; then
+        log "Removed recognized direct scan-out test configuration"
+    else
+        log "Preserving unrecognized direct scan-out configuration: $DIRECT_SCANOUT_TEST"
+    fi
+fi
+rm -f -- "$HELPER_STAGING"
+HELPER_STAGING=""
 
 install -d -o "$TARGET_USER" -g "$TARGET_GROUP" \
     "$USER_CONFIG_DIR/labwc" "$USER_CONFIG_DIR/systemd/user" \
@@ -1570,8 +1708,9 @@ systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP 
 # Apply a saved Lite display mode before the boot gate and Chromium start.
 /usr/local/bin/v_link_lite_display.py apply || printf 'V-Link Lite: display policy failed; keeping compositor mode.\n' >&2
 
-# Keep the V-Link mark visible while the boot gate and Chromium start.
-swaybg -i /usr/local/share/v-link-lite/splash.png -m fit -c 000000 &
+# Render once per effective resolution, then display the PNG at native size.
+/usr/local/bin/v_link_lite_display.py refresh-splash || printf 'V-Link Lite: splash refresh failed; using the installed fallback.\n' >&2
+swaybg -i /usr/local/share/v-link-lite/splash.png -m center -c 000000 &
 
 # Automount removable media within the kiosk user's graphical session.
 udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &
@@ -1630,6 +1769,7 @@ platform_path_written "$USER_CONFIG_DIR/labwc/autostart"
 SUDOERS_TEMP="$(mktemp /tmp/v-link-sudoers.XXXXXX)"
 cat >"$SUDOERS_TEMP" <<EOF
 $TARGET_USER ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/reboot -h now, /usr/sbin/shutdown -h now
+$TARGET_USER ALL=(root) NOPASSWD: /usr/local/libexec/v-link-lite-render-splash --refresh-installed --width * --height *
 EOF
 if [[ "$CONFIGURE_HARDWARE" == true ]]; then
     cat >>"$SUDOERS_TEMP" <<EOF

@@ -9,6 +9,8 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
+from PIL import Image
+
 from v_link_lite_support import (DISPLAY_MODE_PATTERN, DISPLAY_OUTPUT_PATTERN,
                                  load_settings)
 
@@ -16,6 +18,8 @@ from v_link_lite_support import (DISPLAY_MODE_PATTERN, DISPLAY_OUTPUT_PATTERN,
 HEADER = re.compile(r'^([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\s+".*"$')
 MODE = re.compile(r'^\s+([1-9][0-9]{0,4})x([1-9][0-9]{0,4})\s+px,\s+'
                   r'([0-9]{1,3}(?:\.[0-9]{1,6})?)\s+Hz(?:\s+\(([^)]*)\))?\s*$')
+SPLASH_RENDERER = "/usr/local/libexec/v-link-lite-render-splash"
+SPLASH_IMAGE = "/usr/local/share/v-link-lite/splash.png"
 
 
 class DisplayError(Exception):
@@ -110,6 +114,67 @@ def apply_mode(output_name, token, env):
         raise DisplayError((result.stderr or result.stdout).strip()[:220] or "wlr-randr rejected the mode")
 
 
+def effective_size(home, env):
+    outputs = active_outputs(query_outputs(env))
+    if not outputs:
+        raise DisplayError("No active display mode is available for the Lite splash")
+    settings = load_settings(home)
+    output = find_output(outputs, settings["DISPLAY_OUTPUT"])
+    if output is None:
+        if len(outputs) != 1:
+            raise DisplayError("Several displays are active and no Lite output is selected")
+        output = outputs[0]
+    mode = next((item for item in output["modes"] if item["current"]), None)
+    if mode is None:
+        raise DisplayError("The active display does not report its current mode")
+    return mode["width"], mode["height"]
+
+
+def refresh_splash(width, height, env):
+    command = ["sudo", "-n", SPLASH_RENDERER, "--refresh-installed",
+               "--width", str(width), "--height", str(height)]
+    try:
+        result = subprocess.run(command, env=env, capture_output=True,
+                                text=True, timeout=15, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise DisplayError(f"Could not regenerate the Lite splash: {error}") from error
+    if result.returncode:
+        raise DisplayError((result.stderr or result.stdout).strip()[:220]
+                           or "Lite splash regeneration failed")
+
+
+def png_size(path=None):
+    path = SPLASH_IMAGE if path is None else path
+    try:
+        with Image.open(path) as image:
+            if image.format != "PNG":
+                return None
+            size = image.size
+            image.verify()
+    except (OSError, SyntaxError, ValueError):
+        return None
+    return size
+
+
+def refresh_current_splash(home, env):
+    width, height = effective_size(home, env)
+    if png_size() != (width, height):
+        refresh_splash(width, height, env)
+    return width, height
+
+
+def restart_background(env):
+    try:
+        subprocess.run(["pkill", "-x", "swaybg"], env=env, capture_output=True,
+                       timeout=3, check=False)
+        subprocess.Popen(
+            ["swaybg", "-i", SPLASH_IMAGE, "-m", "center", "-c", "000000"],
+            env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise DisplayError(f"Could not restart the Lite background: {error}") from error
+
+
 def wayland_available(env):
     display = env.get("WAYLAND_DISPLAY", "")
     if not display:
@@ -150,10 +215,23 @@ def apply_saved(home, env, warning=print):
 
 
 def main(argv):
-    if argv != ["apply"]:
-        print("Usage: v_link_lite_display.py apply", file=sys.stderr)
+    if argv not in (["apply"], ["current-size"], ["refresh-splash"]):
+        print("Usage: v_link_lite_display.py {apply|current-size|refresh-splash}",
+              file=sys.stderr)
         return 2
-    apply_saved(Path.home(), os.environ, warning=lambda message: print(message, file=sys.stderr))
+    if argv == ["apply"]:
+        apply_saved(Path.home(), os.environ,
+                    warning=lambda message: print(message, file=sys.stderr))
+    else:
+        try:
+            if argv == ["current-size"]:
+                width, height = effective_size(Path.home(), os.environ)
+                print(f"{width}x{height}")
+            else:
+                refresh_current_splash(Path.home(), os.environ)
+        except (DisplayError, ValueError, OSError) as error:
+            print(f"V-Link Lite: display query failed: {error}", file=sys.stderr)
+            return 1
     return 0
 
 

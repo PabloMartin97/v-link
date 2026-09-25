@@ -17,10 +17,11 @@ from gi.repository import Gdk, GLib, Gtk, GtkLayerShell
 
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 VISIBLE = RUNTIME_DIR / "v-link-lite-overlay-visible"
-LOGO = Path("/usr/local/share/v-link-lite/logo.png")
+SPLASH = Path("/usr/local/share/v-link-lite/splash.png")
 READY = threading.Event()
 SLOW_BOOT_SECONDS = 45
 MAX_COVER_SECONDS = 120
+HANDOFF_GRACE_MS = 500
 PIXEL = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01"
          b"\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 
@@ -48,6 +49,7 @@ class Overlay:
     def __init__(self):
         self.setup_process = None
         self.timed_out = False
+        self.handoff_scheduled = False
 
         self.window = Gtk.Window()
         self.window.set_decorated(False)
@@ -66,21 +68,27 @@ class Overlay:
             GtkLayerShell.set_anchor(self.window, edge, True)
         GtkLayerShell.set_keyboard_mode(self.window, GtkLayerShell.KeyboardMode.NONE)
 
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        content.set_halign(Gtk.Align.CENTER)
-        content.set_valign(Gtk.Align.CENTER)
-        content.pack_start(Gtk.Image.new_from_file(str(LOGO)), False, False, 0)
+        content = Gtk.Overlay()
+        splash = Gtk.Image.new_from_file(str(SPLASH))
+        splash.set_halign(Gtk.Align.CENTER)
+        splash.set_valign(Gtk.Align.CENTER)
+        content.add(splash)
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        controls.set_halign(Gtk.Align.CENTER)
+        controls.set_valign(Gtk.Align.CENTER)
         self.message = Gtk.Label()
         self.message.set_markup(
             '<span foreground="white">V-Link is taking longer than expected. '
             'Press S for Settings.</span>'
         )
         self.message.set_no_show_all(True)
-        content.pack_start(self.message, False, False, 0)
+        controls.pack_start(self.message, False, False, 0)
         self.continue_button = Gtk.Button(label="Continue to V-Link")
         self.continue_button.set_no_show_all(True)
         self.continue_button.connect("clicked", lambda *_: self.window.destroy())
-        content.pack_start(self.continue_button, False, False, 0)
+        controls.pack_start(self.continue_button, False, False, 0)
+        content.add_overlay(controls)
         self.window.add(content)
         self.window.show_all()
 
@@ -90,7 +98,12 @@ class Overlay:
 
     def on_map(self, *_):
         # The installer waits for the overlay to map before starting V-Link.
-        VISIBLE.touch()
+        temporary = VISIBLE.with_name(f'.{VISIBLE.name}.{os.getpid()}')
+        try:
+            temporary.write_text(f'{os.getpid()}\n', encoding='ascii')
+            temporary.replace(VISIBLE)
+        finally:
+            temporary.unlink(missing_ok=True)
         return False
 
     def on_key(self, _window, event):
@@ -117,15 +130,26 @@ class Overlay:
             return True
         exit_code = self.setup_process.returncode
         self.setup_process = None
-        if READY.is_set() or exit_code in (20, 21, 22):
+        if READY.is_set():
+            self.schedule_handoff()
+        elif exit_code in (20, 21, 22):
             self.window.destroy()
         else:
             self.window.show_all()
         return False
 
+    def schedule_handoff(self):
+        if not self.handoff_scheduled:
+            self.handoff_scheduled = True
+            GLib.timeout_add(HANDOFF_GRACE_MS, self.finish_handoff)
+
+    def finish_handoff(self):
+        self.window.destroy()
+        return False
+
     def check_handoff(self):
         if READY.is_set():
-            self.window.destroy()
+            self.schedule_handoff()
             return False
         return True
 
@@ -146,8 +170,8 @@ class Overlay:
 
 
 def main():
-    if not RUNTIME_DIR.is_dir() or not LOGO.is_file():
-        raise RuntimeError("Lite overlay runtime or logo is missing")
+    if not RUNTIME_DIR.is_dir() or not SPLASH.is_file():
+        raise RuntimeError("Lite overlay runtime or splash is missing")
     server = HTTPServer(("127.0.0.1", 40777), HandoffHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -157,7 +181,11 @@ def main():
     finally:
         server.shutdown()
         server.server_close()
-        VISIBLE.unlink(missing_ok=True)
+        try:
+            if int(VISIBLE.read_text(encoding="ascii").strip()) == os.getpid():
+                VISIBLE.unlink(missing_ok=True)
+        except (OSError, ValueError):
+            pass
 
 
 if __name__ == "__main__":

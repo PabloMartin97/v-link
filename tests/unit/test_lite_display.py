@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from PIL import Image
+
 from tests.unit.test_lite_setup_tui import SETUP, make_ui
 from v_link_lite_support import DEFAULT_SETTINGS, load_settings, parse_settings, save_settings
 import v_link_lite_display as display
@@ -30,6 +32,12 @@ OTHER = '''DP-2 "Bench display"
   Enabled: yes
   Modes:
     1280x720 px, 50.000000 Hz (preferred, current)
+'''
+EFFECTIVE_AFTER_CHANGE = '''DP-2 "Bench display"
+  Enabled: yes
+  Modes:
+    1280x720 px, 50.000000 Hz
+    1920x1080 px, 60.000000 Hz (current)
 '''
 
 
@@ -94,7 +102,7 @@ def test_failed_wlr_randr_does_not_overwrite_saved_preference():
         assert load_settings(directory)["DISPLAY_MODE"] == "auto"
 
 
-def test_multiple_outputs_require_explicit_selection_and_save_its_name():
+def test_multiple_outputs_requery_effective_size_after_applying_selected_mode():
     with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"XDG_CONFIG_HOME": directory}):
         save_settings(directory, DEFAULT_SETTINGS)
         ui, _ = make_ui([])
@@ -104,11 +112,18 @@ def test_multiple_outputs_require_explicit_selection_and_save_its_name():
         headings = []
         ui.choose = lambda heading, *_args, **_kwargs: (headings.append(heading), next(choices))[1]
         ui.message = lambda *_args: None
-        with patch.object(SETUP.lite_display, "query_outputs", return_value=display.parse_outputs(MULTIPLE)), \
-             patch.object(SETUP.lite_display, "apply_mode") as apply:
+        with patch.object(SETUP.lite_display, "query_outputs", side_effect=(
+                 display.parse_outputs(MULTIPLE),
+                 display.parse_outputs(EFFECTIVE_AFTER_CHANGE))), \
+             patch.object(SETUP.lite_display, "apply_mode") as apply, \
+             patch.object(SETUP.lite_display, "png_size", return_value=(1280, 720)), \
+             patch.object(SETUP.lite_display, "refresh_splash") as refresh, \
+             patch.object(SETUP.lite_display, "restart_background") as restart:
             ui.resolution_menu()
         assert headings[0] == "Select display output"
         apply.assert_called_once_with("DP-2", "1280x720@50.000000", ui.env)
+        refresh.assert_called_once_with(1920, 1080, ui.env)
+        restart.assert_called_once_with(ui.env)
         assert load_settings(directory)["DISPLAY_OUTPUT"] == "DP-2"
 
 
@@ -186,4 +201,75 @@ def test_install_and_check_reference_helper_and_ordered_autostart():
     assert 'install -o root -g root -m 0755 "$SOURCE_DIR/lite/v_link_lite_display.py"' in install
     assert install.index("v_link_lite_display.py apply") < install.index("v-link-lite-boot; then")
     assert "Lite display helper is installed root:root 0755" in check
-    assert "labwc applies the Lite display policy before the boot gate" in check
+    assert "labwc applies the display policy and refreshes the matching splash before V-Link" in check
+
+
+def test_effective_size_uses_the_selected_current_output():
+    with tempfile.TemporaryDirectory() as directory, patch.dict(
+            os.environ, {"XDG_CONFIG_HOME": directory}):
+        save_settings(directory, {**DEFAULT_SETTINGS,
+                                  "DISPLAY_MODE": "1280x720@50.000000",
+                                  "DISPLAY_OUTPUT": "DP-2"})
+        with patch.object(display, "query_outputs", return_value=display.parse_outputs(MULTIPLE)):
+            assert display.effective_size(directory, {}) == (1280, 720)
+
+
+def test_refresh_splash_uses_only_validated_fixed_helper_arguments():
+    completed = subprocess.CompletedProcess([], 0, "", "")
+    with patch.object(display.subprocess, "run", return_value=completed) as run:
+        display.refresh_splash(1920, 1080, {"SAFE": "1"})
+    assert run.call_args.args[0] == [
+        "sudo", "-n", "/usr/local/libexec/v-link-lite-render-splash",
+        "--refresh-installed", "--width", "1920", "--height", "1080"]
+
+
+def test_boot_splash_refresh_skips_privileged_renderer_when_size_matches():
+    with patch.object(display, "effective_size", return_value=(1920, 1080)), \
+         patch.object(display, "png_size", return_value=(1920, 1080)), \
+         patch.object(display, "refresh_splash") as refresh:
+        assert display.refresh_current_splash("/home/tester", {}) == (1920, 1080)
+    refresh.assert_not_called()
+
+    with patch.object(display, "effective_size", return_value=(1280, 720)), \
+         patch.object(display, "png_size", return_value=(1920, 1080)), \
+         patch.object(display, "refresh_splash") as refresh:
+        assert display.refresh_current_splash("/home/tester", {}) == (1280, 720)
+    refresh.assert_called_once_with(1280, 720, {})
+
+
+def test_png_size_accepts_a_complete_valid_png():
+    with tempfile.TemporaryDirectory() as directory:
+        splash = Path(directory) / "splash.png"
+        Image.new("RGB", (1920, 1080), "black").save(splash)
+        assert display.png_size(splash) == (1920, 1080)
+
+
+def test_png_size_rejects_a_png_truncated_after_its_valid_header():
+    with tempfile.TemporaryDirectory() as directory:
+        splash = Path(directory) / "splash.png"
+        Image.new("RGB", (1920, 1080), "black").save(splash)
+        splash.write_bytes(splash.read_bytes()[:24])
+        assert display.png_size(splash) is None
+
+
+def test_png_size_rejects_a_corrupt_png():
+    with tempfile.TemporaryDirectory() as directory:
+        splash = Path(directory) / "splash.png"
+        Image.new("RGB", (1280, 720), "black").save(splash)
+        data = bytearray(splash.read_bytes())
+        chunk = data.index(b"IDAT")
+        length = int.from_bytes(data[chunk - 4:chunk], "big")
+        data[chunk + 4 + length] ^= 0xFF
+        splash.write_bytes(data)
+        assert display.png_size(splash) is None
+
+
+def test_wrong_png_dimensions_force_regeneration_for_effective_size():
+    with tempfile.TemporaryDirectory() as directory:
+        splash = Path(directory) / "splash.png"
+        Image.new("RGB", (1280, 720), "black").save(splash)
+        with patch.object(display, "SPLASH_IMAGE", str(splash)), \
+             patch.object(display, "effective_size", return_value=(1920, 1080)), \
+             patch.object(display, "refresh_splash") as refresh:
+            assert display.refresh_current_splash("/home/tester", {}) == (1920, 1080)
+        refresh.assert_called_once_with(1920, 1080, {})

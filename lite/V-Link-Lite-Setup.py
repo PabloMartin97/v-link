@@ -844,7 +844,13 @@ class SetupUI:
         except (OSError, ValueError) as error:
             self.message(f"Display changed now, but the preference could not be saved: {error}")
             return
-        self.message("Display mode applied and saved. The next graphical boot will use it if still available.")
+        try:
+            lite_display.refresh_current_splash(self.home, self.env)
+            lite_display.restart_background(self.env)
+        except lite_display.DisplayError as error:
+            self.message(f"Display mode applied and saved, but the Lite splash could not be refreshed: {error}")
+            return
+        self.message("Display mode and matching Lite splash applied and saved. The next graphical boot will use them if still available.")
 
     def cursor_menu(self):
         while True:

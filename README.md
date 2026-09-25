@@ -96,6 +96,14 @@ Lite renders the existing V-Link logos on a black boot splash, uses the same
 branding for the Settings gate, and keeps a matching Wayland background until
 Chromium shows its own splash. The firmware rainbow is disabled; the earliest
 custom image is enabled when Raspberry Pi OS provides its splash-support tool.
+The Wayland background and GTK cover use the same native-resolution PNG without
+scaling. Lite regenerates it only when the effective display dimensions change,
+including after a fixed resolution is selected in Setup.
+On the tested labwc 0.8.4 / wlroots 0.18.2 combination, removing a layer-shell
+splash over fullscreen Chromium can expose a transient white frame. The Lite
+session applies `WLR_SCENE_DISABLE_VISIBILITY=1` as a targeted workaround before
+labwc starts; setting it from labwc's own environment configuration would be too
+late because wlroots is already running by then.
 `Display / Input` offers cursor Auto (hidden at start and again after five
 seconds idle) or Visible, plus a separate mouse Activated/Deactivated switch.
 Deactivated ignores mouse and touchpad input but leaves touch and keyboard

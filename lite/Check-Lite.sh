@@ -142,7 +142,7 @@ else
     warn "nmtui is unavailable; the Network summary still works"
 fi
 
-for helper in /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay /usr/local/libexec/v-link-lite-prepare-splash /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor; do
+for helper in /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay /usr/local/libexec/v-link-lite-prepare-splash /usr/local/libexec/v-link-lite-render-splash /usr/local/libexec/v-link-lite-session /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor; do
     if [[ -f "$helper" && -x "$helper" ]] && \
        [[ "$(stat -c '%u:%g' "$helper")" == '0:0' ]] && \
        [[ "$(stat -c '%a' "$helper")" == 755 ]]; then
@@ -151,6 +151,20 @@ for helper in /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite
         fail "$helper is missing or has incorrect ownership/mode"
     fi
 done
+if [[ -x /usr/bin/labwc ]]; then
+    pass "/usr/bin/labwc is available to the Lite session launcher"
+else
+    fail "missing executable: /usr/bin/labwc"
+fi
+if [[ -f /usr/local/libexec/v-link-lite-session && \
+      ! -L /usr/local/libexec/v-link-lite-session ]] && \
+   bash -n /usr/local/libexec/v-link-lite-session >/dev/null 2>&1 && \
+   grep -qFx 'export WLR_SCENE_DISABLE_VISIBILITY=1' /usr/local/libexec/v-link-lite-session && \
+   grep -qFx 'exec /usr/bin/labwc' /usr/local/libexec/v-link-lite-session; then
+    pass "V-Link Lite session enables the wlroots visibility workaround"
+else
+    fail "V-Link Lite session launcher is invalid"
+fi
 if [[ -f /usr/local/libexec/v-link-lite-boot ]] && \
    bash -n /usr/local/libexec/v-link-lite-boot >/dev/null 2>&1; then
     pass "Lite boot gate shell syntax is valid"
@@ -162,8 +176,9 @@ if python3 -c 'import gi; gi.require_version("Gtk", "3.0"); gi.require_version("
 else
     fail "GTK layer-shell is unavailable"
 fi
-if [[ -f /usr/local/libexec/v-link-lite-overlay && -f /usr/local/libexec/v-link-lite-prepare-splash ]] && \
-   python3 -c 'import ast, pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in ("/usr/local/libexec/v-link-lite-overlay", "/usr/local/libexec/v-link-lite-prepare-splash")]' >/dev/null 2>&1; then
+if [[ -f /usr/local/libexec/v-link-lite-overlay && -f /usr/local/libexec/v-link-lite-prepare-splash && \
+      -f /usr/local/libexec/v-link-lite-render-splash ]] && \
+   python3 -c 'import ast, pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in ("/usr/local/libexec/v-link-lite-overlay", "/usr/local/libexec/v-link-lite-prepare-splash", "/usr/local/libexec/v-link-lite-render-splash")]' >/dev/null 2>&1; then
     pass "Lite splash helpers have valid Python syntax"
 else
     fail "Lite splash helpers are unavailable or invalid"
@@ -193,6 +208,12 @@ for splash_asset in \
         fail "Lite splash asset is missing or unsafe: $splash_asset"
     fi
 done
+if grep -qsFx "$TARGET_USER ALL=(root) NOPASSWD: /usr/local/libexec/v-link-lite-render-splash --refresh-installed --width * --height *" \
+      /etc/sudoers.d/v-link-lite; then
+    pass "Lite splash renderer has restricted sudo permission"
+else
+    fail "Lite splash renderer sudo permission is missing"
+fi
 if [[ -f /boot/firmware/config.txt ]] && \
    grep -qFx '# BEGIN V-LINK LITE SPLASH' /boot/firmware/config.txt && \
    grep -qFx 'disable_splash=1' /boot/firmware/config.txt && \
@@ -344,6 +365,24 @@ if [[ -f /usr/share/wayland-sessions/labwc.desktop ]]; then
 else
     fail "missing /usr/share/wayland-sessions/labwc.desktop"
 fi
+if [[ -f /usr/share/wayland-sessions/v-link-lite.desktop && \
+      ! -L /usr/share/wayland-sessions/v-link-lite.desktop ]] && \
+   [[ "$(stat -c '%u:%g:%a' /usr/share/wayland-sessions/v-link-lite.desktop)" == '0:0:644' ]] && \
+   grep -qFx '[Desktop Entry]' /usr/share/wayland-sessions/v-link-lite.desktop && \
+   grep -qFx 'Exec=/usr/local/libexec/v-link-lite-session' /usr/share/wayland-sessions/v-link-lite.desktop && \
+   grep -qFx 'Type=Application' /usr/share/wayland-sessions/v-link-lite.desktop; then
+    pass "V-Link Lite Wayland session is installed"
+else
+    fail "V-Link Lite Wayland session is missing or invalid"
+fi
+if [[ -f /usr/share/wayland-sessions/labwc.desktop ]]; then
+    if grep -qsFx 'Exec=/usr/local/bin/v-link-labwc-visibility-test' \
+          /usr/share/wayland-sessions/labwc.desktop; then
+        fail "packaged labwc session still points to the experimental V-Link wrapper"
+    else
+        pass "packaged labwc session is not redirected by V-Link"
+    fi
+fi
 
 LABWC_RC="$TARGET_HOME/.config/labwc/rc.xml"
 LABWC_AUTOSTART="$TARGET_HOME/.config/labwc/autostart"
@@ -456,17 +495,20 @@ fi
 if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
     /^\/usr\/local\/bin\/v_link_lite_display[.]py apply/ { display++; applied = NR }
+    /^\/usr\/local\/bin\/v_link_lite_display[.]py refresh-splash/ { refresh++; refreshed = NR }
     /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { started = NR }
-    END { exit !(imported && display == 1 && applied > imported && gate > applied && started > gate) }
+    END { exit !(imported && display == 1 && applied > imported && refresh == 1 &&
+                  refreshed > applied && gate > refreshed && started > gate) }
 ' "$LABWC_AUTOSTART"; then
-    pass "labwc applies the Lite display policy before the boot gate and V-Link"
+    pass "labwc applies the display policy and refreshes the matching splash before V-Link"
 else
-    fail "labwc autostart is missing the ordered Lite display policy"
+    fail "labwc autostart is missing the ordered display or splash policy"
 fi
 if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+import-environment[[:space:]]/ { imported = NR }
-    /^swaybg -i \/usr\/local\/share\/v-link-lite\/splash[.]png -m fit -c 000000 &$/ { background = NR }
+    /^\/usr\/local\/bin\/v_link_lite_display[.]py refresh-splash/ { refreshed = NR }
+    /^swaybg -i \/usr\/local\/share\/v-link-lite\/splash[.]png -m center -c 000000 &$/ { background = NR }
     /^udiskie --no-config --automount --no-notify --no-tray --no-file-manager --no-terminal --no-password-prompt &$/ { automounter = NR }
     /^if \/usr\/local\/libexec\/v-link-lite-boot; then$/ { gate = NR }
     /^[[:space:]]*if \/usr\/local\/libexec\/v-link-lite-prepare-splash; then$/ { prepared = NR }
@@ -475,7 +517,7 @@ if [[ -f "$LABWC_AUTOSTART" ]] && awk '
     /^[[:space:]]*\/usr\/local\/bin\/v-link-lite-cursor apply/ { policy = NR }
     /^[[:space:]]*systemctl[[:space:]]+--user[[:space:]]+start[[:space:]]+v-link[.]service &$/ { starts++; started = NR }
     /^fi$/ { if (gate && NR > gate) closed = NR }
-    END { exit !(imported && background > imported && automounter > background && gate > automounter &&
+    END { exit !(imported && refreshed > imported && background > refreshed && automounter > background && gate > automounter &&
                   prepared > gate && overlay > prepared && mapped > overlay && policy > mapped &&
                   started > policy && closed > started && starts == 1) }
 ' "$LABWC_AUTOSTART"; then
@@ -557,13 +599,28 @@ if grep -qs "^autologin-user=$TARGET_USER$" /etc/lightdm/lightdm.conf.d/50-v-lin
 else
     fail "graphical autologin is not configured for $TARGET_USER"
 fi
-for session_setting in user-session=labwc autologin-session=labwc; do
+for session_setting in user-session=v-link-lite autologin-session=v-link-lite; do
     if grep -qs "^$session_setting$" /etc/lightdm/lightdm.conf.d/50-v-link-lite.conf; then
         pass "LightDM has $session_setting"
     else
         fail "LightDM is missing $session_setting"
     fi
 done
+
+if [[ "$PRE_REBOOT" == true ]]; then
+    warn "active V-Link Lite session environment check deferred until reboot"
+else
+    LABWC_PID="$(pgrep -u "$TARGET_USER" -o -x labwc 2>/dev/null || true)"
+    if [[ -n "$LABWC_PID" ]] && \
+       tr '\0' '\n' <"/proc/$LABWC_PID/environ" 2>/dev/null | \
+           grep -qFx 'WLR_SCENE_DISABLE_VISIBILITY=1'; then
+        pass "running labwc has the wlroots visibility workaround"
+    elif [[ -n "$LABWC_PID" ]]; then
+        fail "running labwc lacks WLR_SCENE_DISABLE_VISIBILITY=1; reboot into v-link-lite"
+    else
+        fail "cannot verify the V-Link Lite environment because labwc is not running"
+    fi
+fi
 
 printf '\nApplication\n'
 if [[ -r "$APP_DIR/backend/shared/lite_console.py" ]] && \
@@ -724,6 +781,16 @@ if [[ "$PRE_REBOOT" != true && -S "$RUNTIME_DIR/bus" ]]; then
     if grep -q '^WAYLAND_DISPLAY=' <<<"$USER_MANAGER_ENV" && \
        grep -q '^XDG_SESSION_TYPE=wayland$' <<<"$USER_MANAGER_ENV"; then
         pass "the user service manager has the Wayland environment"
+        WAYLAND_DISPLAY_VALUE="$(sed -n 's/^WAYLAND_DISPLAY=//p' <<<"$USER_MANAGER_ENV" | tail -n 1)"
+        EFFECTIVE_SIZE="$(runuser -u "$TARGET_USER" -- "${USER_ENV[@]}" \
+            "WAYLAND_DISPLAY=$WAYLAND_DISPLAY_VALUE" "XDG_CONFIG_HOME=$TARGET_HOME/.config" \
+            /usr/local/bin/v_link_lite_display.py current-size 2>/dev/null || true)"
+        SPLASH_SIZE="$(python3 -c 'from PIL import Image; image=Image.open("/usr/local/share/v-link-lite/splash.png"); print(f"{image.width}x{image.height}")' 2>/dev/null || true)"
+        if [[ -n "$EFFECTIVE_SIZE" && "$SPLASH_SIZE" == "$EFFECTIVE_SIZE" ]]; then
+            pass "Lite splash matches the effective display resolution ($EFFECTIVE_SIZE)"
+        else
+            fail "Lite splash resolution ($SPLASH_SIZE) does not match the effective display ($EFFECTIVE_SIZE)"
+        fi
     else
         fail "the user service manager is missing its Wayland environment"
     fi

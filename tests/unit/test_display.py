@@ -8,6 +8,7 @@ block is skipped and only the helper functions / globals are available.
 import importlib.util
 import logging
 import re
+import subprocess
 import sys
 import types
 import threading
@@ -95,6 +96,7 @@ def reset_state(monkeypatch):
     monkeypatch.setattr(_vmod, 'vlink', _MockVlink(), raising=False)
     _vmod._log_handler.buffer.clear()
     ss = _vmod.shared_state
+    ss.liteMode = False
     ss.rtiStatus = False
     ss.ignStatus.clear()
     for key in list(ss.THREADS):
@@ -126,6 +128,8 @@ def test_full_restart_reexecutes_after_browser_hardware_and_server_shutdown(monk
     monkeypatch.setattr(_vmod.shared_state, 'restart_event', restart_event)
     monkeypatch.setattr(_vmod.sys, 'argv', [str(_VLINK_PATH), '--dev', '--nokiosk'])
     monkeypatch.setattr(_vmod.os, 'execv', lambda exe, args: events.append(('exec', exe, args)))
+    monkeypatch.setattr(_vmod, 'ensure_lite_restart_overlay',
+                        lambda: events.append(('overlay',)))
 
     instance.process_restart_event()
 
@@ -133,7 +137,143 @@ def test_full_restart_reexecutes_after_browser_hardware_and_server_shutdown(monk
         ('stop', 'app'), ('stop', 'rti'), ('stop', 'ign'), ('stop', 'server'),
         ('exec', sys.executable, [sys.executable, str(_VLINK_PATH), '--dev', '--nokiosk']),
     ]
+    assert ('overlay',) not in events
     assert not restart_event.is_set()
+
+
+def test_lite_restart_requests_overlay_before_stopping_browser(monkeypatch):
+    events = []
+    monkeypatch.setattr(_vmod, 'logger', MagicMock())
+    instance = _vmod.VLINK()
+    instance.stop_thread = lambda name: events.append(('stop', name))
+    monkeypatch.setattr(_vmod.shared_state, 'liteMode', True)
+    monkeypatch.setattr(_vmod.shared_state, 'THREADS', {
+        'server': _alive(), 'app': _alive(), 'rti': _alive(),
+    })
+    restart_event = threading.Event()
+    restart_event.set()
+    monkeypatch.setattr(_vmod.shared_state, 'restart_event', restart_event)
+    monkeypatch.setattr(_vmod, 'ensure_lite_restart_overlay',
+                        lambda: events.append(('overlay',)) or False)
+    monkeypatch.setattr(_vmod.os, 'execv', lambda *_args: events.append(('exec',)))
+
+    instance.process_restart_event()
+
+    assert events == [
+        ('overlay',), ('stop', 'app'), ('stop', 'rti'), ('stop', 'server'), ('exec',),
+    ]
+
+
+def configure_overlay_test_paths(monkeypatch, tmp_path):
+    runtime = tmp_path / 'runtime'
+    runtime.mkdir()
+    executable = tmp_path / 'v-link-lite-overlay'
+    executable.write_text('#!/bin/sh\n')
+    executable.chmod(0o755)
+    proc_root = tmp_path / 'proc'
+    proc_root.mkdir()
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(runtime))
+    monkeypatch.setattr(_vmod, 'LITE_OVERLAY', executable)
+    monkeypatch.setattr(_vmod, 'PROC_ROOT', proc_root)
+    monkeypatch.setattr(_vmod.os, 'kill', lambda _pid, _signal: None)
+    return executable, runtime / _vmod.LITE_OVERLAY_MARKER, proc_root
+
+
+def write_overlay_process(marker, proc_root, executable, pid=321):
+    marker.write_text(f'{pid}\n')
+    process = proc_root / str(pid)
+    process.mkdir(exist_ok=True)
+    (process / 'cmdline').write_bytes(
+        b'/usr/bin/python3\0' + str(executable).encode() + b'\0')
+
+
+def test_lite_overlay_marker_requires_matching_live_process(monkeypatch, tmp_path):
+    executable, marker, proc_root = configure_overlay_test_paths(monkeypatch, tmp_path)
+    write_overlay_process(marker, proc_root, executable)
+    assert _vmod._lite_overlay_pid(marker) == 321
+
+    (proc_root / '321/cmdline').write_bytes(b'/usr/bin/python3\0/tmp/not-the-overlay\0')
+    assert _vmod._lite_overlay_pid(marker) is None
+
+    write_overlay_process(marker, proc_root, executable)
+    monkeypatch.setattr(_vmod.os, 'kill',
+                        MagicMock(side_effect=ProcessLookupError))
+    assert _vmod._lite_overlay_pid(marker) is None
+
+
+def test_lite_restart_reuses_valid_mapped_overlay(monkeypatch, tmp_path):
+    executable, marker, proc_root = configure_overlay_test_paths(monkeypatch, tmp_path)
+    write_overlay_process(marker, proc_root, executable)
+    popen = MagicMock(side_effect=AssertionError('must not launch a duplicate overlay'))
+    monkeypatch.setattr(_vmod.subprocess, 'Popen', popen)
+
+    assert _vmod.ensure_lite_restart_overlay() is True
+    popen.assert_not_called()
+
+
+def test_lite_restart_overlay_missing_warns_and_continues(monkeypatch, tmp_path):
+    _executable, _marker, _proc_root = configure_overlay_test_paths(monkeypatch, tmp_path)
+    missing = tmp_path / 'missing-overlay'
+    monkeypatch.setattr(_vmod, 'LITE_OVERLAY', missing)
+    test_logger = MagicMock()
+    monkeypatch.setattr(_vmod, 'logger', test_logger)
+
+    assert _vmod.ensure_lite_restart_overlay() is False
+    assert 'unavailable' in test_logger.warning.call_args.args[0]
+
+
+def test_lite_restart_overlay_maps_and_is_launched_detached(monkeypatch, tmp_path):
+    executable, marker, proc_root = configure_overlay_test_paths(monkeypatch, tmp_path)
+    launched = MagicMock()
+
+    def popen(args, **kwargs):
+        launched(args, **kwargs)
+        write_overlay_process(marker, proc_root, executable)
+        return MagicMock()
+
+    monkeypatch.setattr(_vmod.subprocess, 'Popen', popen)
+    monkeypatch.setattr(_vmod.time, 'monotonic', lambda: 0.0)
+
+    assert _vmod.ensure_lite_restart_overlay() is True
+    args, kwargs = launched.call_args
+    assert args == ([str(executable)],)
+    assert kwargs == {
+        'stdin': subprocess.DEVNULL,
+        'stdout': subprocess.DEVNULL,
+        'stderr': subprocess.DEVNULL,
+        'start_new_session': True,
+        'close_fds': True,
+    }
+
+
+def test_lite_restart_overlay_timeout_warns_and_continues(monkeypatch, tmp_path):
+    configure_overlay_test_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(_vmod.subprocess, 'Popen', MagicMock(return_value=MagicMock()))
+    ticks = iter((10.0, 10.0, 15.0))
+    monkeypatch.setattr(_vmod.time, 'monotonic', lambda: next(ticks))
+    monkeypatch.setattr(_vmod.time, 'sleep', lambda _seconds: None)
+    test_logger = MagicMock()
+    monkeypatch.setattr(_vmod, 'logger', test_logger)
+
+    assert _vmod.ensure_lite_restart_overlay() is False
+    assert 'did not map in time' in test_logger.warning.call_args.args[0]
+
+
+def test_lite_restart_removes_only_stale_marker_before_launch(monkeypatch, tmp_path):
+    executable, marker, proc_root = configure_overlay_test_paths(monkeypatch, tmp_path)
+    marker.write_text('987\n')
+    process = proc_root / '987'
+    process.mkdir()
+    (process / 'cmdline').write_bytes(b'/usr/bin/python3\0/tmp/unrelated\0')
+
+    def popen(_args, **_kwargs):
+        assert not marker.exists()
+        write_overlay_process(marker, proc_root, executable, pid=654)
+        return MagicMock()
+
+    monkeypatch.setattr(_vmod.subprocess, 'Popen', popen)
+    monkeypatch.setattr(_vmod.time, 'monotonic', lambda: 0.0)
+    assert _vmod.ensure_lite_restart_overlay() is True
 
 
 class TestBacklightCanData:

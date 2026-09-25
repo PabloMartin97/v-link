@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PREPARE = ROOT / "lite/Prepare-V-Link-SD.command"
 FIRSTBOOT = ROOT / "lite/V-Link-FirstBoot.sh"
 INSTALL = ROOT / "lite/Install-Lite.sh"
+SESSION = ROOT / "lite/V-Link-Lite-Session.sh"
+CHECK = ROOT / "lite/Check-Lite.sh"
 
 
 def prepare(boot, cmdline, firstrun=None):
@@ -216,14 +218,24 @@ def test_overlay_has_normal_handoff_and_bounded_fail_open():
     assert "if READY.is_set():" in source
     assert "SLOW_BOOT_SECONDS = 45" in source
     assert "MAX_COVER_SECONDS = 120" in source
+    assert "HANDOFF_GRACE_MS = 500" in source
     assert "Continue to V-Link" in source
     assert "self.window.destroy()" in source.split("def absolute_timeout", 1)[1]
     tree = ast.parse(source)
     overlay = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                    and node.name == "Overlay")
     methods = [node for node in overlay.body if isinstance(node, ast.FunctionDef)
-               and node.name in {"check_handoff", "absolute_timeout"}]
-    namespace = {}
+               and node.name in {"schedule_handoff", "finish_handoff",
+                                 "check_handoff", "absolute_timeout"}]
+
+    class Glib:
+        calls = []
+
+        @classmethod
+        def timeout_add(cls, delay, callback):
+            cls.calls.append((delay, callback))
+
+    namespace = {"GLib": Glib, "HANDOFF_GRACE_MS": 500}
     exec(compile(ast.Module(body=methods, type_ignores=[]), "overlay-methods", "exec"), namespace)
 
     class Window:
@@ -239,7 +251,12 @@ def test_overlay_has_normal_handoff_and_bounded_fail_open():
             return self.value
 
     namespace["READY"] = Ready()
-    instance = type("FakeOverlay", (), {"window": Window()})()
+    instance = type("FakeOverlay", (), {
+        "window": Window(),
+        "handoff_scheduled": False,
+        "schedule_handoff": namespace["schedule_handoff"],
+        "finish_handoff": namespace["finish_handoff"],
+    })()
     assert namespace["check_handoff"](instance) is True
     assert not instance.window.destroyed
     assert namespace["absolute_timeout"](instance) is False
@@ -247,6 +264,11 @@ def test_overlay_has_normal_handoff_and_bounded_fail_open():
     instance.window.destroyed = False
     namespace["READY"].value = True
     assert namespace["check_handoff"](instance) is False
+    assert not instance.window.destroyed
+    assert len(Glib.calls) == 1 and Glib.calls[0][0] == 500
+    assert namespace["check_handoff"](instance) is False
+    assert len(Glib.calls) == 1
+    assert Glib.calls[0][1]() is False
     assert instance.window.destroyed
     instance.window.destroyed = False
     assert namespace["absolute_timeout"](instance) is False
@@ -308,6 +330,143 @@ def test_platform_rollback_preserves_external_change_after_installer_write():
         assert target.read_text() == "external"
         assert "changed after installation" in result.stderr
         assert "rollback was partial" in result.stderr
+
+
+def test_lite_session_asset_and_generated_desktop_are_valid():
+    session = SESSION.read_text()
+    install = INSTALL.read_text()
+    check = CHECK.read_text()
+
+    assert session.startswith("#!/bin/sh\n")
+    assert "export WLR_SCENE_DISABLE_VISIBILITY=1" in session
+    assert "exec /usr/bin/labwc" in session
+    assert "WLR_SCENE_DISABLE_DIRECT_SCANOUT" not in session
+    assert "Exec=/usr/local/libexec/v-link-lite-session" in install
+    assert "DesktopNames=labwc;wlroots" in install
+    assert "user-session=v-link-lite" in install
+    assert "autologin-session=v-link-lite" in install
+    assert "WLR_SCENE_DISABLE_VISIBILITY=1" in check
+    assert "running labwc has the wlroots visibility workaround" in check
+
+
+def test_lite_session_is_installed_before_lightdm_selects_it():
+    install = INSTALL.read_text()
+    launcher = install.index(
+        "validate_lite_session_launcher \"$LITE_SESSION_LAUNCHER\"", 1000)
+    desktop = install.index("platform_path_written \"$LITE_SESSION_DESKTOP\"")
+    lightdm = install.index("user-session=v-link-lite", desktop)
+    migration = install.index(
+        'restore_known_experimental_labwc_desktop "$EXPERIMENTAL_LABWC_DESKTOP"')
+
+    assert launcher < desktop < lightdm < migration
+    assert 'user-session=labwc\nautologin-session=labwc' not in install
+    assert "v-link-lite-session" not in (ROOT / "Update.sh").read_text()
+
+
+def run_lite_migration(root, labwc_text, wrapper_text, direct_scanout_text):
+    functions = installer_transaction_functions()
+    labwc = root / "labwc.desktop"
+    wrapper = root / "v-link-labwc-visibility-test"
+    direct_scanout = root / "90-v-link-direct-scanout-test.env"
+    expected_wrapper = root / "expected-wrapper"
+    expected_direct_scanout = root / "expected-direct-scanout"
+    backup = root / "backup"
+    backup.mkdir()
+    labwc.write_text(labwc_text)
+    wrapper.write_text(wrapper_text)
+    direct_scanout.write_text(direct_scanout_text)
+    expected_wrapper.write_text(
+        "#!/bin/sh\nexport WLR_SCENE_DISABLE_VISIBILITY=1\nexec /usr/bin/labwc\n")
+    expected_direct_scanout.write_text("WLR_SCENE_DISABLE_DIRECT_SCANOUT=1\n")
+    script = (
+        "set -Eeuo pipefail\n" + functions + "\n"
+        'PLATFORM_PATHS=("$1" "$2" "$3")\nPLATFORM_BACKUP="$4"\n'
+        'for index in "${!PLATFORM_PATHS[@]}"; do\n'
+        '  path="${PLATFORM_PATHS[index]}"\n'
+        '  platform_fingerprint "$path" >"$PLATFORM_BACKUP/$index.original"\n'
+        '  cp -a -- "$path" "$PLATFORM_BACKUP/$index"\n'
+        'done\n'
+        'restore_known_experimental_labwc_desktop "$1"\n'
+        'if remove_known_experimental_file "$2" "$5"; then :; fi\n'
+        'if remove_known_experimental_file "$3" "$6"; then :; fi\n'
+        '# A repeated migration must be a no-op.\n'
+        'restore_known_experimental_labwc_desktop "$1"\n'
+        'if remove_known_experimental_file "$2" "$5"; then :; fi\n'
+        'if remove_known_experimental_file "$3" "$6"; then :; fi\n')
+    result = subprocess.run(
+        ["bash", "-c", script, "bash", str(labwc), str(wrapper),
+         str(direct_scanout), str(backup), str(expected_wrapper),
+         str(expected_direct_scanout)], text=True, capture_output=True)
+    return result, labwc, wrapper, direct_scanout
+
+
+def test_known_experimental_session_is_migrated_idempotently():
+    with tempfile.TemporaryDirectory() as directory:
+        result, labwc, wrapper, direct_scanout = run_lite_migration(
+            Path(directory),
+            "[Desktop Entry]\nName=labwc\n"
+            "Exec=/usr/local/bin/v-link-labwc-visibility-test\nType=Application\n",
+            "#!/bin/sh\nexport WLR_SCENE_DISABLE_VISIBILITY=1\nexec /usr/bin/labwc\n",
+            "WLR_SCENE_DISABLE_DIRECT_SCANOUT=1\n")
+
+        assert result.returncode == 0, result.stderr
+        assert "Exec=labwc\n" in labwc.read_text()
+        assert not wrapper.exists()
+        assert not direct_scanout.exists()
+
+
+def test_unknown_experimental_files_are_preserved():
+    with tempfile.TemporaryDirectory() as directory:
+        result, labwc, wrapper, direct_scanout = run_lite_migration(
+            Path(directory),
+            "[Desktop Entry]\nName=custom\nExec=/opt/custom-labwc\n",
+            "#!/bin/sh\nexec /opt/custom-labwc\n",
+            "USER_OWNED_SETTING=1\n")
+
+        assert result.returncode == 0, result.stderr
+        assert "Exec=/opt/custom-labwc" in labwc.read_text()
+        assert wrapper.read_text() == "#!/bin/sh\nexec /opt/custom-labwc\n"
+        assert direct_scanout.read_text() == "USER_OWNED_SETTING=1\n"
+
+
+def test_session_installation_checkpoints_are_rolled_back_on_failure():
+    functions = installer_transaction_functions()
+    names = ("v-link-lite-session", "v-link-lite.desktop", "50-v-link-lite.conf")
+    for fail_after in range(1, len(names) + 1):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = [root / name for name in names]
+            backup = root / "backup"
+            backup.mkdir()
+            paths[2].write_text("original LightDM\n")
+            shutil.copy2(paths[2], backup / "2")
+            (backup / "0.absent").touch()
+            (backup / "1.absent").touch()
+            script = (
+                "set -Eeuo pipefail\n" + functions + "\n"
+                'PLATFORM_PATHS=("$1" "$2" "$3")\nPLATFORM_BACKUP="$4"\n'
+                'for index in "${!PLATFORM_PATHS[@]}"; do\n'
+                '  platform_fingerprint "${PLATFORM_PATHS[index]}" '
+                '>"$PLATFORM_BACKUP/$index.original"\n'
+                'done\n'
+                'for ((index=0; index<$5; index++)); do\n'
+                '  printf "installed %s\\n" "$index" >"${PLATFORM_PATHS[index]}"\n'
+                '  platform_path_written "${PLATFORM_PATHS[index]}"\n'
+                'done\n'
+                'rollback_platform_files\n')
+            result = subprocess.run(
+                ["bash", "-c", script, "bash", *map(str, paths), str(backup),
+                 str(fail_after)], text=True, capture_output=True)
+            assert result.returncode == 0, result.stderr
+            assert not paths[0].exists()
+            assert not paths[1].exists()
+            assert paths[2].read_text() == "original LightDM\n"
+
+
+def test_lite_installer_does_not_manage_general_labwc_environment():
+    install = INSTALL.read_text()
+    assert '"$USER_CONFIG_DIR/labwc/environment"' not in install
+    assert install.count("WLR_SCENE_DISABLE_DIRECT_SCANOUT=1") == 1
 
 
 def write_mock_systemctl(path):

@@ -69,6 +69,13 @@ def test_overlay_covers_browser_until_react_signals_ready():
     assert "MutationObserver(ready)" in handoff
     assert "127.0.0.1:40777/ready" in handoff
     assert "Press S for Settings" in overlay
+    assert 'SPLASH = Path("/usr/local/share/v-link-lite/splash.png")' in overlay
+    assert "logo.png" not in overlay
+    assert "Gtk.Image.new_from_file(str(SPLASH))" in overlay
+    assert "v_link_lite_display.py refresh-splash" in install
+    assert "splash.png -m center -c 000000" in install
+    assert install.index("v_link_lite_display.py apply") < install.index(
+        "v_link_lite_display.py refresh-splash") < install.index("swaybg -i")
 
 
 def test_lite_handoff_reapplies_after_frontend_update_without_duplicates():
