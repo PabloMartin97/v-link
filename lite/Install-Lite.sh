@@ -132,6 +132,16 @@ begin_platform_files() {
         /usr/local/bin/v_link_lite_support.py /usr/local/bin/v_link_lite_audio.py
         /usr/local/bin/v_link_lite_display.py
         /usr/local/bin/v-link-lite-setup /usr/local/bin/v-link-lite-cursor
+        /usr/local/lib/v-link-lite/setup/__init__.py
+        /usr/local/lib/v-link-lite/setup/ui.py
+        /usr/local/lib/v-link-lite/setup/navigation.py
+        /usr/local/lib/v-link-lite/setup/network.py
+        /usr/local/lib/v-link-lite/setup/audio.py
+        /usr/local/lib/v-link-lite/setup/display.py
+        /usr/local/lib/v-link-lite/setup/storage.py
+        /usr/local/lib/v-link-lite/setup/vlink.py
+        /usr/local/lib/v-link-lite/setup/diagnostics.py
+        /usr/local/lib/v-link-lite/setup/terminal.py
         /usr/local/libexec/v-link-lite-boot /usr/local/libexec/v-link-lite-overlay
         /usr/local/libexec/v-link-lite-prepare-splash /usr/local/libexec/v-link-lite-session
         /usr/local/libexec/v-link-lite-render-splash
@@ -824,6 +834,10 @@ validate_source() {
     for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Session.sh lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Terminal.bashrc lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
+    for required in __init__.py ui.py navigation.py network.py audio.py display.py storage.py vlink.py diagnostics.py terminal.py; do
+        [[ -f "$source/lite/setup/$required" ]] || \
+            die "source is incomplete: missing lite/setup/$required"
+    done
 
     validate_lite_session_launcher "$source/lite/V-Link-Lite-Session.sh" || \
         die "source is incomplete: invalid V-Link Lite Wayland session launcher"
@@ -1443,6 +1457,16 @@ for helper_spec in \
     HELPER_STAGING=""
     platform_path_written "$HELPER_DESTINATION"
 done
+[[ ! -L /usr/local/lib/v-link-lite && ! -L /usr/local/lib/v-link-lite/setup ]] || \
+    die "unsafe V-Link Lite Setup module path"
+install -d -o root -g root -m 0755 /usr/local/lib/v-link-lite/setup
+for setup_module in __init__.py ui.py navigation.py network.py audio.py display.py storage.py vlink.py diagnostics.py terminal.py; do
+    install -o root -g root -m 0644 "$SOURCE_DIR/lite/setup/$setup_module" \
+        "/usr/local/lib/v-link-lite/setup/$setup_module"
+    platform_path_written "/usr/local/lib/v-link-lite/setup/$setup_module"
+done
+runuser -u "$TARGET_USER" -- python3 -c \
+    'import sys; sys.path[:0] = ["/usr/local/lib/v-link-lite", "/usr/local/bin"]; from setup.audio import AudioMixin; from setup.diagnostics import DiagnosticsMixin; from setup.display import DisplayMixin; from setup.navigation import NavigationMixin; from setup.network import NetworkMixin; from setup.storage import StorageMixin; from setup.terminal import TerminalMixin; from setup.ui import BaseUI; from setup.vlink import VLinkMixin'
 validate_lite_session_launcher "$LITE_SESSION_LAUNCHER" || \
     die "installed V-Link Lite Wayland session launcher is invalid"
 

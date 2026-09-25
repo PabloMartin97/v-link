@@ -314,6 +314,27 @@ if [[ -f /usr/local/bin/v-link-lite-setup ]] && \
 else
     fail "Lite Setup Python syntax is invalid"
 fi
+SETUP_MODULE_DIR=/usr/local/lib/v-link-lite/setup
+SETUP_MODULES_OK=true
+if [[ ! -d "$SETUP_MODULE_DIR" || -L "$SETUP_MODULE_DIR" ]] || \
+   [[ "$(stat -c '%u:%g:%a' "$SETUP_MODULE_DIR" 2>/dev/null)" != '0:0:755' ]]; then
+    SETUP_MODULES_OK=false
+fi
+for setup_module in __init__.py ui.py navigation.py network.py audio.py display.py storage.py vlink.py diagnostics.py terminal.py; do
+    setup_path="$SETUP_MODULE_DIR/$setup_module"
+    if [[ ! -f "$setup_path" || -L "$setup_path" ]] || \
+       [[ "$(stat -c '%u:%g:%a' "$setup_path" 2>/dev/null)" != '0:0:644' ]]; then
+        SETUP_MODULES_OK=false
+    fi
+done
+if [[ "$SETUP_MODULES_OK" == true ]] && \
+   runuser -u "$TARGET_USER" -- python3 -c \
+       'import sys; sys.path[:0] = ["/usr/local/lib/v-link-lite", "/usr/local/bin"]; from setup.audio import AudioMixin; from setup.diagnostics import DiagnosticsMixin; from setup.display import DisplayMixin; from setup.navigation import NavigationMixin; from setup.network import NetworkMixin; from setup.storage import StorageMixin; from setup.terminal import TerminalMixin; from setup.ui import BaseUI; from setup.vlink import VLinkMixin' \
+       >/dev/null 2>&1; then
+    pass "Lite Setup modular package is installed root-owned and importable"
+else
+    fail "Lite Setup modular package is missing, unsafe, or not importable"
+fi
 
 for package_name in udisks2 udiskie; do
     if [[ "$(dpkg-query -W -f='${Status}' "$package_name" 2>/dev/null)" == 'install ok installed' ]]; then

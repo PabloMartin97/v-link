@@ -365,6 +365,22 @@ def test_lite_terminal_help_is_installed_and_managed():
     assert 'builtin help "$@"' in terminal
 
 
+def test_lite_setup_package_is_installed_inside_platform_transaction():
+    install = INSTALL.read_text()
+    check = CHECK.read_text()
+    modules = ("__init__.py", "ui.py", "navigation.py", "network.py", "audio.py",
+               "display.py", "storage.py", "vlink.py", "diagnostics.py", "terminal.py")
+
+    assert install.index("begin_platform_files") < install.index(
+        "install -d -o root -g root -m 0755 /usr/local/lib/v-link-lite/setup")
+    for module in modules:
+        installed = f"/usr/local/lib/v-link-lite/setup/{module}"
+        assert installed in install
+        assert (ROOT / "lite/setup" / module).is_file()
+    assert 'platform_path_written "/usr/local/lib/v-link-lite/setup/$setup_module"' in install
+    assert "Lite Setup modular package is installed root-owned and importable" in check
+
+
 def test_lite_session_is_installed_before_lightdm_selects_it():
     install = INSTALL.read_text()
     launcher = install.index(

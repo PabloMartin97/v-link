@@ -11,6 +11,8 @@ SCRIPT = Path(__file__).resolve().parents[2] / "lite/V-Link-Lite-Setup.py"
 SPEC = importlib.util.spec_from_file_location("v_link_lite_setup", SCRIPT)
 SETUP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SETUP)
+SETUP_DISPLAY = importlib.import_module("setup.display")
+SETUP_VLINK = importlib.import_module("setup.vlink")
 
 
 class FakeScreen:
@@ -242,8 +244,8 @@ def test_mouse_toggle_applies_immediately_in_running_lite_session():
     ui.display_available = lambda: True
     ui.command = lambda args, timeout: (commands.append((args, timeout)), (0, ""))[1]
     ui.message = messages.append
-    with patch.object(SETUP, "load_settings", side_effect=lambda _home: settings.copy()), \
-         patch.object(SETUP, "save_settings", side_effect=lambda _home, value: settings.update(value)):
+    with patch.object(SETUP_DISPLAY, "load_settings", side_effect=lambda _home: settings.copy()), \
+         patch.object(SETUP_DISPLAY, "save_settings", side_effect=lambda _home, value: settings.update(value)):
         ui.cursor_menu()
     assert settings["MOUSE_ENABLED"] == "no"
     assert commands == [(["/usr/local/bin/v-link-lite-cursor", "apply"], 12)]
@@ -340,7 +342,7 @@ def test_console_only_reads_running_service_and_never_controls_it():
         return 0, "123"
 
     ui.command = command
-    with patch.object(curses, "doupdate"), patch.object(SETUP, "read_snapshot", return_value={
+    with patch.object(curses, "doupdate"), patch.object(SETUP_VLINK, "read_snapshot", return_value={
         "version": "3.0", "device": "Pi 4", "rti": False, "ign": True,
         "threads": [["server", True]], "warnings": [],
     }):
