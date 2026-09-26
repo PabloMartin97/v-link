@@ -12,6 +12,8 @@ from pathlib import Path
 
 SOURCE_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(SOURCE_ROOT))
+if (SOURCE_ROOT / "lib").is_dir():
+    sys.path.insert(0, str(SOURCE_ROOT / "lib"))
 if not (SOURCE_ROOT / "setup").is_dir():
     sys.path.insert(0, "/usr/local/lib/v-link-lite")
 

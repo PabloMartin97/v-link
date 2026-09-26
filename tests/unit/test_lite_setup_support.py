@@ -11,10 +11,10 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lite"))
+sys.path.insert(0, str(ROOT / "lite/lib"))
 import v_link_lite_support as support
 
-SPEC = importlib.util.spec_from_file_location("lite_cursor", ROOT / "lite/V-Link-Lite-Cursor.py")
+SPEC = importlib.util.spec_from_file_location("lite_cursor", ROOT / "lite/runtime/V-Link-Lite-Cursor.py")
 cursor = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(cursor)
 

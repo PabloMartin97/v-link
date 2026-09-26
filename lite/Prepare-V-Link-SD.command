@@ -6,9 +6,11 @@ SOURCE_BRANCH="little-os-test"
 SOURCE_DIRECTORY="lite"
 INSTALLER_NAME="Install-Lite.sh"
 BOOTSTRAP_NAME="V-Link-FirstBoot.sh"
+BOOTSTRAP_SOURCE="bootstrap/$BOOTSTRAP_NAME"
 CONFIG_NAME="v-link-firstboot.conf"
 DEFAULT_BOOT_RUNTIME="/boot/firmware"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CURL_BIN="${V_LINK_CURL:-/usr/bin/curl}"
 
 pause_and_exit() {
     local status="${1:-0}"
@@ -20,6 +22,20 @@ pause_and_exit() {
 fail() {
     printf '\nERROR: %s\n' "$*" >&2
     pause_and_exit 1
+}
+
+preserve_mode() {
+    local reference="$1"
+    local target="$2"
+    local mode=""
+    if mode="$(stat -f '%Lp' "$reference" 2>/dev/null)"; then
+        :
+    elif mode="$(stat -c '%a' "$reference" 2>/dev/null)"; then
+        :
+    else
+        return 0
+    fi
+    chmod "$mode" "$target" 2>/dev/null || true
 }
 
 printf '\n============================================================\n'
@@ -84,22 +100,40 @@ if [[ -f "$BOOT_VOLUME/$CONFIG_NAME" || -f "$CMDLINE.v-link-prep.bak" ]]; then
 fi
 
 TMPDIR_VLINK="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_VLINK"' EXIT
+STAGE_DIR=""
+cleanup() {
+    rm -rf "$TMPDIR_VLINK"
+    if [[ -n "$STAGE_DIR" && -d "$STAGE_DIR" ]]; then
+        rm -rf "$STAGE_DIR"
+    fi
+}
+trap cleanup EXIT
 
-if [[ -f "$SCRIPT_DIR/$INSTALLER_NAME" && -f "$SCRIPT_DIR/$BOOTSTRAP_NAME" ]]; then
+if [[ -f "$SCRIPT_DIR/$INSTALLER_NAME" && -f "$SCRIPT_DIR/$BOOTSTRAP_SOURCE" ]]; then
     printf '\nUsing the first-boot files from this local checkout...\n'
     cp "$SCRIPT_DIR/$INSTALLER_NAME" "$TMPDIR_VLINK/$INSTALLER_NAME"
-    cp "$SCRIPT_DIR/$BOOTSTRAP_NAME" "$TMPDIR_VLINK/$BOOTSTRAP_NAME"
+    cp "$SCRIPT_DIR/$BOOTSTRAP_SOURCE" "$TMPDIR_VLINK/$BOOTSTRAP_NAME"
     FILE_SOURCE="local checkout"
 else
-    printf '\nDownloading the current V-Link first-boot files...\n'
-    /usr/bin/curl -fL --retry 3 \
-        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$SOURCE_DIRECTORY/$INSTALLER_NAME" \
+    printf '\nResolving the V-Link source branch...\n'
+    "$CURL_BIN" -fL --retry 3 \
+        "https://api.github.com/repos/$REPOSITORY/commits/$SOURCE_BRANCH" \
+        -o "$TMPDIR_VLINK/source-commit.json" || fail "Could not resolve GitHub branch $SOURCE_BRANCH"
+    SOURCE_SHA="$(LC_ALL=C sed -nE '/^[[:space:]]*"sha":[[:space:]]*"[0-9a-fA-F]{40}",?[[:space:]]*$/ {
+        s/^[[:space:]]*"sha":[[:space:]]*"([0-9a-fA-F]{40})",?[[:space:]]*$/\1/
+        p
+        q
+    }' "$TMPDIR_VLINK/source-commit.json")"
+    [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || fail "GitHub returned an invalid commit SHA for $SOURCE_BRANCH"
+
+    printf '\nDownloading the V-Link first-boot files from commit %s...\n' "$SOURCE_SHA"
+    "$CURL_BIN" -fL --retry 3 \
+        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_SHA/$SOURCE_DIRECTORY/$INSTALLER_NAME" \
         -o "$TMPDIR_VLINK/$INSTALLER_NAME" || fail "Could not download $INSTALLER_NAME"
-    /usr/bin/curl -fL --retry 3 \
-        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_BRANCH/$SOURCE_DIRECTORY/$BOOTSTRAP_NAME" \
+    "$CURL_BIN" -fL --retry 3 \
+        "https://raw.githubusercontent.com/$REPOSITORY/$SOURCE_SHA/$SOURCE_DIRECTORY/$BOOTSTRAP_SOURCE" \
         -o "$TMPDIR_VLINK/$BOOTSTRAP_NAME" || fail "Could not download $BOOTSTRAP_NAME"
-    FILE_SOURCE="GitHub branch $SOURCE_BRANCH"
+    FILE_SOURCE="GitHub branch $SOURCE_BRANCH @ $SOURCE_SHA"
 fi
 
 /bin/bash -n "$TMPDIR_VLINK/$INSTALLER_NAME" || fail "$INSTALLER_NAME contains a syntax error"
@@ -165,29 +199,69 @@ if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
         fail "Could not add the V-Link hook to Raspberry Pi Imager firstrun.sh"
 fi
 
-[[ -f "$CMDLINE.v-link-prep.bak" ]] || cp "$CMDLINE" "$CMDLINE.v-link-prep.bak"
-cp "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME"
-cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME"
-cmp -s "$TMPDIR_VLINK/$INSTALLER_NAME" "$BOOT_VOLUME/$INSTALLER_NAME" || \
-    fail "Could not verify the copied $INSTALLER_NAME"
-cmp -s "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" || \
-    fail "Could not verify the copied $BOOTSTRAP_NAME"
-chmod +x "$BOOT_VOLUME/$INSTALLER_NAME" "$BOOT_VOLUME/$BOOTSTRAP_NAME" 2>/dev/null || true
+STAGE_DIR="$(mktemp -d "$BOOT_VOLUME/.v-link-prep.XXXXXX")" || \
+    fail "Could not create a staging directory on the SD card"
+INSTALLER_STAGE="$STAGE_DIR/$INSTALLER_NAME"
+BOOTSTRAP_STAGE="$STAGE_DIR/$BOOTSTRAP_NAME"
+CONFIG_STAGE="$STAGE_DIR/$CONFIG_NAME"
+CMDLINE_STAGE="$STAGE_DIR/cmdline.txt"
+
+cp "$TMPDIR_VLINK/$INSTALLER_NAME" "$INSTALLER_STAGE" || fail "Could not stage $INSTALLER_NAME"
+cp "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOTSTRAP_STAGE" || fail "Could not stage $BOOTSTRAP_NAME"
+cmp -s "$TMPDIR_VLINK/$INSTALLER_NAME" "$INSTALLER_STAGE" || fail "Could not verify staged $INSTALLER_NAME"
+cmp -s "$TMPDIR_VLINK/$BOOTSTRAP_NAME" "$BOOTSTRAP_STAGE" || fail "Could not verify staged $BOOTSTRAP_NAME"
+if [[ -f "$BOOT_VOLUME/$INSTALLER_NAME" ]]; then
+    preserve_mode "$BOOT_VOLUME/$INSTALLER_NAME" "$INSTALLER_STAGE"
+fi
+if [[ -f "$BOOT_VOLUME/$BOOTSTRAP_NAME" ]]; then
+    preserve_mode "$BOOT_VOLUME/$BOOTSTRAP_NAME" "$BOOTSTRAP_STAGE"
+fi
+chmod +x "$INSTALLER_STAGE" "$BOOTSTRAP_STAGE" 2>/dev/null || true
+
+INSTALLER_SHA256="$(/usr/bin/shasum -a 256 "$INSTALLER_STAGE" | awk '{print $1}')"
+BOOTSTRAP_SHA256="$(/usr/bin/shasum -a 256 "$BOOTSTRAP_STAGE" | awk '{print $1}')"
 printf 'SOURCE=%s\nINSTALLER_SHA256=%s\nBOOTSTRAP_SHA256=%s\n' \
-    "$FILE_SOURCE" \
-    "$(/usr/bin/shasum -a 256 "$TMPDIR_VLINK/$INSTALLER_NAME" | awk '{print $1}')" \
-    "$(/usr/bin/shasum -a 256 "$TMPDIR_VLINK/$BOOTSTRAP_NAME" | awk '{print $1}')" \
-    >"$BOOT_VOLUME/$CONFIG_NAME"
+    "$FILE_SOURCE" "$INSTALLER_SHA256" "$BOOTSTRAP_SHA256" >"$CONFIG_STAGE"
+if [[ -f "$BOOT_VOLUME/$CONFIG_NAME" ]]; then
+    preserve_mode "$BOOT_VOLUME/$CONFIG_NAME" "$CONFIG_STAGE"
+fi
+grep -qFx "SOURCE=$FILE_SOURCE" "$CONFIG_STAGE" && \
+    grep -qFx "INSTALLER_SHA256=$INSTALLER_SHA256" "$CONFIG_STAGE" && \
+    grep -qFx "BOOTSTRAP_SHA256=$BOOTSTRAP_SHA256" "$CONFIG_STAGE" || \
+    fail "Could not verify staged $CONFIG_NAME"
+
 if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
-    cp "$FIRSTRUN_TEMP" "$BOOT_VOLUME/firstrun.sh"
+    FIRSTRUN_STAGE="$STAGE_DIR/firstrun.sh"
+    cp "$FIRSTRUN_TEMP" "$FIRSTRUN_STAGE" || fail "Could not stage firstrun.sh"
+    cmp -s "$FIRSTRUN_TEMP" "$FIRSTRUN_STAGE" || fail "Could not verify staged firstrun.sh"
+    preserve_mode "$BOOT_VOLUME/firstrun.sh" "$FIRSTRUN_STAGE"
 fi
 
-# Commit cmdline.txt last. If any validation above fails, the card retains its
-# previous boot command line and cannot be left at kernel-command-line.target.
-CMDLINE_TEMP="$(mktemp "$BOOT_VOLUME/.cmdline.v-link.XXXXXX")"
-printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE_TEMP"
-chmod --reference="$CMDLINE" "$CMDLINE_TEMP" 2>/dev/null || true
-mv -f "$CMDLINE_TEMP" "$CMDLINE"
+printf '%s\n' "$CMDLINE_TEXT" >"$CMDLINE_STAGE"
+preserve_mode "$CMDLINE" "$CMDLINE_STAGE"
+[[ "$(LC_ALL=C awk 'NR == 1 { line = $0 } END { if (NR != 1) exit 1; print line }' "$CMDLINE_STAGE")" == "$CMDLINE_TEXT" ]] || \
+    fail "Could not verify staged cmdline.txt"
+
+if [[ ! -f "$CMDLINE.v-link-prep.bak" ]]; then
+    BACKUP_STAGE="$STAGE_DIR/cmdline.txt.v-link-prep.bak"
+    cp "$CMDLINE" "$BACKUP_STAGE" || fail "Could not stage the original cmdline.txt backup"
+    cmp -s "$CMDLINE" "$BACKUP_STAGE" || fail "Could not verify the original cmdline.txt backup"
+    preserve_mode "$CMDLINE" "$BACKUP_STAGE"
+    mv -f "$BACKUP_STAGE" "$CMDLINE.v-link-prep.bak" || fail "Could not save the original cmdline.txt backup"
+fi
+
+# Each rename is atomic because staging is on the boot partition. Assets and
+# their hash manifest are committed before cmdline.txt activates first boot.
+mv -f "$INSTALLER_STAGE" "$BOOT_VOLUME/$INSTALLER_NAME" || fail "Could not install $INSTALLER_NAME"
+mv -f "$BOOTSTRAP_STAGE" "$BOOT_VOLUME/$BOOTSTRAP_NAME" || fail "Could not install $BOOTSTRAP_NAME"
+mv -f "$CONFIG_STAGE" "$BOOT_VOLUME/$CONFIG_NAME" || fail "Could not install $CONFIG_NAME"
+if [[ -f "$BOOT_VOLUME/firstrun.sh" ]]; then
+    mv -f "$FIRSTRUN_STAGE" "$BOOT_VOLUME/firstrun.sh" || fail "Could not install firstrun.sh"
+fi
+
+# Commit cmdline.txt last. If any validation or earlier rename fails, the card
+# retains its previous boot command line and cannot activate an incomplete set.
+mv -f "$CMDLINE_STAGE" "$CMDLINE" || fail "Could not install cmdline.txt"
 
 printf '\nSD card prepared successfully.\n\n'
 printf 'First boot flow:\n'

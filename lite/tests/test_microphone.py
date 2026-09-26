@@ -4,6 +4,7 @@ import array
 import importlib.util
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,8 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("v_link_lite_audio", ROOT / "v_link_lite_audio.py")
+sys.path.insert(0, str(ROOT / "lib"))
+SPEC = importlib.util.spec_from_file_location("v_link_lite_audio", ROOT / "lib/v_link_lite_audio.py")
 audio = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(audio)
 

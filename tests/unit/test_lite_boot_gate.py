@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_settings_shortcut_is_hidden_but_still_available():
-    gate = (ROOT / "lite/V-Link-Lite-Boot.sh").read_text(encoding="utf-8")
+    gate = (ROOT / "lite/runtime/V-Link-Lite-Boot.sh").read_text(encoding="utf-8")
     check = (ROOT / "lite/Check-Lite.sh").read_text(encoding="utf-8")
 
     assert "--override=colors.alpha=0" in gate
@@ -57,8 +57,8 @@ def test_html_has_black_first_paint_before_react():
 
 def test_overlay_covers_browser_until_react_signals_ready():
     install = (ROOT / "lite/Install-Lite.sh").read_text(encoding="utf-8")
-    overlay = (ROOT / "lite/V-Link-Lite-Overlay.py").read_text(encoding="utf-8")
-    handoff = (ROOT / "lite/V-Link-Lite-Handoff.js").read_text(encoding="utf-8")
+    overlay = (ROOT / "lite/runtime/V-Link-Lite-Overlay.py").read_text(encoding="utf-8")
+    handoff = (ROOT / "lite/runtime/V-Link-Lite-Handoff.js").read_text(encoding="utf-8")
 
     assert "gir1.2-gtklayershell-0.1" in install
     assert "v-link-lite-overlay &" in install
@@ -79,8 +79,8 @@ def test_overlay_covers_browser_until_react_signals_ready():
 
 
 def test_lite_handoff_reapplies_after_frontend_update_without_duplicates():
-    helper = ROOT / "lite/V-Link-Lite-Prepare-Splash.py"
-    script = ROOT / "lite/V-Link-Lite-Handoff.js"
+    helper = ROOT / "lite/splash/V-Link-Lite-Prepare-Splash.py"
+    script = ROOT / "lite/runtime/V-Link-Lite-Handoff.js"
     with tempfile.TemporaryDirectory() as directory:
         app = Path(directory)
         dist = app / "frontend/dist"

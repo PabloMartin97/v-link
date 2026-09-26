@@ -11,21 +11,62 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PREPARE = ROOT / "lite/Prepare-V-Link-SD.command"
-FIRSTBOOT = ROOT / "lite/V-Link-FirstBoot.sh"
+FIRSTBOOT = ROOT / "lite/bootstrap/V-Link-FirstBoot.sh"
 INSTALL = ROOT / "lite/Install-Lite.sh"
-SESSION = ROOT / "lite/V-Link-Lite-Session.sh"
+SESSION = ROOT / "lite/runtime/V-Link-Lite-Session.sh"
 CHECK = ROOT / "lite/Check-Lite.sh"
-TERMINAL_RC = ROOT / "lite/V-Link-Lite-Terminal.bashrc"
+TERMINAL_RC = ROOT / "lite/runtime/V-Link-Lite-Terminal.bashrc"
 
 
-def prepare(boot, cmdline, firstrun=None):
+def prepare(boot, cmdline, firstrun=None, *, script=PREPARE, extra_env=None):
     (boot / "cmdline.txt").write_bytes(cmdline)
     (boot / "config.txt").write_text("[all]\n")
     if firstrun is not None:
         (boot / "firstrun.sh").write_text(firstrun)
     env = {**os.environ, "V_LINK_BOOT_VOLUME": str(boot)}
-    return subprocess.run(["bash", str(PREPARE)], input="\n", text=True,
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(["bash", str(script)], input="\n", text=True,
                           capture_output=True, env=env, timeout=30)
+
+
+def make_fake_curl(directory, sha):
+    fake = directory / "curl"
+    fake.write_text(f'''#!/bin/bash
+set -eu
+url=""
+output=""
+while (($#)); do
+    case "$1" in
+        -o) output="$2"; shift 2 ;;
+        http*) url="$1"; shift ;;
+        *) shift ;;
+    esac
+done
+printf '%s\\n' "$url" >>"$V_LINK_CURL_LOG"
+case "$url" in
+    https://api.github.com/*) printf '%s\\n' '{{' '  "sha": "{sha}",' '}}' >"$output" ;;
+    */lite/Install-Lite.sh) cp "$V_LINK_REMOTE_INSTALLER" "$output" ;;
+    */lite/bootstrap/V-Link-FirstBoot.sh) cp "$V_LINK_REMOTE_BOOTSTRAP" "$output" ;;
+    *) exit 22 ;;
+esac
+''')
+    fake.chmod(0o755)
+    return fake
+
+
+def make_failing_mv(directory):
+    fake = directory / "mv"
+    fake.write_text('''#!/bin/bash
+set -eu
+target="${!#}"
+if [[ "$(basename -- "$target")" == "$V_LINK_FAIL_MV_TARGET" ]]; then
+    exit 91
+fi
+exec /bin/mv "$@"
+''')
+    fake.chmod(0o755)
+    return fake
 
 
 def test_prepare_clean_card_and_manifest_hashes():
@@ -99,6 +140,114 @@ def test_prepare_accepts_single_crlf_without_merging_tokens():
         result = prepare(boot, b"rootwait console=tty1\r\n")
         assert result.returncode == 0, result.stderr
         assert (boot / "cmdline.txt").read_text().startswith("rootwait console=tty1 ")
+
+
+def test_prepare_remote_downloads_are_pinned_to_one_resolved_sha():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        helper_dir = root / "helper"
+        helper_dir.mkdir()
+        remote_prepare = helper_dir / PREPARE.name
+        shutil.copy2(PREPARE, remote_prepare)
+        sha = "a1" * 20
+        curl_log = root / "curl.log"
+        fake_curl = make_fake_curl(root, sha)
+        boot = root / "boot"
+        boot.mkdir()
+        result = prepare(
+            boot, b"rootwait console=tty1\n", script=remote_prepare,
+            extra_env={
+                "V_LINK_CURL": str(fake_curl),
+                "V_LINK_CURL_LOG": str(curl_log),
+                "V_LINK_REMOTE_INSTALLER": str(INSTALL),
+                "V_LINK_REMOTE_BOOTSTRAP": str(FIRSTBOOT),
+            })
+        assert result.returncode == 0, result.stderr
+        urls = curl_log.read_text().splitlines()
+        assert urls[0].endswith("/commits/little-os-test")
+        assert len(urls) == 3
+        assert all(f"/{sha}/" in url for url in urls[1:])
+        manifest = (boot / "v-link-firstboot.conf").read_text()
+        assert f"SOURCE=GitHub branch little-os-test @ {sha}" in manifest
+
+
+def test_prepare_remote_rejects_invalid_resolved_sha_before_downloads():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        helper_dir = root / "helper"
+        helper_dir.mkdir()
+        remote_prepare = helper_dir / PREPARE.name
+        shutil.copy2(PREPARE, remote_prepare)
+        curl_log = root / "curl.log"
+        fake_curl = make_fake_curl(root, "not-a-git-sha")
+        boot = root / "boot"
+        boot.mkdir()
+        result = prepare(
+            boot, b"rootwait console=tty1\n", script=remote_prepare,
+            extra_env={"V_LINK_CURL": str(fake_curl), "V_LINK_CURL_LOG": str(curl_log)})
+        assert result.returncode != 0
+        assert "invalid commit SHA" in result.stderr
+        assert len(curl_log.read_text().splitlines()) == 1
+        assert not (boot / "Install-Lite.sh").exists()
+        assert not (boot / "v-link-firstboot.conf").exists()
+
+
+def test_prepare_failed_installer_rename_preserves_all_previous_final_files():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        boot = root / "boot"
+        bin_dir = root / "bin"
+        boot.mkdir()
+        bin_dir.mkdir()
+        make_failing_mv(bin_dir)
+        old_installer = b"#!/bin/bash\necho old installer\n"
+        old_bootstrap = b"#!/bin/bash\necho old bootstrap\n"
+        old_manifest = b"SOURCE=old\nINSTALLER_SHA256=old\nBOOTSTRAP_SHA256=old\n"
+        (boot / "Install-Lite.sh").write_bytes(old_installer)
+        (boot / "V-Link-FirstBoot.sh").write_bytes(old_bootstrap)
+        (boot / "v-link-firstboot.conf").write_bytes(old_manifest)
+        (boot / "cmdline.txt.v-link-prep.bak").write_bytes(b"original backup\n")
+        original_cmdline = b"rootwait console=tty1\n"
+        result = prepare(
+            boot, original_cmdline,
+            extra_env={
+                "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                "V_LINK_FAIL_MV_TARGET": "Install-Lite.sh",
+            })
+        assert result.returncode != 0
+        assert (boot / "Install-Lite.sh").read_bytes() == old_installer
+        assert (boot / "V-Link-FirstBoot.sh").read_bytes() == old_bootstrap
+        assert (boot / "v-link-firstboot.conf").read_bytes() == old_manifest
+        assert (boot / "cmdline.txt").read_bytes() == original_cmdline
+        assert not list(boot.glob(".v-link-prep.*"))
+
+
+def test_prepare_failed_manifest_rename_leaves_complete_assets_and_old_manifest():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        boot = root / "boot"
+        bin_dir = root / "bin"
+        boot.mkdir()
+        bin_dir.mkdir()
+        make_failing_mv(bin_dir)
+        old_manifest = b"SOURCE=old\nINSTALLER_SHA256=old\nBOOTSTRAP_SHA256=old\n"
+        (boot / "Install-Lite.sh").write_text("old installer\n")
+        (boot / "V-Link-FirstBoot.sh").write_text("old bootstrap\n")
+        (boot / "v-link-firstboot.conf").write_bytes(old_manifest)
+        (boot / "cmdline.txt.v-link-prep.bak").write_bytes(b"original backup\n")
+        original_cmdline = b"rootwait console=tty1\n"
+        result = prepare(
+            boot, original_cmdline,
+            extra_env={
+                "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                "V_LINK_FAIL_MV_TARGET": "v-link-firstboot.conf",
+            })
+        assert result.returncode != 0
+        assert (boot / "Install-Lite.sh").read_bytes() == INSTALL.read_bytes()
+        assert (boot / "V-Link-FirstBoot.sh").read_bytes() == FIRSTBOOT.read_bytes()
+        assert (boot / "v-link-firstboot.conf").read_bytes() == old_manifest
+        assert (boot / "cmdline.txt").read_bytes() == original_cmdline
+        assert not list(boot.glob(".v-link-prep.*"))
 
 
 def stage_firstboot(boot, system, valid=True, direct=False):
@@ -215,7 +364,7 @@ def test_lite_installer_cache_and_cleanup_remain_scoped():
 
 
 def test_overlay_has_normal_handoff_and_bounded_fail_open():
-    source = (ROOT / "lite/V-Link-Lite-Overlay.py").read_text()
+    source = (ROOT / "lite/runtime/V-Link-Lite-Overlay.py").read_text()
     assert "if READY.is_set():" in source
     assert "SLOW_BOOT_SECONDS = 45" in source
     assert "MAX_COVER_SECONDS = 120" in source
@@ -355,7 +504,7 @@ def test_lite_terminal_help_is_installed_and_managed():
     check = CHECK.read_text()
     terminal = TERMINAL_RC.read_text()
 
-    assert "lite/V-Link-Lite-Terminal.bashrc" in install
+    assert "lite/runtime/V-Link-Lite-Terminal.bashrc" in install
     assert "/usr/local/share/v-link-lite/terminal.bashrc" in install
     assert "platform_path_written /usr/local/share/v-link-lite/terminal.bashrc" in install
     assert "Lite maintenance terminal help is installed root:root 0644" in check

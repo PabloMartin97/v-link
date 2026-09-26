@@ -9,7 +9,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "lite/Render-Lite-Splash.py"
+SCRIPT = ROOT / "lite/splash/Render-Lite-Splash.py"
 SPEC = importlib.util.spec_from_file_location("v_link_lite_splash", SCRIPT)
 SPLASH = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SPLASH)

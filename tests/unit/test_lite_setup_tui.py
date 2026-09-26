@@ -226,8 +226,8 @@ def test_resize_clamps_view_offsets_to_new_viewport():
 
 def test_graphical_setup_launchers_use_larger_font_without_changing_boot_gate():
     root = SCRIPT.parents[1]
-    gate = (root / "lite/V-Link-Lite-Boot.sh").read_text(encoding="utf-8")
-    overlay = (root / "lite/V-Link-Lite-Overlay.py").read_text(encoding="utf-8")
+    gate = (root / "lite/runtime/V-Link-Lite-Boot.sh").read_text(encoding="utf-8")
+    overlay = (root / "lite/runtime/V-Link-Lite-Overlay.py").read_text(encoding="utf-8")
     assert gate.count("--font=monospace:size=16") == 1
     assert '"--font=monospace:size=16"' in overlay
     assert "foot --fullscreen --title='V-Link Lite Boot'" in gate

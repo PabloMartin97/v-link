@@ -90,5 +90,5 @@ PipeWire source level in Lite; an update must not silently change the shared
 V-Link setting. The labwc keyboard hardening reserves `F1`–`F12`, `Menu`, `Shift+F10`,
 `Shift+Escape`, `Alt+Tab`, `Alt+F4`, several Alt/Ctrl browser navigation and
 editing shortcuts, Ctrl+0–9, Ctrl+F4/F5/F6 and Ctrl+plus/minus/equal (see
-`lite/V-Link-Lite-Cursor.py` for the authoritative list). The splash gate uses
+`lite/runtime/V-Link-Lite-Cursor.py` for the authoritative list). The splash gate uses
 `S` for Setup. Do not reuse reserved combinations as ordinary app shortcuts.

@@ -831,7 +831,7 @@ validate_source() {
 
     [[ -f "$source/Check-Lite.sh" || -f "$source/lite/Check-Lite.sh" ]] || \
         die "source is incomplete: missing Check-Lite.sh"
-    for required in lite/V-Link-Lite-Boot.sh lite/V-Link-Lite-Overlay.py lite/V-Link-Lite-Prepare-Splash.py lite/V-Link-Lite-Session.sh lite/V-Link-Lite-Handoff.js lite/V-Link-Lite-Terminal.bashrc lite/V-Link-Lite-Setup.py lite/V-Link-Lite-Cursor.py lite/v_link_lite_support.py lite/v_link_lite_audio.py lite/v_link_lite_display.py lite/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
+    for required in lite/runtime/V-Link-Lite-Boot.sh lite/runtime/V-Link-Lite-Overlay.py lite/splash/V-Link-Lite-Prepare-Splash.py lite/runtime/V-Link-Lite-Session.sh lite/runtime/V-Link-Lite-Handoff.js lite/runtime/V-Link-Lite-Terminal.bashrc lite/V-Link-Lite-Setup.py lite/runtime/V-Link-Lite-Cursor.py lite/lib/v_link_lite_support.py lite/lib/v_link_lite_audio.py lite/lib/v_link_lite_display.py lite/splash/Render-Lite-Splash.py frontend/public/assets/svg/logos/moose.svg frontend/public/assets/svg/logos/vlink.svg; do
         [[ -f "$source/$required" ]] || die "source is incomplete: missing $required"
     done
     for required in __init__.py ui.py navigation.py network.py audio.py display.py storage.py vlink.py diagnostics.py terminal.py; do
@@ -839,7 +839,7 @@ validate_source() {
             die "source is incomplete: missing lite/setup/$required"
     done
 
-    validate_lite_session_launcher "$source/lite/V-Link-Lite-Session.sh" || \
+    validate_lite_session_launcher "$source/lite/runtime/V-Link-Lite-Session.sh" || \
         die "source is incomplete: invalid V-Link Lite Wayland session launcher"
 
     if [[ ! -f "$source/frontend/dist/index.html" && ! -f "$source/frontend/package.json" ]]; then
@@ -1435,20 +1435,20 @@ platform_path_written /etc/systemd/system/default.target
 
 log "Installing root-owned Lite maintenance helpers"
 install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/bin
-install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/lib/v_link_lite_support.py" /usr/local/bin/v_link_lite_support.py
 platform_path_written /usr/local/bin/v_link_lite_support.py
-install -o root -g root -m 0644 "$SOURCE_DIR/lite/v_link_lite_audio.py" /usr/local/bin/v_link_lite_audio.py
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/lib/v_link_lite_audio.py" /usr/local/bin/v_link_lite_audio.py
 platform_path_written /usr/local/bin/v_link_lite_audio.py
-install -o root -g root -m 0755 "$SOURCE_DIR/lite/v_link_lite_display.py" /usr/local/bin/v_link_lite_display.py
+install -o root -g root -m 0755 "$SOURCE_DIR/lite/lib/v_link_lite_display.py" /usr/local/bin/v_link_lite_display.py
 platform_path_written /usr/local/bin/v_link_lite_display.py
 for helper_spec in \
-    'lite/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
-    'lite/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \
-    'lite/V-Link-Lite-Prepare-Splash.py:/usr/local/libexec/v-link-lite-prepare-splash' \
-    'lite/Render-Lite-Splash.py:/usr/local/libexec/v-link-lite-render-splash' \
-    'lite/V-Link-Lite-Session.sh:/usr/local/libexec/v-link-lite-session' \
+    'lite/runtime/V-Link-Lite-Boot.sh:/usr/local/libexec/v-link-lite-boot' \
+    'lite/runtime/V-Link-Lite-Overlay.py:/usr/local/libexec/v-link-lite-overlay' \
+    'lite/splash/V-Link-Lite-Prepare-Splash.py:/usr/local/libexec/v-link-lite-prepare-splash' \
+    'lite/splash/Render-Lite-Splash.py:/usr/local/libexec/v-link-lite-render-splash' \
+    'lite/runtime/V-Link-Lite-Session.sh:/usr/local/libexec/v-link-lite-session' \
     'lite/V-Link-Lite-Setup.py:/usr/local/bin/v-link-lite-setup' \
-    'lite/V-Link-Lite-Cursor.py:/usr/local/bin/v-link-lite-cursor'; do
+    'lite/runtime/V-Link-Lite-Cursor.py:/usr/local/bin/v-link-lite-cursor'; do
     HELPER_SOURCE="${helper_spec%%:*}"
     HELPER_DESTINATION="${helper_spec#*:}"
     HELPER_STAGING="$(mktemp "${HELPER_DESTINATION}.new.XXXXXX")"
@@ -1472,14 +1472,14 @@ validate_lite_session_launcher "$LITE_SESSION_LAUNCHER" || \
 
 log "Rendering V-Link branding for the graphical splash"
 install -d -o root -g root -m 0755 /usr/local/share/v-link-lite
-install -o root -g root -m 0644 "$SOURCE_DIR/lite/V-Link-Lite-Handoff.js" \
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/runtime/V-Link-Lite-Handoff.js" \
     /usr/local/share/v-link-lite/handoff.js
 platform_path_written /usr/local/share/v-link-lite/handoff.js
-install -o root -g root -m 0644 "$SOURCE_DIR/lite/V-Link-Lite-Terminal.bashrc" \
+install -o root -g root -m 0644 "$SOURCE_DIR/lite/runtime/V-Link-Lite-Terminal.bashrc" \
     /usr/local/share/v-link-lite/terminal.bashrc
 platform_path_written /usr/local/share/v-link-lite/terminal.bashrc
 SPLASH_WORK="$(mktemp -d /tmp/v-link-splash.XXXXXX)"
-python3 "$SOURCE_DIR/lite/Render-Lite-Splash.py" \
+python3 "$SOURCE_DIR/lite/splash/Render-Lite-Splash.py" \
     --logos-dir "$SOURCE_DIR/frontend/public/assets/svg/logos" \
     --output-dir "$SPLASH_WORK"
 for splash_image in logo.png splash.png; do

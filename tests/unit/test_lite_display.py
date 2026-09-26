@@ -198,7 +198,7 @@ def test_install_and_check_reference_helper_and_ordered_autostart():
     root = Path(__file__).resolve().parents[2]
     install = (root / "lite/Install-Lite.sh").read_text()
     check = (root / "lite/Check-Lite.sh").read_text()
-    assert 'install -o root -g root -m 0755 "$SOURCE_DIR/lite/v_link_lite_display.py"' in install
+    assert 'install -o root -g root -m 0755 "$SOURCE_DIR/lite/lib/v_link_lite_display.py"' in install
     assert install.index("v_link_lite_display.py apply") < install.index("v-link-lite-boot; then")
     assert "Lite display helper is installed root:root 0755" in check
     assert "labwc applies the display policy and refreshes the matching splash before V-Link" in check
