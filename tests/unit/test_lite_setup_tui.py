@@ -93,6 +93,12 @@ def test_menu_redraws_in_one_curses_session():
     endwin.assert_not_called()
 
 
+def test_space_selects_the_highlighted_menu_item():
+    ui, _ = make_ui([curses.KEY_DOWN, ord(" ")])
+    with patch.object(curses, "doupdate"):
+        assert ui.choose("Menu", [("one", "One"), ("two", "Two")]) == "two"
+
+
 def test_setup_panel_is_centered_on_large_terminal():
     ui, screen = make_ui([27], height=40, width=120)
     with patch.object(curses, "doupdate"):
@@ -257,6 +263,28 @@ def test_volume_typing_replaces_initial_value():
     ui, _ = make_ui([ord("5"), ord("0"), 10])
     with patch.object(curses, "doupdate"):
         assert ui.input_number("Volume", "75") == 50
+
+
+def test_volume_uses_direction_arrows_and_space_to_save():
+    keys = [curses.KEY_LEFT, curses.KEY_DOWN, curses.KEY_RIGHT, curses.KEY_UP, ord(" ")]
+    ui, _ = make_ui(keys)
+    with patch.object(curses, "doupdate"):
+        assert ui.input_number("Volume", "75") == 75
+
+
+def test_volume_arrow_adjustment_is_clamped_to_zero_and_one_hundred():
+    low, _ = make_ui([curses.KEY_LEFT, curses.KEY_DOWN, ord(" ")])
+    high, _ = make_ui([curses.KEY_RIGHT, curses.KEY_UP, ord(" ")])
+    with patch.object(curses, "doupdate"):
+        assert low.input_number("Volume", "0") == 0
+        assert high.input_number("Volume", "100") == 100
+
+
+def test_space_closes_information_views_like_enter():
+    ui, screen = make_ui([ord(" ")])
+    with patch.object(curses, "doupdate"):
+        ui.view("Information", "Ready")
+    assert screen.draws == 1
 
 
 def test_startup_service_menu_does_not_offer_start_or_restart():

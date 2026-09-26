@@ -60,7 +60,7 @@ class BaseUI:
     def size(self):
         return self.panel_height, self.panel_width
 
-    def frame(self, heading, footer="Arrows: move   Enter: select   Esc: back"):
+    def frame(self, heading, footer="Arrows: move   Space/Enter: select   Esc: back"):
         self.screen.erase()
         height, width = self.screen.getmaxyx()
         if height < 14 or width < 48:
@@ -129,7 +129,7 @@ class BaseUI:
                 selected = max(0, selected - visible)
             elif key == curses.KEY_NPAGE:
                 selected = min(len(items) - 1, selected + visible)
-            elif key in (10, 13, curses.KEY_ENTER, curses.KEY_RIGHT):
+            elif key in (ord(" "), 10, 13, curses.KEY_ENTER, curses.KEY_RIGHT):
                 self.menu_positions[heading] = selected
                 return items[selected][0]
             self.menu_positions[heading] = selected
@@ -160,7 +160,7 @@ class BaseUI:
                 self.put(height - 3, 4, f"Line {top + 1}/{len(lines)}")
             self.flush()
             key = self.screen.getch()
-            if key in (27, 10, 13, curses.KEY_ENTER, curses.KEY_BACKSPACE, 127):
+            if key in (27, ord(" "), 10, 13, curses.KEY_ENTER, curses.KEY_BACKSPACE, 127):
                 return
             if key == curses.KEY_UP:
                 top = max(0, top - 1)
@@ -183,16 +183,22 @@ class BaseUI:
         value = initial
         fresh = True
         while True:
-            if self.frame(heading, "Digits: 0-100   Enter: save   Esc: cancel"):
+            if self.frame(heading, "Arrows: +/- 5   Space/Enter: save   Esc: cancel"):
                 self.put(7, 6, f"Volume: {value}%")
             self.flush()
             key = self.screen.getch()
             if key == 27:
                 return None
-            if key in (10, 13, curses.KEY_ENTER):
+            if key in (ord(" "), 10, 13, curses.KEY_ENTER):
                 if value.isdigit() and 0 <= int(value) <= 100:
                     return int(value)
                 self.message("Enter a whole number from 0 to 100.")
+            elif key in (curses.KEY_LEFT, curses.KEY_DOWN,
+                         curses.KEY_RIGHT, curses.KEY_UP):
+                current = int(value) if value.isdigit() and 0 <= int(value) <= 100 else 75
+                step = -5 if key in (curses.KEY_LEFT, curses.KEY_DOWN) else 5
+                value = str(min(100, max(0, current + step)))
+                fresh = True
             elif key in (curses.KEY_BACKSPACE, 127, 8):
                 value = value[:-1]
                 fresh = False
@@ -220,4 +226,3 @@ class BaseUI:
         state = output.splitlines()[0] if output else ""
         return state if state in {"active", "inactive", "failed", "activating",
                                   "deactivating", "reloading"} else "unavailable"
-
