@@ -503,12 +503,20 @@ def test_lite_terminal_help_is_installed_and_managed():
     install = INSTALL.read_text()
     check = CHECK.read_text()
     terminal = TERMINAL_RC.read_text()
+    setup_terminal = (ROOT / "lite/setup/terminal.py").read_text().splitlines()
 
     assert "lite/runtime/V-Link-Lite-Terminal.bashrc" in install
     assert "/usr/local/share/v-link-lite/terminal.bashrc" in install
     assert "platform_path_written /usr/local/share/v-link-lite/terminal.bashrc" in install
     assert "Lite maintenance terminal help is installed root:root 0644" in check
-    assert 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' in check
+    health_check = check.split(
+        "if [[ -f /usr/local/share/v-link-lite/terminal.bashrc", 1)[1].split("\nfi", 1)[0]
+    assert "-f /usr/local/lib/v-link-lite/setup/terminal.py" in health_check
+    assert "! -L /usr/local/lib/v-link-lite/setup/terminal.py" in health_check
+    assert "grep -qFx" in health_check
+    assert 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' in health_check
+    assert "/usr/local/bin/v-link-lite-setup" not in health_check
+    assert 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' in setup_terminal
     assert "help()" in terminal
     assert "exit          Return to V-Link Lite Setup" in terminal
     assert 'builtin help "$@"' in terminal

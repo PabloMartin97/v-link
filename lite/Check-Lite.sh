@@ -194,8 +194,10 @@ if [[ -f /usr/local/share/v-link-lite/terminal.bashrc && \
    [[ "$(stat -c '%u:%g:%a' /usr/local/share/v-link-lite/terminal.bashrc)" == '0:0:644' ]] && \
    grep -qF '_v_link_lite_help()' /usr/local/share/v-link-lite/terminal.bashrc && \
    grep -qF 'exit          Return to V-Link Lite Setup' /usr/local/share/v-link-lite/terminal.bashrc && \
-   grep -qF 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' \
-       /usr/local/bin/v-link-lite-setup; then
+   [[ -f /usr/local/lib/v-link-lite/setup/terminal.py && \
+      ! -L /usr/local/lib/v-link-lite/setup/terminal.py ]] && \
+   grep -qFx 'TERMINAL_RC = "/usr/local/share/v-link-lite/terminal.bashrc"' \
+       /usr/local/lib/v-link-lite/setup/terminal.py; then
     pass "Lite maintenance terminal help is installed root:root 0644"
 else
     fail "Lite maintenance terminal help is missing or unsafe"
