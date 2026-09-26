@@ -683,8 +683,8 @@ if __name__ == '__main__':
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 script_path = os.path.join(current_dir, 'Update.sh')
 
-                # Run the updater in an independent transient unit so it
-                # survives this service stopping.
+                # Run the selected release updater in an independent transient
+                # user unit so it survives the V-Link service stopping.
                 try:
                     logger.info('Starting update...')
                     subprocess.run([
@@ -693,12 +693,13 @@ if __name__ == '__main__':
                         '--collect',
                         f'--unit=v-link-update-{os.getpid()}',
                         script_path,
+                        '--release-id',
+                        str(shared_state.update_release_id),
                     ], check=True)
                 except Exception as e:
                     logger.error(f'Update failed: {e}')
                     # Exit unsuccessfully and let Restart=on-failure recover
-                    # this service; restarting it from inside its own cgroup
-                    # can deadlock or terminate this process mid-cleanup.
+                    # this service if the updater could not be launched.
                     sys.exit(1)
 
             sys.exit(0)

@@ -1,139 +1,102 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+#!/bin/bash
+set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_WORK="$(mktemp -d "${TMPDIR:-/tmp}/v-link-package.XXXXXX")"
-FRONTEND_STAGE=""
-RELEASE_STAGE=""
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
 
-cleanup() {
-    local status=$?
-    trap - EXIT
-    rm -rf -- "$PACKAGE_WORK"
-    [[ -z "$FRONTEND_STAGE" || ! -e "$FRONTEND_STAGE" ]] || rm -rf -- "$FRONTEND_STAGE"
-    [[ -z "$RELEASE_STAGE" || ! -e "$RELEASE_STAGE" ]] || rm -rf -- "$RELEASE_STAGE"
-    exit "$status"
-}
-trap cleanup EXIT
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+    echo "Commit all source changes before packaging so the archive matches its commit manifest." >&2
+    exit 1
+fi
 
-publish_directory() {
-    local staging="$1"
-    local destination="$2"
-    local backup="$destination.v-link-package-old"
-
-    # Recover a complete previous directory if an earlier publish was killed.
-    if [[ -e "$backup" ]]; then
-        rm -rf -- "$destination"
-        mv "$backup" "$destination"
-    fi
-    if [[ -e "$destination" ]]; then
-        mv "$destination" "$backup"
-    fi
-    if mv "$staging" "$destination"; then
-        rm -rf -- "$backup"
-    else
-        [[ ! -e "$backup" ]] || mv "$backup" "$destination"
-        return 1
-    fi
-}
-
-recover_published_directory() {
-    local destination="$1"
-    local backup="$destination.v-link-package-old"
-    if [[ -e "$backup" ]]; then
-        rm -rf -- "$destination"
-        mv "$backup" "$destination"
-    fi
-}
-
-echo "V-Link release packager"
-recover_published_directory "$SCRIPT_DIR/frontend/dist"
-recover_published_directory "$SCRIPT_DIR/dist"
-mkdir -p "$PACKAGE_WORK/frontend-source" "$PACKAGE_WORK/release"
-
-# Build against a clean lockfile without deleting the developer's existing
-# node_modules, frontend/dist or last known-good release on failure.
-tar -C "$SCRIPT_DIR/frontend" \
-    --exclude='./node_modules' --exclude='./dist' \
-    -cf - . | tar -C "$PACKAGE_WORK/frontend-source" -xf -
-
-echo "Building frontend in an isolated directory..."
-(
-    cd "$PACKAGE_WORK/frontend-source"
-    export ELECTRON_SKIP_BINARY_DOWNLOAD=1
-    npm ci --legacy-peer-deps --no-audit --no-fund
-    npm run build
-)
-
-FRONTEND_HASH="$(python3 - "$SCRIPT_DIR/frontend" <<'PY'
-import hashlib
-import sys
+python3 - <<'PY'
+import json
 from pathlib import Path
 
-root = Path(sys.argv[1])
-digest = hashlib.sha256()
-for path in sorted(root.rglob('*')):
-    relative = path.relative_to(root)
-    if not path.is_file() or relative.parts[0] in {'dist', 'node_modules'}:
-        continue
-    digest.update(relative.as_posix().encode())
-    digest.update(b'\0')
-    digest.update(hashlib.sha256(path.read_bytes()).digest())
-print(digest.hexdigest())
+package = json.loads(Path("frontend/package.json").read_text(encoding="utf-8"))
+lock = json.loads(Path("frontend/package-lock.json").read_text(encoding="utf-8"))
+version = package["version"]
+if lock["version"] != version or lock["packages"][""]["version"] != version:
+    raise SystemExit("Frontend package and lockfile versions differ. Run npm version in frontend/ first.")
 PY
-)"
-printf '%s\n' "$FRONTEND_HASH" >"$PACKAGE_WORK/frontend-source/dist/.v-link-source.sha256"
 
-RELEASE_DIR="$PACKAGE_WORK/release"
-mkdir -p "$RELEASE_DIR/frontend/dist" "$RELEASE_DIR/backend" "$RELEASE_DIR/resources/dtoverlays"
-cp -R "$PACKAGE_WORK/frontend-source/dist/." "$RELEASE_DIR/frontend/dist/"
-cp -R "$SCRIPT_DIR/backend/." "$RELEASE_DIR/backend/"
-cp "$SCRIPT_DIR"/resources/dtoverlays/*.dtbo "$RELEASE_DIR/resources/dtoverlays/"
-find "$RELEASE_DIR/backend" -type d -name __pycache__ -prune -exec rm -rf -- {} +
+echo "Building V-Link frontend..."
+npm --prefix frontend run build
 
-cp -p "$SCRIPT_DIR/V-Link.py" "$RELEASE_DIR/V-Link.py"
-cp -p "$SCRIPT_DIR/requirements.txt" "$RELEASE_DIR/requirements.txt"
-cp -p "$SCRIPT_DIR/Install.sh" "$RELEASE_DIR/Install.sh"
-cp -p "$SCRIPT_DIR/lite/Install-Lite.sh" "$RELEASE_DIR/Install-Lite.sh"
-cp -p "$SCRIPT_DIR/Uninstall.sh" "$RELEASE_DIR/Uninstall.sh"
-cp -p "$SCRIPT_DIR/Update.sh" "$RELEASE_DIR/Update.sh"
-cp -p "$SCRIPT_DIR/Patch.sh" "$RELEASE_DIR/Patch.sh"
-cp -p "$SCRIPT_DIR/lite/Check-Lite.sh" "$RELEASE_DIR/Check-Lite.sh"
+echo "Preparing release assets..."
+STAGE=$(mktemp -d)
+trap 'rm -rf "$STAGE"' EXIT
 
-echo "Creating and validating V-Link.zip..."
+mkdir -p \
+    "$STAGE/package/frontend" \
+    "$STAGE/package/frontend/public/assets/svg/logos" \
+    "$STAGE/package/resources/dtoverlays" \
+    "$STAGE/assets"
+
+cp -a frontend/dist "$STAGE/package/frontend/dist"
+cp frontend/package.json "$STAGE/package/frontend/package.json"
+
+# Lite needs the original marks to generate the boot splash.
+cp frontend/public/assets/svg/logos/moose.svg \
+   frontend/public/assets/svg/logos/vlink.svg \
+   "$STAGE/package/frontend/public/assets/svg/logos/"
+
+cp -a backend "$STAGE/package/backend"
+cp -a updater "$STAGE/package/updater"
+
+# Lite installer/runtime files and hardware overlays are also part of the
+# release archive so Raspberry Pi OS Lite can install from a stable release.
+cp -a lite "$STAGE/package/lite"
+cp -a resources/dtoverlays/. "$STAGE/package/resources/dtoverlays/"
+
+cp V-Link.py requirements.txt Update.sh "$STAGE/package/"
+
+cp Install.sh Uninstall.sh Update.sh "$STAGE/assets/"
+cp lite/Install-Lite.sh "$STAGE/assets/Install-Lite.sh"
+
+find "$STAGE/package" -type d -name __pycache__ -prune -exec rm -rf {} +
+find "$STAGE/package" -type f -name '*.pyc' -delete
+
+COMMIT=$(git rev-parse HEAD)
+BRANCH=$(git symbolic-ref -q --short HEAD || echo detached)
+python3 - "$COMMIT" "$BRANCH" "$STAGE/package/.vlink-release.json" <<'PY'
+import json
+import sys
+
+commit, branch, destination = sys.argv[1:]
+with open(destination, "w", encoding="utf-8") as output:
+    json.dump({"tag": None, "branch": branch, "commit": commit, "prerelease": None}, output, indent=2)
+    output.write("\n")
+PY
+
 (
-    cd "$RELEASE_DIR"
-    zip -r V-Link.zip \
-        V-Link.py Patch.sh Check-Lite.sh Update.sh requirements.txt \
-        frontend/ backend/ resources/dtoverlays/
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum V-Link.zip >V-Link.zip.sha256
-    else
-        shasum -a 256 V-Link.zip >V-Link.zip.sha256
-    fi
-
-    unzip -tq V-Link.zip
-    ZIP_ENTRIES="$(unzip -Z1 V-Link.zip)"
-    for required in \
-        V-Link.py \
-        Check-Lite.sh \
-        Update.sh \
-        requirements.txt \
-        backend/server.py \
-        frontend/dist/index.html \
-        resources/dtoverlays/v-link.dtbo \
-        resources/dtoverlays/mcp2515-can1.dtbo \
-        resources/dtoverlays/mcp2515-can2.dtbo; do
-        grep -Fxq "$required" <<<"$ZIP_ENTRIES"
-    done
+    cd "$STAGE/package"
+    zip -qr "$STAGE/assets/V-Link.zip" \
+        V-Link.py requirements.txt Update.sh updater frontend backend \
+        resources lite .vlink-release.json
 )
 
-# Copy into same-filesystem staging directories, then publish complete trees.
-FRONTEND_STAGE="$(mktemp -d "$SCRIPT_DIR/frontend/.dist.v-link-new.XXXXXX")"
-RELEASE_STAGE="$(mktemp -d "$SCRIPT_DIR/.dist.v-link-new.XXXXXX")"
-cp -R "$PACKAGE_WORK/frontend-source/dist/." "$FRONTEND_STAGE/"
-cp -R "$RELEASE_DIR/." "$RELEASE_STAGE/"
-publish_directory "$FRONTEND_STAGE" "$SCRIPT_DIR/frontend/dist"
-publish_directory "$RELEASE_STAGE" "$SCRIPT_DIR/dist"
+# Lite verifies the release archive before installing it.
+if command -v sha256sum >/dev/null 2>&1; then
+    (
+        cd "$STAGE/assets"
+        sha256sum V-Link.zip > V-Link.zip.sha256
+    )
+else
+    (
+        cd "$STAGE/assets"
+        shasum -a 256 V-Link.zip > V-Link.zip.sha256
+    )
+fi
 
-echo "Release ready in $SCRIPT_DIR/dist"
+rm -rf dist
+mv "$STAGE/assets" dist
+
+echo "Created release assets from $COMMIT:"
+printf '  %s\n' \
+    "$ROOT/dist/Install.sh" \
+    "$ROOT/dist/Install-Lite.sh" \
+    "$ROOT/dist/Uninstall.sh" \
+    "$ROOT/dist/Update.sh" \
+    "$ROOT/dist/V-Link.zip" \
+    "$ROOT/dist/V-Link.zip.sha256"

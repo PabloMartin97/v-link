@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect, useRef, ReactNode } from 'react';
 import CanSettings from './CanSettings';
 import AudioSettings from './AudioSettings';
+import ReleaseChooser from './ReleaseChooser';
 import { getAudioSettingsFromAppSettings, withAudioSettings, type AudioSettingsValues } from './audioSettingsState';
 
 import styled, { useTheme } from 'styled-components';
@@ -462,43 +463,7 @@ const Settings = () => {
     socket.most.emit("force_switch");
   }
 
-  const checkUpdate = async () => {
-    const githubRepo = "PabloMartin97/v-link";
-
-    try {
-      const response = await fetch(
-        `https://api.github.com/repos/${githubRepo}/releases/latest`
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch the latest release.");
-      }
-
-      const data = await response.json();
-      const latestVersion = String(data.tag_name ?? "");
-      const versionParts = (value: string) =>
-        value.trim().replace(/^v/i, "").split("-", 1)[0]
-          .split(".").map((part) => Number.parseInt(part, 10) || 0);
-      const compareVersions = (left: string, right: string) => {
-        const leftParts = versionParts(left);
-        const rightParts = versionParts(right);
-        const length = Math.max(leftParts.length, rightParts.length);
-        for (let index = 0; index < length; index += 1) {
-          const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-          if (difference !== 0) return difference;
-        }
-        return 0;
-      };
-
-      if (!latestVersion || compareVersions(latestVersion, versionNumber) <= 0)
-        openModal("No Updates available.", "Check back again later :)", undefined, undefined)
-      else {
-        openModal("New update available!", `Current: ${versionNumber} \n\n Latest: ${latestVersion}`, "UPDATE NOW", () => systemTask('update'))
-      }
-    } catch (error) {
-      openModal("Error checking for updates:", error instanceof Error ? error.message : String(error), undefined, undefined)
-    }
-  }
+  const checkUpdate = () => openModal('V-Link releases', <ReleaseChooser currentVersion={versionNumber} />);
 
 
   // Toggle Threads
